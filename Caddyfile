@@ -1,0 +1,6 @@
+tudominio.com {
+  reverse_proxy /api/* localhost:3000
+  root * /app/frontend/dist
+  try_files {path} /index.html
+  file_server
+}

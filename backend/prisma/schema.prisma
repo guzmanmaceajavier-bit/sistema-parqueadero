@@ -1,0 +1,426 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id              Int       @id @default(autoincrement())
+  nombre          String
+  usuario         String    @unique
+  correo          String    @unique
+  password        String
+  rol             String    @default("empleado")
+  estado          Boolean   @default(true)
+  intentosFallidos Int      @default(0)
+  bloqueadoHasta  DateTime?
+  ultimoAcceso    DateTime?
+  resetToken        String?
+  resetTokenExpires DateTime?
+  tokenVersion      Int       @default(0)
+  createdAt         DateTime  @default(now())
+  sucursalId      Int?
+  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id])
+  accesos         Acceso[]
+  cajas           Caja[]
+}
+
+model Acceso {
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    String
+  actividad  String
+  ip         String?
+  dispositivo String?
+  createdAt  DateTime @default(now())
+  usuarioRel Usuario  @relation(fields: [usuarioId], references: [id])
+}
+
+model Configuracion {
+  id                 Int      @id @default(autoincrement())
+
+  nombreParqueadero  String
+
+  nit                String?
+  direccion          String?
+  ciudad             String?
+
+  telefono           String?
+  whatsapp           String?
+
+  correo             String?
+
+  logo               String?
+  fondoLogin         String?
+
+  /* ─── Tema / Apariencia ─── */
+  colorPrincipal     String?  @default("#0d9488")
+  colorSecundario    String?  @default("#14b8a6")
+  colorFondo         String?  @default("#f8fafc")
+  modoOscuro         Boolean  @default(false)
+  colorFondoLogin    String?  @default("#f0fdf4")
+  tamanoFuente       String?  @default("medium")
+
+  /* ─── Formato Regional ─── */
+  formatoFecha       String?  @default("DD/MM/YYYY")
+  formatoHora        String?  @default("24h")
+  formatoMoneda      String?  @default("COP")
+  zonaHoraria        String?  @default("America/Bogota")
+  monedaSimbolo      String?  @default("$")
+  idioma             String?  @default("es")
+
+  /* ─── Notificaciones ─── */
+  notificarWhatsappIngreso     Boolean @default(false)
+  notificarWhatsappSalida      Boolean @default(false)
+  notificarWhatsappReserva     Boolean @default(false)
+  notificarWhatsappVencimiento Boolean @default(false)
+  notificarEmail               Boolean @default(false)
+
+  /* ─── Plantillas WhatsApp ─── */
+  mensajeWhatsappIngreso      String?
+  mensajeWhatsappSalida       String?
+  mensajeWhatsappFactura      String?
+  mensajeWhatsappReserva      String?
+  mensajeWhatsappRecordatorio String?
+  mensajeWhatsappVencida      String?
+  mensajeWhatsappBienvenida   String?
+
+  /* ─── Configuración Operativa ─── */
+  horarioApertura      String?  @default("06:00")
+  horarioCierre        String?  @default("22:00")
+  paginacionPorDefecto Int?     @default(15)
+  iva                  Float?   @default(0)
+  pieFactura           String?
+  metodosPago          String?  @default("efectivo,tarjeta,transferencia")
+
+  /* ─── Seguridad ─── */
+  intentosMaximos      Int?     @default(10)
+
+  /* ─── Período de gracia ─── */
+  minutosGracia        Int?     @default(0)
+
+  createdAt          DateTime @default(now())
+}
+model Cliente {
+  id            Int      @id @default(autoincrement())
+
+  nombres       String
+  apellidos     String
+
+  documento     String   @unique
+
+  telefono      String?
+  email         String?
+  direccion     String?
+
+  observaciones String?
+
+  deseaReservar Boolean  @default(false)
+
+  estado        String   @default("ACTIVO")
+
+  bloqueado     Boolean  @default(false)
+  saldo         Float?   @default(0)
+
+  createdAt     DateTime @default(now())
+
+  ingresos       Ingreso[]
+  vehiculos      Vehiculo[]
+  mensualidades  Mensualidad[]
+  reservas       Reserva[]
+  ausencias      Ausencia[]
+}
+
+model Vehiculo {
+  id        Int       @id @default(autoincrement())
+  placa     String    @unique
+  marca     String?
+  modelo    String?
+  color     String?
+  tipo      String?
+  clase     String?
+  observaciones String?
+  estado    Boolean   @default(true)
+  bloqueado Boolean  @default(false)
+  clienteId Int
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+  createdAt DateTime  @default(now())
+  ingresos  Ingreso[]
+  mensualidades Mensualidad[]
+  reservas  Reserva[]
+  ausencias Ausencia[]
+  cliente   Cliente   @relation(fields: [clienteId], references: [id])
+}
+
+model Puesto {
+  id          Int       @id @default(autoincrement())
+  codigo      String    @unique
+  estado      String    @default("LIBRE")
+  observacion String?
+  zona        String?
+  createdAt   DateTime  @default(now())
+  activo      Boolean   @default(true)
+  tipoPuesto  String
+  updatedAt   DateTime  @updatedAt
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+  ingresos    Ingreso[]
+  reservas    Reserva[]
+  mensualidades Mensualidad[]
+}
+
+model Ingreso {
+  id            Int       @id @default(autoincrement())
+  clienteId     Int
+  vehiculoId    Int
+  puestoId      Int
+  reservaId     Int?      @unique
+  fechaEntrada  DateTime  @default(now())
+  fechaSalida   DateTime?
+  estado        String    @default("ACTIVO")
+  createdAt     DateTime  @default(now())
+  tiempoMinutos Int?
+  valorPagado   Float?
+  ticketExtraviado Boolean @default(false)
+  cliente       Cliente   @relation(fields: [clienteId], references: [id])
+  puesto        Puesto    @relation(fields: [puestoId], references: [id])
+  vehiculo      Vehiculo  @relation(fields: [vehiculoId], references: [id])
+  reserva       Reserva?  @relation(fields: [reservaId], references: [id])
+  facturas      Factura[]
+}
+
+model Tarifa {
+  id              Int      @id @default(autoincrement())
+
+  nombre          String
+  tipoVehiculo    String
+  modalidad       String
+
+  valor           Float
+
+  /* ─── Tarifas progresivas ─── */
+  precioPrimeraHora  Float?
+  precioHoraAdicional Float?
+  tarifaMaximaDiaria  Float?
+  minutosGratis      Int?     @default(0)
+
+  minutosCortesia Int?     @default(0)
+
+  descripcion     String?
+
+  activa          Boolean  @default(true)
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+model Caja {
+  id          Int       @id @default(autoincrement())
+  apertura    Float
+  cierre      Float?
+  estado      String    @default("ABIERTA")
+  usuarioId   Int
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id])
+  observacion String?
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  movimientos CajaMovimiento[]
+}
+
+model CajaMovimiento {
+  id         Int       @id @default(autoincrement())
+  cajaId     Int
+  caja       Caja      @relation(fields: [cajaId], references: [id], onDelete: Cascade)
+  tipo       String    // INGRESO | EGRESO
+  concepto   String
+  monto      Float
+  metodoPago String?   // efectivo | tarjeta | transferencia
+  facturaId  Int?
+  factura    Factura?  @relation(fields: [facturaId], references: [id])
+  gastoId    Int?
+  gasto      Gasto?    @relation(fields: [gastoId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  @@index([cajaId])
+}
+model Plan {
+  id              Int             @id @default(autoincrement())
+  nombre          String
+  descripcion     String?
+  duracionDias    Int
+  valor           Float
+  tipoVehiculo    String          @default("todos")
+  activo          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  mensualidades   Mensualidad[]
+}
+
+model Mensualidad {
+  id            Int      @id @default(autoincrement())
+
+  clienteId     Int
+  vehiculoId    Int
+  planId        Int?
+  puestoId      Int?
+
+  fechaInicio   DateTime
+  fechaFin      DateTime
+
+  valor         Float
+
+  estado        String   @default("ACTIVA")
+
+  observacion   String?
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  facturas       Factura[]
+  cliente        Cliente  @relation(fields: [clienteId], references: [id])
+  vehiculo       Vehiculo @relation(fields: [vehiculoId], references: [id])
+  plan           Plan?    @relation(fields: [planId], references: [id])
+  puesto         Puesto?  @relation(fields: [puestoId], references: [id])
+}
+model Gasto {
+  id          Int      @id @default(autoincrement())
+
+  concepto    String
+  categoria   String   @default("otros")
+  descripcion String?
+
+  valor       Float
+
+  fecha       DateTime @default(now())
+
+  recurrente    Boolean  @default(false)
+  periodicidad  String?  // "semanal" | "mensual" | "anual"
+  proximaGeneracion DateTime?
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  cajaMovimientos CajaMovimiento[]
+}
+model Movimiento {
+  id          Int      @id @default(autoincrement())
+
+  modulo      String
+  accion      String
+
+  descripcion String
+
+  usuario     String?
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+model Factura {
+  id          Int      @id @default(autoincrement())
+
+  numero      String   @unique
+
+  ingresoId   Int?
+  mensualidadId Int?
+
+  origen      String   @default("INGRESO")
+
+  valor       Float
+  metodoPago  String?
+
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  ingreso        Ingreso? @relation(fields: [ingresoId], references: [id])
+  mensualidad    Mensualidad? @relation(fields: [mensualidadId], references: [id])
+  cajaMovimientos CajaMovimiento[]
+}
+
+model Reserva {
+  id              Int       @id @default(autoincrement())
+  clienteId       Int
+  vehiculoId      Int?
+  puestoId        Int?
+  fechaReserva    DateTime  @default(now())
+  fechaInicio     DateTime
+  fechaFin        DateTime?
+  estado          String    @default("PENDIENTE")
+  observaciones   String?
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  cliente         Cliente   @relation(fields: [clienteId], references: [id])
+  vehiculo        Vehiculo? @relation(fields: [vehiculoId], references: [id])
+  puesto          Puesto?   @relation(fields: [puestoId], references: [id])
+  ingreso         Ingreso?
+}
+
+model PushSubscription {
+  id           Int      @id @default(autoincrement())
+  usuarioId    Int
+  subscription Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([usuarioId])
+}
+
+model Ausencia {
+  id              Int       @id @default(autoincrement())
+  clienteId       Int
+  vehiculoId      Int
+  fechaSalida     DateTime
+  fechaRegreso    DateTime?
+  motivo          String?
+  opcion          String    @default("HISTORIAL")
+  estado          String    @default("ACTIVA")
+  sucursalId Int?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  cliente         Cliente   @relation(fields: [clienteId], references: [id])
+  vehiculo        Vehiculo  @relation(fields: [vehiculoId], references: [id])
+}
+
+model Sucursal {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  direccion String?
+  telefono  String?
+  estado    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuarios      Usuario[]
+  vehiculos     Vehiculo[]
+  puestos       Puesto[]
+  tarifas       Tarifa[]
+  facturas      Factura[]
+  mensualidades Mensualidad[]
+  gastos        Gasto[]
+  caja          Caja[]
+  reservas      Reserva[]
+  ausencias     Ausencia[]
+  movimientos   Movimiento[]
+}
+
+

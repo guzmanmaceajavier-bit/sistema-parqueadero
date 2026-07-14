@@ -1,0 +1,53 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "ingresos": "Ingresos",
+    "salidas": "Salidas",
+    "clientes": "Clientes",
+    "vehiculos": "Vehiculos",
+    "puestos": "Puestos",
+    "tarifas": "Tarifas",
+    "caja": "Caja",
+    "gastos": "Gastos",
+    "mensualidades": "Mensualidades",
+    "reservas": "Reservas",
+    "usuarios": "Usuarios",
+    "configuracion": "Configuracion",
+    "reportes": "Reportes",
+    "ocupacion": "Ocupacion",
+    "logout": "Cerrar Sesion"
+  },
+  "common": {
+    "loading": "Cargando...",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "search": "Buscar",
+    "export": "Exportar",
+    "noData": "Sin datos"
+  },
+  "caja": {
+    "open": "Abrir Caja",
+    "close": "Cerrar Caja",
+    "closed": "Caja Cerrada",
+    "movements": "Movimientos",
+    "initialAmount": "Monto Inicial",
+    "finalAmount": "Monto Final",
+    "password": "Contrasena"
+  },
+  "tickets": {
+    "entry": "Ticket de Entrada",
+    "exit": "Factura de Salida",
+    "folio": "Folio",
+    "plate": "Placa",
+    "client": "Cliente",
+    "vehicle": "Vehiculo",
+    "entryTime": "Ingreso",
+    "exitTime": "Salida",
+    "time": "Tiempo",
+    "total": "Total",
+    "payment": "Pago",
+    "thanks": "Gracias por su preferencia"
+  }
+}

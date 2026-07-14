@@ -1,0 +1,48 @@
+export const MARCAS_VEHICULO = [
+  { value: "chevrolet", label: "Chevrolet" },
+  { value: "renault", label: "Renault" },
+  { value: "toyota", label: "Toyota" },
+  { value: "mazda", label: "Mazda" },
+  { value: "hyundai", label: "Hyundai" },
+  { value: "kia", label: "Kia" },
+  { value: "nissan", label: "Nissan" },
+  { value: "ford", label: "Ford" },
+  { value: "volkswagen", label: "Volkswagen" },
+  { value: "suzuki", label: "Suzuki" },
+  { value: "bmw", label: "BMW" },
+  { value: "mercedes-benz", label: "Mercedes-Benz" },
+  { value: "audi", label: "Audi" },
+  { value: "honda", label: "Honda" },
+  { value: "mitsubishi", label: "Mitsubishi" },
+  { value: "subaru", label: "Subaru" },
+  { value: "peugeot", label: "Peugeot" },
+  { value: "citroen", label: "Citroën" },
+  { value: "fiat", label: "Fiat" },
+  { value: "jeep", label: "Jeep" },
+  { value: "volvo", label: "Volvo" },
+  { value: "dongfeng", label: "Dongfeng" },
+  { value: "jac", label: "JAC" },
+  { value: "great-wall", label: "Great Wall" },
+  { value: "changan", label: "Changan" },
+  { value: "baic", label: "BAIC" },
+  { value: "yamaha", label: "Yamaha" },
+  { value: "activo", label: "Activo" },
+  { value: "victory", label: "Victory" },
+  { value: "akT", label: "AKT" },
+];
+
+export const TIPOS_VEHICULO = [
+  { value: "moto", label: "Moto" },
+  { value: "carro", label: "Carro" },
+  { value: "camioneta", label: "Camioneta" },
+  { value: "bicicleta", label: "Bicicleta" },
+];
+
+export const CLASES_VEHICULO = [
+  { value: "particular", label: "Particular" },
+  { value: "publico", label: "Público" },
+  { value: "carga", label: "Carga" },
+  { value: "electrico", label: "Eléctrico" },
+  { value: "deportivo", label: "Deportivo" },
+  { value: "especial", label: "Especial" },
+];

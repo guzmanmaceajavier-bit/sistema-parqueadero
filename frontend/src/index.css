@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: #0d9488;
+    --color-secondary: #14b8a6;
+    --color-bg: #ffffff;
+    --teal-50: #f0fdfa; --teal-100: #ccfbf1; --teal-200: #99f6e4; --teal-300: #5eead4;
+    --teal-400: #2dd4bf; --teal-500: #14b8a6; --teal-600: #0d9488; --teal-700: #0f766e;
+    --teal-800: #115e59; --teal-900: #134e4a;
+    --emerald-50: #ecfdf5; --emerald-100: #d1fae5; --emerald-200: #a7f3d0; --emerald-300: #6ee7b7;
+    --emerald-400: #34d399; --emerald-500: #10b981; --emerald-600: #059669; --emerald-700: #047857;
+    --emerald-800: #065f46; --emerald-900: #064e3b;
+  }
+
+  .dark {
+    --color-primary: #2dd4bf;
+    --color-secondary: #34d399;
+    --color-bg: #0f172a;
+    --teal-50: #0f2f29; --teal-100: #134e4a; --teal-200: #115e59; --teal-300: #0f766e;
+    --teal-400: #0d9488; --teal-500: #14b8a6; --teal-600: #2dd4bf; --teal-700: #5eead4;
+    --teal-800: #99f6e4; --teal-900: #ccfbf1;
+    --emerald-50: #052e1c; --emerald-100: #064e3b; --emerald-200: #065f46; --emerald-300: #047857;
+    --emerald-400: #059669; --emerald-500: #10b981; --emerald-600: #34d399; --emerald-700: #6ee7b7;
+    --emerald-800: #a7f3d0; --emerald-900: #d1fae5;
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { font-size: 15px; }
+
+body {
+  font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+  background: var(--color-bg);
+  color: #334155;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Global dark mode overrides — matches Ingresos.tsx style (slate-900 bg, slate-700 cards, white text) */
+/* Uses :where() to keep specificity low so pages WITH explicit dark: classes are not overridden */
+:where(.dark) .bg-white { background-color: #334155; }
+:where(.dark) .text-slate-900 { color: #f8fafc; }
+:where(.dark) .text-slate-800 { color: #ffffff; }
+:where(.dark) .text-slate-700 { color: #e2e8f0; }
+:where(.dark) .text-slate-600 { color: #cbd5e1; }
+:where(.dark) .text-slate-500 { color: #94a3b8; }
+:where(.dark) .text-slate-400 { color: #64748b; }
+:where(.dark) .border-slate-300 { border-color: #475569; }
+:where(.dark) .border-slate-200 { border-color: #475569; }
+:where(.dark) .border-slate-100 { border-color: #334155; }
+:where(.dark) .bg-slate-50 { background-color: #334155; }
+:where(.dark) .bg-slate-100 { background-color: #334155; }
+:where(.dark) .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.4); }
+:where(.dark) .shadow { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.5); }
+:where(.dark) .shadow-md { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5); }
+:where(.dark) .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
+:where(.dark) .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+:where(.dark) .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+:where(.dark) select option { background-color: #334155; color: #f8fafc; }
+:where(.dark) .hover\:bg-slate-50:hover { background-color: #475569; }
+:where(.dark) .hover\:bg-slate-100:hover { background-color: #475569; }
+:where(.dark) .hover\:text-slate-600:hover { color: #e2e8f0; }
+:where(.dark) .hover\:border-slate-200:hover { border-color: #64748b; }

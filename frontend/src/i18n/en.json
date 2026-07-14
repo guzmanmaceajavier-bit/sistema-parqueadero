@@ -1,0 +1,53 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "ingresos": "Check-ins",
+    "salidas": "Check-outs",
+    "clientes": "Clients",
+    "vehiculos": "Vehicles",
+    "puestos": "Spots",
+    "tarifas": "Rates",
+    "caja": "Cash Register",
+    "gastos": "Expenses",
+    "mensualidades": "Monthly Fees",
+    "reservas": "Reservations",
+    "usuarios": "Users",
+    "configuracion": "Settings",
+    "reportes": "Reports",
+    "ocupacion": "Occupancy",
+    "logout": "Logout"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "export": "Export",
+    "noData": "No data"
+  },
+  "caja": {
+    "open": "Open Register",
+    "close": "Close Register",
+    "closed": "Register Closed",
+    "movements": "Movements",
+    "initialAmount": "Opening Balance",
+    "finalAmount": "Closing Balance",
+    "password": "Password"
+  },
+  "tickets": {
+    "entry": "Entry Ticket",
+    "exit": "Exit Receipt",
+    "folio": "Folio",
+    "plate": "Plate",
+    "client": "Client",
+    "vehicle": "Vehicle",
+    "entryTime": "Check-in",
+    "exitTime": "Check-out",
+    "time": "Time",
+    "total": "Total",
+    "payment": "Payment",
+    "thanks": "Thank you for your visit"
+  }
+}

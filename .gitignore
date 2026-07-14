@@ -1,0 +1,60 @@
+# ─── Entorno y Secretos ───
+.env
+.env.local
+.env.production
+.env.test
+*.env
+**/*.env
+
+# ─── Dependencias ───
+node_modules/
+**/node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ─── Build / Distribucion ───
+frontend/dist/
+**/dist/
+build/
+*.tsbuildinfo
+
+# ─── Archivos del sistema ───
+.DS_Store
+Thumbs.db
+*.log
+logs/
+**/logs/
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+
+# ─── IDE / Editor ───
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── Prisma (generado) ───
+backend/generated/
+backend/prisma/generated/
+backend/src/generated/
+
+# ─── Reportes generados ───
+*.pdf
+*.xlsx
+*.csv
+*.zip
+
+# ─── Tests / Debug ───
+coverage/
+**/coverage/
+*.test.js.snap
+
+# ─── Docker ───
+.docker/
