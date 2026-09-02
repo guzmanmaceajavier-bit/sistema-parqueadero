@@ -62,9 +62,14 @@ const limiter = rateLimit({
 
 app.use(helmet());
 const CORS_ORIGINS = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS === "*" ? "*" : process.env.CORS_ORIGINS.split(",")
+  ? process.env.CORS_ORIGINS === "*" ? true : process.env.CORS_ORIGINS.split(",")
   : ["http://localhost:5173", "http://localhost:3000"];
-app.use(cors({ origin: CORS_ORIGINS, credentials: CORS_ORIGINS !== "*" }));
+app.use(cors({
+  origin: CORS_ORIGINS === true
+    ? (origin, cb) => cb(null, true)
+    : CORS_ORIGINS,
+  credentials: true,
+}));
 app.use(limiter);
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
