@@ -2,12 +2,12 @@ import { z } from "zod";
 
 export const crearVehiculoSchema = z.object({
   placa: z.string().trim().min(3, "Placa debe tener al menos 3 caracteres").max(20).toUpperCase(),
-  marca: z.string().trim().optional().nullable().max(50),
-  modelo: z.string().trim().optional().nullable().max(50),
-  color: z.string().trim().optional().nullable().max(30),
+  marca: z.string().trim().max(50).optional().nullable(),
+  modelo: z.string().trim().max(50).optional().nullable(),
+  color: z.string().trim().max(30).optional().nullable(),
   tipo: z.enum(["moto", "carro", "camioneta", "bicicleta", "otro"]).optional().default("carro"),
   clase: z.enum(["particular", "publico", "carga", "electrico", "deportivo", "especial", "otro"]).optional().default("particular"),
-  observaciones: z.string().trim().optional().nullable().max(500),
+  observaciones: z.string().trim().max(500).optional().nullable(),
   clienteId: z.coerce.number({ required_error: "Cliente es requerido" }).nullable().optional(),
 });
 

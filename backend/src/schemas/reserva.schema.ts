@@ -6,7 +6,7 @@ export const crearReservaSchema = z.object({
   puestoId: z.coerce.number().optional().nullable(),
   fechaInicio: z.string().refine(val => !isNaN(Date.parse(val)), "Fecha inválida"),
   fechaFin: z.string().optional().nullable(),
-  observaciones: z.string().trim().optional().nullable().max(500),
+  observaciones: z.string().trim().max(500).optional().nullable(),
 });
 
 export const actualizarReservaSchema = z.object({
@@ -15,5 +15,5 @@ export const actualizarReservaSchema = z.object({
   puestoId: z.coerce.number().optional().nullable(),
   fechaInicio: z.string().optional(),
   fechaFin: z.string().optional().nullable(),
-  observaciones: z.string().trim().optional().nullable().max(500),
+  observaciones: z.string().trim().max(500).optional().nullable(),
 });

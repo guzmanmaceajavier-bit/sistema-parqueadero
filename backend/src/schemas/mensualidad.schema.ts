@@ -8,7 +8,7 @@ export const crearMensualidadSchema = z.object({
   fechaInicio: z.string().refine(val => !isNaN(Date.parse(val)), "Fecha inválida"),
   fechaFin: z.string().refine(val => !isNaN(Date.parse(val)), "Fecha inválida"),
   valor: z.coerce.number().positive("Valor debe ser positivo"),
-  observacion: z.string().trim().optional().nullable().max(500),
+  observacion: z.string().trim().max(500).optional().nullable(),
 });
 
 export const actualizarMensualidadSchema = z.object({
@@ -18,5 +18,5 @@ export const actualizarMensualidadSchema = z.object({
   fechaInicio: z.string().optional(),
   fechaFin: z.string().optional(),
   valor: z.coerce.number().positive().optional(),
-  observacion: z.string().trim().optional().nullable().max(500),
+  observacion: z.string().trim().max(500).optional().nullable(),
 });
