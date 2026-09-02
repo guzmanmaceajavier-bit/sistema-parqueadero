@@ -5,6 +5,7 @@ import api from "../services/api";
 import Pagination from "../components/Pagination";
 import Toast from "../components/Toast";
 import ExportButton from "../components/ExportButton";
+import { TableSkeleton } from "../components/Skeleton";
 
 function IconActivity() {
   return <List className="w-4 h-4" />;
@@ -21,6 +22,7 @@ export default function Movimientos() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
+  const [initialLoading, setInitialLoading] = useState(true);
   const mostrarToast = (mensaje, tipo = "success") => setToast({ mensaje, tipo });
 
   const cargarMovimientos = async (p = 1) => {
@@ -30,7 +32,7 @@ export default function Movimientos() {
       const res = await api.get("/movimientos", { params });
       setMovimientos(res.data.movimientos || []);
       setPagination(res.data.pagination || {});
-    } catch { }
+    } catch { } finally { setInitialLoading(false); }
   };
 
   useEffect(() => { cargarMovimientos(page); }, [page]);
@@ -55,6 +57,7 @@ export default function Movimientos() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={5} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -86,6 +89,7 @@ export default function Movimientos() {
         </div>
         <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
+      )}
 
       <style>{`
         @keyframes modal-in { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }

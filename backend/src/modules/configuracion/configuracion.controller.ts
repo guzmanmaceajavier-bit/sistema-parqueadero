@@ -18,7 +18,7 @@ export const obtenerConfiguracion = asyncHandler(async (req, res) => {
 });
 
 const CAMPOS_CONFIG = [
-  "nombreParqueadero", "nit", "direccion", "ciudad", "telefono", "whatsapp", "correo", "logo", "fondoLogin", "colorFondoLogin",
+  "nombreParqueadero", "nit", "direccion", "ciudad", "telefono", "whatsapp", "correo", "logo", "fondoLogin",
   "colorPrincipal", "colorSecundario", "colorFondo", "modoOscuro", "tamanoFuente",
   "formatoFecha", "formatoHora", "formatoMoneda", "zonaHoraria", "monedaSimbolo", "idioma",
   "notificarWhatsappIngreso", "notificarWhatsappSalida", "notificarWhatsappReserva",
@@ -27,7 +27,8 @@ const CAMPOS_CONFIG = [
   "mensajeWhatsappReserva", "mensajeWhatsappRecordatorio", "mensajeWhatsappVencida",
   "mensajeWhatsappBienvenida",
   "horarioApertura", "horarioCierre", "paginacionPorDefecto", "iva",
-  "pieFactura", "metodosPago", "intentosMaximos",
+  "pieFactura", "metodosPago", "intentosMaximos", "minutosGracia",
+  "listasConfiguracion",
 ];
 
 export const guardarConfiguracion = asyncHandler(async (req, res) => {

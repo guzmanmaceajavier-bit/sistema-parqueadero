@@ -11,6 +11,8 @@ import Pagination from "../components/Pagination";
 import Toast from "../components/Toast";
 import ExportButton from "../components/ExportButton";
 import SelectWithOther from "../components/SelectWithOther";
+import { useListas } from "../context/ListasContext";
+import { TableSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
@@ -79,7 +81,7 @@ function CategoriaBadge({ categoria }) {
     tecnologia: "bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800",
     otros: "bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800",
   };
-  const label = CATEGORIAS.find(c => c.value === categoria)?.label || categoria;
+  const label = listas.categoriasGasto.find(c => c.value === categoria)?.label || categoria;
   return (
     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border capitalize ${colors[categoria] || colors.otros}`}>
       {label}
@@ -90,6 +92,7 @@ function CategoriaBadge({ categoria }) {
 export default function Gastos() {
   const navigate = useNavigate();
   const { requestAbrirCaja } = useCaja();
+  const { listas } = useListas();
   const [gastos, setGastos] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda);
@@ -99,6 +102,7 @@ export default function Gastos() {
   const [cargando, setCargando] = useState(false);
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [fechaInicio, setFechaInicio] = useState("");
@@ -128,6 +132,7 @@ export default function Gastos() {
       setGastos(res.data.gastos || []);
       setPagination(res.data.pagination || {});
     } catch (error) { console.log(error); }
+    finally { setInitialLoading(false); }
   };
 
   useEffect(() => { cargarGastos(page); }, [page, fechaInicio, fechaFin]);
@@ -233,6 +238,7 @@ export default function Gastos() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={7} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -285,6 +291,7 @@ export default function Gastos() {
         </div>
         <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
+      )}
 
       <FormModal
         open={mostrarModal}
@@ -308,7 +315,7 @@ export default function Gastos() {
             <input name="concepto" placeholder="Ej: Pago empleados, Compra insumos..." value={form.concepto} onChange={handleChange} className={inputClass} />
           </div>
           <div>
-            <SelectWithOther label="Categoría" name="categoria" value={form.categoria} onChange={handleChange} options={CATEGORIAS} otherLabel="Otra categoría" />
+            <SelectWithOther label="Categoría" name="categoria" value={form.categoria} onChange={handleChange} options={listas.categoriasGasto} otherLabel="Otra categoría" />
           </div>
           <div>
             <label className={labelClass}>Valor ($)</label>

@@ -1,6 +1,7 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearIngresoSchema, actualizarIngresoSchema } from "../../schemas/ingreso.schema.js";
 import {
   registrarIngreso,
@@ -77,7 +78,7 @@ router.get("/", verificarToken, obtenerIngresos);
  *       404:
  *         description: Ingreso no encontrado
  */
-router.get("/:id", verificarToken, obtenerIngreso);
+router.get("/:id", verificarToken, validateIdParam, obtenerIngreso);
 
 /**
  * @swagger
@@ -98,8 +99,8 @@ router.get("/:id", verificarToken, obtenerIngreso);
  *       400:
  *         description: Error al procesar salida
  */
-router.put("/salida/:id", verificarToken, registrarSalida);
-router.put("/liberar/:id", verificarToken, liberarPuesto);
+router.put("/salida/:id", verificarToken, validateIdParam, registrarSalida);
+router.put("/liberar/:id", verificarToken, validateIdParam, liberarPuesto);
 
 /**
  * @swagger
@@ -140,8 +141,8 @@ router.post("/simular-cobro", verificarToken, simularCobro);
  *       200:
  *         description: Salida y cobro registrados
  */
-router.post("/salida-con-cobro/:id", verificarToken, registrarSalidaConCobro);
-router.put("/:id", verificarToken, validate(actualizarIngresoSchema), actualizarIngreso);
+router.post("/salida-con-cobro/:id", verificarToken, validateIdParam, registrarSalidaConCobro);
+router.put("/:id", verificarToken, validateIdParam, validate(actualizarIngresoSchema), actualizarIngreso);
 
 /**
  * @swagger
@@ -160,7 +161,7 @@ router.put("/:id", verificarToken, validate(actualizarIngresoSchema), actualizar
  *       200:
  *         description: Ingreso eliminado
  */
-router.delete("/:id", verificarToken, eliminarIngreso);
+router.delete("/:id", verificarToken, validateIdParam, eliminarIngreso);
 
 /**
  * @swagger
@@ -184,6 +185,6 @@ router.delete("/:id", verificarToken, eliminarIngreso);
  *               type: string
  *               format: binary
  */
-router.get("/:id/ticket", verificarToken, ticketEntrada);
+router.get("/:id/ticket", verificarToken, validateIdParam, ticketEntrada);
 
 export default router;

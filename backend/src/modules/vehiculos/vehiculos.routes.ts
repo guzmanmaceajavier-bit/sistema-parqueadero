@@ -2,6 +2,7 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { crearVehiculo, obtenerVehiculos, obtenerVehiculo, actualizarVehiculo, eliminarVehiculo } from "./vehiculos.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearVehiculoSchema, actualizarVehiculoSchema } from "../../schemas/vehiculo.schema.js";
 
 const router = express.Router();
@@ -68,8 +69,8 @@ router.get("/", verificarToken, obtenerVehiculos);
  *       404:
  *         description: Vehiculo no encontrado
  */
-router.get("/:id", verificarToken, obtenerVehiculo);
-router.put("/:id", verificarToken, validate(actualizarVehiculoSchema), actualizarVehiculo);
+router.get("/:id", verificarToken, validateIdParam, obtenerVehiculo);
+router.put("/:id", verificarToken, validateIdParam, validate(actualizarVehiculoSchema), actualizarVehiculo);
 
 /**
  * @swagger
@@ -90,6 +91,6 @@ router.put("/:id", verificarToken, validate(actualizarVehiculoSchema), actualiza
  *       404:
  *         description: Vehiculo no encontrado
  */
-router.delete("/:id", verificarToken, eliminarVehiculo);
+router.delete("/:id", verificarToken, validateIdParam, eliminarVehiculo);
 
 export default router;

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Plus, Search, ParkingCircle, X } from "lucide-react";
+import { Plus, Search, ParkingCircle, X, ChevronDown, Filter } from "lucide-react";
 import api from "../services/api";
 import Pagination from "../components/Pagination";
 import ExportButton from "../components/ExportButton";
@@ -10,6 +10,8 @@ import PuestoDetailModal from "../components/puestos/PuestoDetailModal";
 import PuestoAssignModal from "../components/puestos/PuestoAssignModal";
 import { TIPOS_PUESTO, ESTADOS_PUESTO } from "../components/puestos/puesto.constants";
 import { getZonaColor, combinarTipos } from "../components/puestos/puesto.helpers";
+import { useListas } from "../context/ListasContext";
+import { PuestosGridSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 
@@ -32,7 +34,7 @@ function ConfirmDialog({ abierto, titulo, mensaje, onConfirm, onCancel }) {
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-700 overflow-hidden animate-modal-in p-6 text-center">
         <p className="text-lg font-bold text-slate-800 dark:text-white mb-2">{titulo}</p>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{mensaje}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 whitespace-pre-line">{mensaje}</p>
         <div className="flex justify-center gap-3">
           <button onClick={onCancel} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600">Cancelar</button>
           <button onClick={() => { onConfirm(); onCancel(); }} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Confirmar</button>
@@ -44,15 +46,66 @@ function ConfirmDialog({ abierto, titulo, mensaje, onConfirm, onCancel }) {
 
 function IconPlus() { return <Plus className="w-5 h-5" />; }
 
+function FiltroDropdown({ label, opciones, valor, onChange, color = "teal", renderOption }) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef(null);
+  const seleccionado = opciones.find(o => o.value === valor);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const cerrar = (e) => { if (ref.current && !ref.current.contains(e.target)) setAbierto(false); };
+    document.addEventListener("mousedown", cerrar);
+    return () => document.removeEventListener("mousedown", cerrar);
+  }, [abierto]);
+
+  const colores = {
+    teal: { active: "bg-teal-600 text-white border-teal-600", hover: "hover:bg-teal-50 dark:hover:bg-teal-900/20" },
+    indigo: { active: "bg-indigo-600 text-white border-indigo-600", hover: "hover:bg-indigo-50 dark:hover:bg-indigo-900/20" },
+  };
+  const c = colores[color] || colores.teal;
+  const isActive = valor !== "" && valor !== "TODOS" && valor !== "TODAS";
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setAbierto(!abierto)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+          isActive
+            ? `${c.active} shadow-md`
+            : `bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-600 ${c.hover}`
+        }`}>
+        <Filter className="w-3 h-3" />
+        {seleccionado?.label || label}
+        <ChevronDown className={`w-3 h-3 transition-transform ${abierto ? "rotate-180" : ""}`} />
+      </button>
+      {abierto && (
+        <div className="absolute z-50 mt-1 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl overflow-hidden">
+          {opciones.map(o => (
+            <button key={o.value} onClick={() => { onChange(o.value); setAbierto(false); }}
+              className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
+                valor === o.value
+                  ? "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300 font-medium"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+              }`}>
+              {renderOption ? renderOption(o) : o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const formVacio = { codigo: "", tipoPuesto: "carro", estado: "LIBRE", observacion: "", zona: "" };
 const bulkFormVacio = { prefijo: "", cantidad: 1, tipoPuesto: "carro", zona: "" };
 
 export default function Puestos() {
+  const { listas } = useListas();
   const [puestos, setPuestos] = useState([]);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [puestoId, setPuestoId] = useState(null);
   const [cargando, setCargando] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [filtroEstado, setFiltroEstado] = useState("TODOS");
@@ -80,6 +133,7 @@ export default function Puestos() {
       setPagination(res.data.pagination || {});
     } finally {
       cargandoRef.current = false;
+      setInitialLoading(false);
     }
   }, [filtroEstado, search]);
 
@@ -111,7 +165,7 @@ export default function Puestos() {
       ? tiposSeleccionados.filter(t => t !== value)
       : [...tiposSeleccionados, value];
     const combinados = combinarTipos(nuevos, otrosTipos);
-    setTiposSeleccionados(combinados.filter(t => TIPOS_PUESTO.some(pt => pt.value === t)));
+    setTiposSeleccionados(combinados.filter(t => listas.tiposPuesto.some(pt => pt.value === t)));
     setForm(p => ({ ...p, tipoPuesto: combinados.join(",") }));
   };
 
@@ -125,7 +179,7 @@ export default function Puestos() {
       ? bulkTipos.filter(t => t !== value)
       : [...bulkTipos, value];
     const combinados = combinarTipos(nuevos, bulkOtrosTipos);
-    setBulkTipos(combinados.filter(t => TIPOS_PUESTO.some(pt => pt.value === t)));
+    setBulkTipos(combinados.filter(t => listas.tiposPuesto.some(pt => pt.value === t)));
     setBulkForm(p => ({ ...p, tipoPuesto: combinados.join(",") }));
   };
 
@@ -169,8 +223,8 @@ export default function Puestos() {
     setModoEdicion(true);
     setPuestoId(p.id);
     const tipos = (p.tipoPuesto || "carro").split(",").map(t => t.trim()).filter(Boolean);
-    const conocidos = tipos.filter(t => TIPOS_PUESTO.some(pt => pt.value === t));
-    const otros = tipos.filter(t => !TIPOS_PUESTO.some(pt => pt.value === t));
+    const conocidos = tipos.filter(t => listas.tiposPuesto.some(pt => pt.value === t));
+    const otros = tipos.filter(t => !listas.tiposPuesto.some(pt => pt.value === t));
     setTiposSeleccionados(conocidos.length ? conocidos : ["carro"]);
     setOtrosTipos(otros.join(", "));
     setForm({ codigo: p.codigo || "", tipoPuesto: p.tipoPuesto || "carro", estado: p.estado || "LIBRE", observacion: p.observacion || "", zona: p.zona || "" });
@@ -185,10 +239,18 @@ export default function Puestos() {
     const ingreso = puesto.ingresos?.[0];
     if (!ingreso) {
       try {
-        await api.put(`/puestos/${puesto.id}`, { estado: "LIBRE" });
-        mostrarToast("Puesto liberado forzosamente");
+        const res = await api.get(`/puestos/${puesto.id}`);
+        const fresh = res.data.puesto;
+        const freshIngreso = fresh?.ingresos?.[0];
+        if (freshIngreso) {
+          await api.put(`/ingresos/liberar/${freshIngreso.id}`);
+          mostrarToast("Puesto liberado");
+        } else {
+          await api.put(`/puestos/${puesto.id}`, { estado: "LIBRE" });
+          mostrarToast("Puesto liberado");
+        }
         cargarPuestos(); cargarTodosPuestos();
-      } catch (error) { mostrarToast("Error al liberar", "error"); }
+      } catch (error) { mostrarToast(error.response?.data?.message || "Error al liberar", "error"); }
       return;
     }
     try {
@@ -263,14 +325,25 @@ export default function Puestos() {
   const [detallePuesto, setDetallePuesto] = useState(null);
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
+  const [vehiculosActivos, setVehiculosActivos] = useState([]);
   const [asignarForm, setAsignarForm] = useState({ clienteId: "", vehiculoId: "" });
 
   const cargarClientes = async () => {
     try { const res = await api.get("/clientes?limit=500"); setClientes(res.data.clientes || []); } catch { }
   };
   const cargarVehiculos = async (clienteId) => {
-    if (!clienteId) { setVehiculos([]); return; }
-    try { const res = await api.get(`/vehiculos?clienteId=${clienteId}&limit=200`); setVehiculos(res.data.vehiculos || []); } catch { }
+    if (!clienteId) { setVehiculos([]); setVehiculosActivos([]); return; }
+    try {
+      const [vehRes, ingRes] = await Promise.all([
+        api.get(`/vehiculos?clienteId=${clienteId}&limit=200`),
+        api.get(`/ingresos?clienteId=${clienteId}&estado=ACTIVO&limit=50`),
+      ]);
+      const todosVehiculos = vehRes.data.vehiculos || [];
+      const activos = ingRes.data.ingresos || [];
+      const idsActivos = new Set(activos.map(i => i.vehiculoId));
+      setVehiculosActivos(activos);
+      setVehiculos(todosVehiculos.filter(v => !idsActivos.has(v.id)));
+    } catch { }
   };
   useEffect(() => { if (asignarForm.clienteId) cargarVehiculos(asignarForm.clienteId); }, [asignarForm.clienteId]);
   useEffect(() => { if (vehiculos.length === 1) setAsignarForm(f => ({ ...f, vehiculoId: vehiculos[0].id.toString() })); }, [vehiculos]);
@@ -321,32 +394,46 @@ export default function Puestos() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-2 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar por código o tipo..." className={inputClass + " pl-10"} />
           <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
         </div>
-        <button onClick={() => setFiltroTipo("TODOS")} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${filtroTipo === "TODOS" ? "bg-teal-600 text-white border-teal-600" : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600"}`}>Todos</button>
-        {TIPOS_PUESTO.map(t => (
-          <button key={t.value} onClick={() => setFiltroTipo(filtroTipo === t.value ? "TODOS" : t.value)} className={`px-3 py-1.5 text-xs font-medium rounded-lg border capitalize transition-all ${filtroTipo === t.value ? "bg-teal-600 text-white border-teal-600" : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600"}`}>
-            {t.label}
+        <FiltroDropdown
+          label="Tipo"
+          opciones={[
+            { value: "TODOS", label: "Todos" },
+            ...listas.tiposPuesto,
+          ]}
+          valor={filtroTipo}
+          onChange={setFiltroTipo}
+          color="teal"
+        />
+        <FiltroDropdown
+          label="Zona"
+          opciones={[
+            { value: "TODAS", label: "Todas" },
+            ...[...new Set(todosPuestos.map(p => p.zona).filter(Boolean))].sort().map(z => ({ value: z, label: z })),
+          ]}
+          valor={filtroZona}
+          onChange={setFiltroZona}
+          color="indigo"
+          renderOption={(o) => {
+            if (o.value === "TODAS") return o.label;
+            const zc = getZonaColor(o.value);
+            return <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: zc }} />{o.label}</span>;
+          }}
+        />
+        {(filtroTipo !== "TODOS" || filtroZona !== "TODAS") && (
+          <button onClick={() => { setFiltroTipo("TODOS"); setFiltroZona("TODAS"); }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+            <X className="w-3 h-3" /> Limpiar
           </button>
-        ))}
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mr-1">Zona:</span>
-        <button onClick={() => setFiltroZona("TODAS")} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${filtroZona === "TODAS" ? "bg-teal-600 text-white border-teal-600 shadow-sm" : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600"}`}>Todas</button>
-        {[...new Set(todosPuestos.map(p => p.zona).filter(Boolean))].sort().map(z => {
-          const zc = getZonaColor(z);
-          return (
-            <button key={z} onClick={() => setFiltroZona(filtroZona === z ? "TODAS" : z)} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${filtroZona === z ? "text-white shadow-sm" : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600"}`} style={filtroZona === z ? { backgroundColor: zc, borderColor: zc } : {}}>
-              {z}
-            </button>
-          );
-        })}
-      </div>
-
+      {initialLoading ? <PuestosGridSkeleton count={12} /> : (
+      <>
       {puestosFiltrados.length === 0 ? (
         <div className="rounded-xl border border-slate-100 dark:border-slate-700 dark:bg-slate-800 p-16 text-center">
           <ParkingCircle className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600" />
@@ -375,6 +462,8 @@ export default function Puestos() {
       )}
 
       <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
+      </>
+      )}
 
       <PuestoFormModal
         abierto={mostrarModal}
@@ -421,6 +510,7 @@ export default function Puestos() {
         puesto={asignarPuesto}
         clientes={clientes}
         vehiculos={vehiculos}
+        vehiculosActivos={vehiculosActivos}
         form={asignarForm}
         onClose={() => setAsignarPuesto(null)}
         onClientChange={(id) => setAsignarForm(f => ({ ...f, clienteId: id?.toString() || "", vehiculoId: "" }))}
@@ -431,11 +521,16 @@ export default function Puestos() {
           const tipos = (asignarPuesto.tipoPuesto || "").split(",").map(t => t.trim()).filter(Boolean);
           if (v && tipos.length > 0 && !tipos.includes(v.tipo)) return mostrarToast(`Este puesto solo acepta: ${tipos.join(", ")}`, "error");
           try {
-            const res = await api.get("/mensualidades", { params: { clienteId: Number(asignarForm.clienteId), estado: "ACTIVA", limit: 1 } });
-            const tienePlan = (res.data.mensualidades?.length || 0) > 0;
+            const res = await api.get("/mensualidades", { params: { clienteId: Number(asignarForm.clienteId), estado: "ACTIVA", limit: 50 } });
+            const planes = res.data.mensualidades || [];
             const ejecutar = () => guardarEntrada(asignarForm.clienteId, asignarForm.vehiculoId, asignarPuesto.id);
-            if (tienePlan) {
-              mostrarConfirm("Cliente con plan activo", "Este cliente tiene un plan activo. Si registras una entrada por separado, podrías generar un cobro duplicado. ¿Deseas continuar?", ejecutar);
+            if (planes.length > 0) {
+              const listaPlanes = planes.map(p => `• ${p.plan?.nombre || "Plan"} (${p.vehiculo?.placa || "sin vehículo"}) — vence ${new Date(p.fechaFin).toLocaleDateString("es-CO")}`).join("\n");
+              mostrarConfirm(
+                "Cliente con plan activo",
+                `Este cliente tiene ${planes.length} plan(es) activo(s):\n${listaPlanes}\n\n¿Deseas registrar una entrada por separado? Esto podría generar un cobro adicional.`,
+                ejecutar
+              );
             } else {
               ejecutar();
             }

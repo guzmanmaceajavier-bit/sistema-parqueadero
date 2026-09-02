@@ -1,12 +1,15 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import dotenv from "dotenv";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
+import http from "http";
 import { swaggerSpec, swaggerUi } from "./config/swagger.js";
 import usuariosRoutes from "./modules/usuarios/usuarios.routes.js";
 import configuracionRoutes from "./modules/configuracion/configuracion.routes.js";
@@ -22,7 +25,6 @@ import gastosRoutes from "./modules/gastos/gastos.routes.js";
 import reservasRoutes from "./modules/reservas/reservas.routes.js";
 import ausenciasRoutes from "./modules/ausencias/ausencias.routes.js";
 import alertasRoutes from "./modules/alertas/alertas.routes.js";
-
 import planesRoutes from "./modules/planes/planes.routes.js";
 import movimientosRoutes from "./modules/movimientos/movimientos.routes.js";
 import facturasRoutes from "./modules/facturas/facturas.routes.js";
@@ -31,8 +33,9 @@ import notificacionesRoutes from "./modules/notificaciones/notificaciones.routes
 import sucursalesRoutes from "./modules/sucursales/sucursales.routes.js";
 import reportesRoutes from "./modules/reportes/reportes.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
-import crypto from "crypto";
-dotenv.config();
+import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
+import { initSocket } from "./services/socket.js";
+import { iniciarScheduler } from "./services/scheduler.js";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -63,6 +66,7 @@ app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
 app.use(limiter);
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
+app.use(sanitizeBody);
 app.use(morgan("dev"));
 const UPLOADS_DIR = path.resolve("uploads");
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -111,9 +115,6 @@ app.get("/", (req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
-import http from "http";
-import { initSocket } from "./services/socket.js";
-import { iniciarScheduler } from "./services/scheduler.js";
 const server = http.createServer(app);
 initSocket(server);
 iniciarScheduler();

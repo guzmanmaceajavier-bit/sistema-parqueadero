@@ -2,6 +2,7 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearGastoSchema, actualizarGastoSchema } from "../../schemas/gasto.schema.js";
 import { crearGasto, obtenerGastos, obtenerGasto, actualizarGasto, eliminarGasto, generarRecurrentes } from "./gastos.controller.js";
 
@@ -67,9 +68,9 @@ router.get("/", verificarToken, obtenerGastos);
  *       404:
  *         description: Gasto no encontrado
  */
-router.get("/:id", verificarToken, obtenerGasto);
+router.get("/:id", verificarToken, validateIdParam, obtenerGasto);
 router.post("/generar-recurrentes", verificarToken, generarRecurrentes);
-router.put("/:id", verificarToken, validate(actualizarGastoSchema), actualizarGasto);
+router.put("/:id", verificarToken, validateIdParam, validate(actualizarGastoSchema), actualizarGasto);
 
 /**
  * @swagger
@@ -90,6 +91,6 @@ router.put("/:id", verificarToken, validate(actualizarGastoSchema), actualizarGa
  *       404:
  *         description: Gasto no encontrado
  */
-router.delete("/:id", verificarToken, eliminarGasto);
+router.delete("/:id", verificarToken, validateIdParam, eliminarGasto);
 
 export default router;

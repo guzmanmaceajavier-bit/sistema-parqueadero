@@ -7,14 +7,14 @@ export const crearAusenciaSchema = z.object({
   vehiculoId: z.coerce.number({ required_error: "Vehículo es requerido" }),
   fechaSalida: z.string().optional(),
   fechaRegreso: z.string().optional().nullable(),
-  motivo: z.string().optional().nullable(),
+  motivo: z.string().trim().optional().nullable().max(500),
   opcion: z.enum(OPCIONES_AUSENCIA).optional(),
 });
 
 export const actualizarAusenciaSchema = z.object({
   fechaSalida: z.string().optional(),
   fechaRegreso: z.string().optional().nullable(),
-  motivo: z.string().optional().nullable(),
+  motivo: z.string().trim().optional().nullable().max(500),
   opcion: z.enum(OPCIONES_AUSENCIA).optional(),
   estado: z.enum(["ACTIVA", "FINALIZADA"]).optional(),
 });

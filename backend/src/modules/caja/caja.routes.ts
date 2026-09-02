@@ -2,8 +2,12 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { abrirCajaSchema, cerrarCajaSchema } from "../../schemas/caja.schema.js";
 import { abrirCaja, obtenerCajaActiva as obtenerCajaActual, cerrarCaja, obtenerCajas, obtenerCaja, obtenerMovimientosCaja, actualizarMovimientoCaja, eliminarMovimientoCaja, actualizarCaja, eliminarCaja } from "./caja.controller.js";
+import rateLimit from "express-rate-limit";
+
+const cajaLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: { ok: false, message: "Demasiadas operaciones de caja. Intente de nuevo en 1 minuto." } });
 
 const router = express.Router();
 
@@ -30,7 +34,7 @@ const router = express.Router();
  *       400:
  *         description: Ya hay una caja abierta
  */
-router.post("/abrir", verificarToken, validate(abrirCajaSchema), abrirCaja);
+router.post("/abrir", verificarToken, cajaLimiter, validate(abrirCajaSchema), abrirCaja);
 
 /**
  * @swagger
@@ -75,7 +79,7 @@ router.get("/actual", verificarToken, obtenerCajaActual);
  *       400:
  *         description: Error al cerrar caja
  */
-router.put("/cerrar/:id", verificarToken, verificarRol("admin", "supervisor"), validate(cerrarCajaSchema), cerrarCaja);
+router.put("/cerrar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, validate(cerrarCajaSchema), cerrarCaja);
 
 /**
  * @swagger
@@ -109,11 +113,11 @@ router.get("/historial", verificarToken, verificarRol("admin", "supervisor"), ob
  *         description: Lista de movimientos
  */
 router.get("/", verificarToken, verificarRol("admin", "supervisor"), obtenerCajas);
-router.get("/:id", verificarToken, obtenerCaja);
-router.get("/:id/movimientos", verificarToken, obtenerMovimientosCaja);
-router.put("/:id", verificarToken, verificarRol("admin"), actualizarCaja);
-router.put("/movimiento/:id", verificarToken, actualizarMovimientoCaja);
-router.delete("/:id", verificarToken, verificarRol("admin"), eliminarCaja);
-router.delete("/movimiento/:id", verificarToken, eliminarMovimientoCaja);
+router.get("/:id", verificarToken, validateIdParam, obtenerCaja);
+router.get("/:id/movimientos", verificarToken, validateIdParam, obtenerMovimientosCaja);
+router.put("/:id", verificarToken, validateIdParam, verificarRol("admin"), actualizarCaja);
+router.put("/movimiento/:id", verificarToken, validateIdParam, actualizarMovimientoCaja);
+router.delete("/:id", verificarToken, validateIdParam, verificarRol("admin"), eliminarCaja);
+router.delete("/movimiento/:id", verificarToken, validateIdParam, eliminarMovimientoCaja);
 
 export default router;

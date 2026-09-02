@@ -4,9 +4,9 @@ import { useAuth } from "../context/AuthContext";
 import { useConfig } from "../context/ConfigContext";
 import {
   Eye, EyeOff, Loader2, LogIn, AlertCircle, Mail, CheckCircle,
-  Sparkles, KeyRound
+  Sparkles, KeyRound, Info
 } from "lucide-react";
-import api, { setToken } from "../services/api";
+import api from "../services/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,10 +14,15 @@ export default function Login() {
   const { login } = useAuth();
   const { config } = useConfig();
   const [forgotMode, setForgotMode] = useState(searchParams.get("modo") === "recuperar");
+  const [testCreds, setTestCreds] = useState([]);
 
   useEffect(() => {
     if (searchParams.get("modo") === "recuperar") setForgotMode(true);
   }, [searchParams]);
+
+  useEffect(() => {
+    api.get("/usuarios/test-credentials").then(r => setTestCreds(r.data.credentials || [])).catch(() => {});
+  }, []);
 
   const accent = config?.colorPrincipal || "#0d9488";
   const bgImage = config?.fondoLogin;
@@ -47,7 +52,6 @@ export default function Login() {
       if (res.data?.ok) {
         if (rememberMe) localStorage.setItem("rememberedUser", user);
         else localStorage.removeItem("rememberedUser");
-        if (res.data.token) setToken(res.data.token);
         login(res.data.usuario);
         return;
       }
@@ -308,6 +312,27 @@ export default function Login() {
                 {loading ? "Entrando..." : "Entrar"}
               </button>
             </form>
+
+            {testCreds.length > 0 && (
+              <div className="mt-5 w-full max-w-[280px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Info size={13} className="text-slate-400" />
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Credenciales de prueba</span>
+                </div>
+                <div className="space-y-1.5">
+                  {testCreds.map((c, i) => (
+                    <button key={i} type="button" onClick={() => { setUser(c.usuario); setPass(c.password); }}
+                      className="w-full text-left px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">{c.usuario}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-500 font-medium capitalize">{c.rol}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">{c.password}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

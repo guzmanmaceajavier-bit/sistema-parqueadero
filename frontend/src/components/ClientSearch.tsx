@@ -25,9 +25,9 @@ export default function ClientSearch({ value, onChange, placeholder = "Buscar cl
     const id = Number(value);
     if (!id) return;
     if (fetchedRef.current[id]) { setLabel(fetchedRef.current[id]); return; }
-    api.get(`/clientes?limit=5`).then(res => {
-      const cs = res.data.clientes || [];
-      cs.forEach(c => { fetchedRef.current[c.id] = `${c.nombres} ${c.apellidos}`; });
+    api.get(`/clientes/${id}`).then(res => {
+      const c = res.data.cliente;
+      if (c) fetchedRef.current[c.id] = `${c.nombres} ${c.apellidos}`;
       if (fetchedRef.current[id]) setLabel(fetchedRef.current[id]);
     }).catch(() => {});
   }, [value]);

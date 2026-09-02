@@ -2,6 +2,7 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearMensualidadSchema, actualizarMensualidadSchema } from "../../schemas/mensualidad.schema.js";
 import { crearMensualidad, obtenerMensualidades, obtenerMensualidad, obtenerVencidas, renovarMensualidad, actualizarMensualidad, cancelarMensualidad, eliminarMensualidad, cobrarMensualidad, generarFacturasPendientes } from "./mensualidades.controller.js";
 
@@ -83,7 +84,7 @@ router.get("/vencidas", verificarToken, obtenerVencidas);
  *       404:
  *         description: Mensualidad no encontrada
  */
-router.get("/:id", verificarToken, obtenerMensualidad);
+router.get("/:id", verificarToken, validateIdParam, obtenerMensualidad);
 
 /**
  * @swagger
@@ -102,7 +103,7 @@ router.get("/:id", verificarToken, obtenerMensualidad);
  *       200:
  *         description: Mensualidad renovada
  */
-router.put("/renovar/:id", verificarToken, renovarMensualidad);
+router.put("/renovar/:id", verificarToken, validateIdParam, renovarMensualidad);
 
 /**
  * @swagger
@@ -121,8 +122,8 @@ router.put("/renovar/:id", verificarToken, renovarMensualidad);
  *       200:
  *         description: Mensualidad cancelada
  */
-router.put("/cancelar/:id", verificarToken, cancelarMensualidad);
-router.put("/:id", verificarToken, validate(actualizarMensualidadSchema), actualizarMensualidad);
+router.put("/cancelar/:id", verificarToken, validateIdParam, cancelarMensualidad);
+router.put("/:id", verificarToken, validateIdParam, validate(actualizarMensualidadSchema), actualizarMensualidad);
 
 /**
  * @swagger
@@ -141,7 +142,7 @@ router.put("/:id", verificarToken, validate(actualizarMensualidadSchema), actual
  *       200:
  *         description: Mensualidad eliminada
  */
-router.delete("/:id", verificarToken, eliminarMensualidad);
+router.delete("/:id", verificarToken, validateIdParam, eliminarMensualidad);
 
 /**
  * @swagger
@@ -160,7 +161,7 @@ router.delete("/:id", verificarToken, eliminarMensualidad);
  *       200:
  *         description: Mensualidad cobrada
  */
-router.post("/cobrar/:id", verificarToken, cobrarMensualidad);
+router.post("/cobrar/:id", verificarToken, validateIdParam, cobrarMensualidad);
 router.post("/generar-facturas", verificarToken, generarFacturasPendientes);
 
 export default router;

@@ -6,6 +6,7 @@ import Toast from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ExportButton from "../components/ExportButton";
 import SelectWithOther from "../components/SelectWithOther";
+import { TableSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
@@ -75,6 +76,7 @@ export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [editarId, setEditarId] = useState(null);
   const [cambiarPass, setCambiarPass] = useState(false);
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
@@ -86,6 +88,7 @@ export default function Usuarios() {
 
   const cargarUsuarios = async () => {
     try { const res = await api.get("/usuarios"); setUsuarios(res.data.usuarios || []); } catch { console.log("error"); }
+    finally { setInitialLoading(false); }
   };
 
   useEffect(() => { cargarUsuarios(); }, []);
@@ -163,6 +166,7 @@ export default function Usuarios() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={7} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -217,6 +221,7 @@ export default function Usuarios() {
           </table>
         </div>
       </div>
+      )}
 
       <FormModal
         open={mostrarModal}

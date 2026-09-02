@@ -203,7 +203,7 @@ export const eliminarCaja = asyncHandler(async (req, res) => {
     await tx.caja.delete({ where: { id: Number(id) } });
   });
   await registrarMovimiento("CAJA", "ELIMINAR", `Caja #${id} eliminada con sus movimientos`, req.usuario?.usuario);
-  res.json({ ok: true, mensaje: "Caja eliminada" });
+  res.json({ ok: true, message: "Caja eliminada" });
 });
 
 export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
@@ -217,7 +217,7 @@ export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
   await prisma.cajaMovimiento.delete({ where: { id: Number(id) } });
   await registrarMovimiento("CAJA", "ANULAR", `Movimiento #${id} anulado: ${movimiento.concepto} - $${movimiento.monto}`, req.usuario?.usuario);
   emitirEvento("caja:movimiento-eliminado", { mensaje: `Movimiento #${id} anulado` });
-  res.json({ ok: true, mensaje: "Movimiento anulado" });
+  res.json({ ok: true, message: "Movimiento anulado" });
 });
 
 export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {

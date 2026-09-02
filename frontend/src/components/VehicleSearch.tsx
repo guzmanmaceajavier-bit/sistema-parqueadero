@@ -25,9 +25,9 @@ export default function VehicleSearch({ value, onChange, placeholder = "Buscar v
     const id = Number(value);
     if (!id) return;
     if (fetchedRef.current[id]) { setLabel(fetchedRef.current[id]); return; }
-    api.get(`/vehiculos?limit=5`).then(res => {
-      const vs = res.data.vehiculos || [];
-      vs.forEach(v => { fetchedRef.current[v.id] = `${v.placa}${v.marca ? ` - ${v.marca}` : ""}`; });
+    api.get(`/vehiculos/${id}`).then(res => {
+      const v = res.data.vehiculo;
+      if (v) fetchedRef.current[v.id] = `${v.placa}${v.marca ? ` - ${v.marca}` : ""}`;
       if (fetchedRef.current[id]) setLabel(fetchedRef.current[id]);
     }).catch(() => {});
   }, [value]);

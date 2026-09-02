@@ -388,29 +388,49 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
 export const ticketEntrada = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const factura = await prisma.factura.findUnique({
-    where: { id: Number(id) },
+  const factura = await prisma.factura.findFirst({
+    where: { ingresoId: Number(id) },
     include: { ingreso: { include: { vehiculo: { include: { cliente: true } }, puesto: true } } },
+    orderBy: { createdAt: 'desc' },
   });
-  if (!factura || !factura.ingreso) throw new AppError('Ingreso no encontrado', 404);
 
-  const ing = factura.ingreso;
+  let ing;
+  let folio;
+  if (factura?.ingreso) {
+    ing = factura.ingreso;
+    folio = factura.numero;
+  } else {
+    ing = await prisma.ingreso.findUnique({
+      where: { id: Number(id) },
+      include: { vehiculo: { include: { cliente: true } }, puesto: true },
+    });
+    if (!ing) throw new AppError('Ingreso no encontrado', 404);
+    folio = `ING-${String(ing.id).padStart(6, '0')}`;
+  }
+
   const config = await prisma.configuracion.findFirst();
+  const cliente = ing.vehiculo?.cliente;
   const pdf = await generarTicketPDF({
     titulo: 'TICKET DE ENTRADA',
     tipo: 'entrada',
-    folio: factura.numero,
+    folio,
     placa: ing.vehiculo?.placa || '\u2014',
-    cliente: [ing.vehiculo?.cliente?.nombres, ing.vehiculo?.cliente?.apellidos].filter(Boolean).join(' ') || '',
+    cliente: [cliente?.nombres, cliente?.apellidos].filter(Boolean).join(' ') || '',
+    clienteDoc: cliente?.documento || '',
+    clienteTelefono: cliente?.telefono || '',
     vehiculo: `${ing.vehiculo?.marca || ''} ${ing.vehiculo?.modelo || ''}`.trim() || ing.vehiculo?.tipo || '',
+    vehiculoTipo: ing.vehiculo?.tipo || '',
+    vehiculoMarca: ing.vehiculo?.marca || '',
+    vehiculoModelo: ing.vehiculo?.modelo || '',
     ingreso: ing.fechaEntrada ? new Date(ing.fechaEntrada).toLocaleString('es-CO') : '',
     puesto: ing.puesto?.codigo || '',
     parqueadero: config?.nombreParqueadero || 'Parqueadero',
     direccion: config?.direccion,
     telefono: config?.telefono,
+    correo: config?.correo,
   });
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="ticket-entrada-${factura.numero}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="ticket-${folio}.pdf"`);
   res.send(pdf);
 });

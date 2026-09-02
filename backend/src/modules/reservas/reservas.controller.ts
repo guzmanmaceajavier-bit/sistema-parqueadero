@@ -255,7 +255,7 @@ export const eliminarReserva = asyncHandler(async (req, res) => {
   await prisma.reserva.delete({ where: { id: Number(id) } });
   await registrarMovimiento("RESERVAS", "ELIMINAR", `Reserva #${id} eliminada`, req.usuario?.usuario);
   emitirEvento("reserva:eliminada", { mensaje: `Reserva #${id} eliminada` });
-  res.json({ ok: true, mensaje: "Reserva eliminada" });
+  res.json({ ok: true, message: "Reserva eliminada" });
 });
 
 export const liberarReservasVencidas = asyncHandler(async (req, res) => {
@@ -276,5 +276,5 @@ export const liberarReservasVencidas = asyncHandler(async (req, res) => {
     liberadas++;
   }
 
-  res.json({ ok: true, liberadas, mensaje: `${liberadas} reserva(s) liberada(s)` });
+  res.json({ ok: true, liberadas, message: `${liberadas} reserva(s) liberada(s)` });
 });

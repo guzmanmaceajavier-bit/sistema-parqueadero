@@ -2,7 +2,14 @@ import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 
-export function exportToCsv(data, filename = "export.csv", columns) {
+function sanitizeCsvValue(val: string): string {
+  if (/^[=+\-@\t\r]/.test(val)) {
+    return `'${val}`;
+  }
+  return val;
+}
+
+export function exportToCsv(data: Array<Record<string, unknown>>, filename = "export.csv", columns?: Array<{ key: string; label: string } | string>) {
   if (!data || data.length === 0) return;
   const keys = columns || Object.keys(data[0]);
   const headers = keys.map((k) => (typeof k === "object" ? k.label : k));
@@ -10,10 +17,11 @@ export function exportToCsv(data, filename = "export.csv", columns) {
   for (const row of data) {
     const values = keys.map((k) => {
       const key = typeof k === "object" ? k.key : k;
-      const val = row[key]?.toString() || "";
-      return val.includes(",") || val.includes('"') || val.includes("\n")
-        ? `"${val.replace(/"/g, '""')}"`
-        : val;
+      const val = String(row[key] ?? "");
+      const sanitized = sanitizeCsvValue(val);
+      return sanitized.includes(",") || sanitized.includes('"') || sanitized.includes("\n")
+        ? `"${sanitized.replace(/"/g, '""')}"`
+        : sanitized;
     });
     csvRows.push(values.join(","));
   }
@@ -26,15 +34,15 @@ export function exportToCsv(data, filename = "export.csv", columns) {
   URL.revokeObjectURL(url);
 }
 
-export function exportToExcel(data, filename = "export.xlsx", columns) {
+export function exportToExcel(data: Array<Record<string, unknown>>, filename = "export.xlsx", columns?: Array<{ key: string; label: string } | string>) {
   if (!data || data.length === 0) return;
   const keys = columns || Object.keys(data[0]);
   const rows = data.map((row) => {
-    const obj = {};
+    const obj: Record<string, string> = {};
     keys.forEach((k) => {
       const key = typeof k === "object" ? k.key : k;
       const label = typeof k === "object" ? k.label : k;
-      obj[label] = row[key]?.toString() || "";
+      obj[label] = String(row[key] ?? "");
     });
     return obj;
   });
@@ -45,7 +53,7 @@ export function exportToExcel(data, filename = "export.xlsx", columns) {
       label.length * 2,
       ...data.map((r) => {
         const key = typeof k === "object" ? k.key : k;
-        return (r[key]?.toString() || "").length * 1.5;
+        return String(r[key] ?? "").length * 1.5;
       })
     );
     return { wch: Math.min(Math.max(max, 10), 40) };
@@ -56,7 +64,7 @@ export function exportToExcel(data, filename = "export.xlsx", columns) {
   XLSX.writeFile(wb, filename.replace(/\.\w+$/, "") + ".xlsx");
 }
 
-export function exportToPdf(data, filename = "export.pdf", columns, title = "Reporte") {
+export function exportToPdf(data: Array<Record<string, unknown>>, filename = "export.pdf", columns?: Array<{ key: string; label: string } | string>, title = "Reporte") {
   if (!data || data.length === 0) return;
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const keys = columns || Object.keys(data[0]);
@@ -64,7 +72,7 @@ export function exportToPdf(data, filename = "export.pdf", columns, title = "Rep
   const rows = data.map((row) =>
     keys.map((k) => {
       const key = typeof k === "object" ? k.key : k;
-      return row[key]?.toString() || "";
+      return String(row[key] ?? "");
     })
   );
   const pageWidth = doc.internal.pageSize.getWidth();

@@ -2,20 +2,21 @@ import { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Menu, Car, Bike, Truck, ParkingMeter, Search } from "lucide-react";
 import Sidebar from "../components/Sidebar";
-import AlertasBanner from "../components/AlertasBanner";
 import CampanaNotificaciones from "../components/CampanaNotificaciones";
 import CajaStatusWidget from "../components/CajaStatusWidget";
 import { useConfig } from "../context/ConfigContext";
 import { useAuth } from "../context/AuthContext";
 import { useCaja } from "../context/CajaContext";
 import { useCajaRecordatorio } from "../hooks/useCajaRecordatorio";
+import api from "../services/api";
 
-const tipoIconos = { carro: Car, moto: Bike, camion: Truck, camioneta: Truck };
+const tipoIconos = { carro: Car, moto: Bike, camioneta: Truck, bicicleta: Bike, otro: Car };
 const tipoColores = {
   carro: "text-blue-500 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800",
   moto: "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800",
-  camion: "text-amber-500 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
   camioneta: "text-violet-500 bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800",
+  bicicleta: "text-amber-500 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
+  otro: "text-slate-500 bg-slate-50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-700",
 };
 
 function MainLayout() {
@@ -36,12 +37,9 @@ function MainLayout() {
     const fetchStats = async () => {
       if (!isAuthenticated) return;
       try {
-        const res = await fetch("/api/dashboard?filtro=hoy", { credentials: "include" });
-        if (res.ok) {
-          const data = await res.json();
-          setVehiculosPorTipo(data.vehiculosPorTipo || {});
-        }
-      } catch {}
+        const res = await api.get("/dashboard", { params: { filtro: "hoy" } });
+        setVehiculosPorTipo(res.data?.vehiculosPorTipo || {});
+      } catch { /* ignore */ }
     };
     fetchStats();
     const t = setInterval(fetchStats, 30000);
@@ -123,7 +121,6 @@ function MainLayout() {
         </header>
 
         <main className="flex-1 overflow-auto p-4 lg:p-6 bg-white dark:bg-slate-900">
-          <AlertasBanner />
           <Outlet />
           {CajaRecordatorioBanner}
         </main>

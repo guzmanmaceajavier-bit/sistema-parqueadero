@@ -5,22 +5,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-let token = localStorage.getItem("token");
-
-api.interceptors.request.use((config) => {
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-export const setToken = (t) => {
-  token = t;
-  if (t) localStorage.setItem("token", t);
-  else localStorage.removeItem("token");
-};
-
-let refreshPromise = null;
+let refreshPromise: Promise<boolean> | null = null;
 
 api.interceptors.response.use(
   (response) => response,
@@ -33,17 +18,13 @@ api.interceptors.response.use(
     if (error.response.status === 401 && !originalRequest._retry && originalRequest.url !== "/usuarios/refresh-token") {
       originalRequest._retry = true;
       if (!refreshPromise) {
-        refreshPromise = api.post("/usuarios/refresh-token").then((res) => {
-          if (res.data?.token) setToken(res.data.token);
-          return true;
-        }).catch(() => false);
+        refreshPromise = api.post("/usuarios/refresh-token").then(() => true).catch(() => false);
       }
       const ok = await refreshPromise;
       refreshPromise = null;
       if (ok) {
         return api(originalRequest);
       }
-      setToken(null);
       window.dispatchEvent(new Event("auth:expired"));
     }
     return Promise.reject(error);

@@ -2,6 +2,7 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearPlanSchema, actualizarPlanSchema } from "../../schemas/plan.schema.js";
 import { crearPlan, obtenerPlanes, obtenerPlan, actualizarPlan, eliminarPlan } from "./planes.controller.js";
 
@@ -68,8 +69,8 @@ router.get("/", verificarToken, obtenerPlanes);
  *       404:
  *         description: Plan no encontrado
  */
-router.get("/:id", verificarToken, obtenerPlan);
-router.put("/:id", verificarToken, verificarRol("admin"), validate(actualizarPlanSchema), actualizarPlan);
+router.get("/:id", verificarToken, validateIdParam, obtenerPlan);
+router.put("/:id", verificarToken, validateIdParam, verificarRol("admin"), validate(actualizarPlanSchema), actualizarPlan);
 
 /**
  * @swagger
@@ -90,6 +91,6 @@ router.put("/:id", verificarToken, verificarRol("admin"), validate(actualizarPla
  *       404:
  *         description: Plan no encontrado
  */
-router.delete("/:id", verificarToken, verificarRol("admin"), eliminarPlan);
+router.delete("/:id", verificarToken, validateIdParam, verificarRol("admin"), eliminarPlan);
 
 export default router;

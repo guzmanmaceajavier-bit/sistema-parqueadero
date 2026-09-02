@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { LogIn, LogOut, Search, X, Clock, PenSquare, Trash2, CheckCircle, Ticket } from "lucide-react";
+import { LogIn, LogOut, Search, X, Clock, PenSquare, Trash2, CheckCircle, Ticket, Car } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCaja } from "../context/CajaContext";
 import { useConfig } from "../context/ConfigContext";
@@ -15,6 +15,7 @@ import FormModal from "../components/ui/FormModal";
 import SelectWithOther from "../components/SelectWithOther";
 import ClientSearch from "../components/ClientSearch";
 import useDebounce from "../hooks/useDebounce";
+import { TableSkeleton } from "../components/Skeleton";
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
@@ -77,6 +78,7 @@ export default function Ingresos() {
   const [cargandoSimulacion, setCargandoSimulacion] = useState(false);
   const [errorSimulacion, setErrorSimulacion] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("TODOS");
+  const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
 
@@ -86,6 +88,7 @@ export default function Ingresos() {
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
 
   const [formEntrada, setFormEntrada] = useState({ clienteId: "", vehiculoId: "", puestoId: "", observaciones: "" });
+  const [ingresosActivosCliente, setIngresosActivosCliente] = useState([]);
 
   const cargarIngresos = async (p = 1) => {
     try {
@@ -96,15 +99,20 @@ export default function Ingresos() {
       setIngresos(res.data.ingresos || []);
       setPagination(res.data.pagination || {});
     } catch (error) { console.log(error); }
+    finally { setInitialLoading(false); }
   };
   const cargarClientes = async () => {
     try { const res = await api.get("/clientes"); setClientes(res.data.clientes || []); } catch (error) { console.log(error); }
   };
   const cargarVehiculosDelCliente = async (clienteId) => {
-    if (!clienteId) { setVehiculosDelCliente([]); return; }
+    if (!clienteId) { setVehiculosDelCliente([]); setIngresosActivosCliente([]); return; }
     try {
-      const res = await api.get("/vehiculos", { params: { clienteId, limit: 100 } });
-      setVehiculosDelCliente(res.data.vehiculos || []);
+      const [vehRes, ingRes] = await Promise.all([
+        api.get("/vehiculos", { params: { clienteId, limit: 100 } }),
+        api.get("/ingresos", { params: { clienteId, estado: "ACTIVO", limit: 50 } }),
+      ]);
+      setVehiculosDelCliente(vehRes.data.vehiculos || []);
+      setIngresosActivosCliente(ingRes.data.ingresos || []);
     } catch (error) { console.log(error); }
   };
   const cargarPuestos = async () => {
@@ -315,6 +323,7 @@ export default function Ingresos() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={9} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -393,10 +402,11 @@ export default function Ingresos() {
         </div>
         <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
+      )}
 
       <FormModal
         open={mostrarModalEntrada}
-        onClose={() => { setMostrarModalEntrada(false); setEditandoIngreso(null); }}
+        onClose={() => { setMostrarModalEntrada(false); setEditandoIngreso(null); setIngresosActivosCliente([]); }}
         gradient="from-blue-600 to-cyan-500"
         icon={LogIn}
         titulo={editandoIngreso ? "Editar Entrada" : "Registrar Entrada"}
@@ -419,6 +429,32 @@ export default function Ingresos() {
               <ClientSearch value={formEntrada.clienteId} onChange={(id) => { const val = id?.toString() || ""; setFormEntrada(p => ({ ...p, clienteId: val, vehiculoId: "" })); cargarVehiculosDelCliente(val); }} placeholder="Buscar cliente por nombre o documento..." />
             )}
           </div>
+          {ingresosActivosCliente.length > 0 && !editandoIngreso && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                  <Car className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Este cliente ya tiene {ingresosActivosCliente.length} vehículo{ingresosActivosCliente.length > 1 ? "s" : ""} registrado{ingresosActivosCliente.length > 1 ? "s" : ""}</p>
+                  <div className="mt-2 space-y-1.5">
+                    {ingresosActivosCliente.map(ing => (
+                      <div key={ing.id} className="flex items-center gap-2 text-xs text-blue-700 dark:text-blue-400">
+                        <span className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 dark:bg-blue-800/40 rounded font-mono font-bold">{ing.vehiculo?.placa || "—"}</span>
+                        <span className="text-blue-400 dark:text-blue-500">→</span>
+                        <span className="font-medium">{ing.puesto?.codigo || "Sin puesto"}</span>
+                        <span className="text-blue-300 dark:text-blue-600">·</span>
+                        <span>{ing.vehiculo?.tipo || ""}</span>
+                        <span className="text-blue-300 dark:text-blue-600">·</span>
+                        <span>{new Date(ing.fechaEntrada).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-blue-500 dark:text-blue-400 mt-2 italic">Puede registrar otro vehículo para este cliente.</p>
+                </div>
+              </div>
+            </div>
+          )}
           <div>
             <label className={labelClass}>Vehículo</label>
             <Select value={formEntrada.vehiculoId} onChange={(val) => setFormEntrada(p => ({ ...p, vehiculoId: val }))} options={[
@@ -478,7 +514,7 @@ export default function Ingresos() {
             <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
               <p className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider mb-1">Error al calcular cobro</p>
               <p className="text-sm text-red-600 dark:text-red-300">{errorSimulacion}</p>
-              <p className="text-xs text-red-500 dark:text-red-400 mt-2">Verificá que el vehículo tenga un tipo asignado (carro/moto/bicicleta) y que exista una tarifa activa para ese tipo.</p>
+              <p className="text-xs text-red-500 dark:text-red-400 mt-2">Verificá que el vehículo tenga un tipo asignado (moto, carro, camioneta, bicicleta u otro) y que exista una tarifa activa para ese tipo.</p>
             </div>
           ) : simulacion?.plan ? (
             <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800 space-y-2">

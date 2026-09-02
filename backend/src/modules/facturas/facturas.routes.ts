@@ -1,7 +1,11 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { obtenerFacturas, obtenerFactura, descargarFacturaPDF, enviarWhatsapp, reciboSalida } from "./facturas.controller.js";
+import rateLimit from "express-rate-limit";
+
+const pdfLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { ok: false, message: "Demasiadas descargas de PDF. Intente de nuevo en 1 minuto." } });
 
 const router = express.Router();
 
@@ -38,7 +42,7 @@ router.get("/", verificarToken, obtenerFacturas);
  *       404:
  *         description: Factura no encontrada
  */
-router.get("/:id", verificarToken, obtenerFactura);
+router.get("/:id", verificarToken, validateIdParam, obtenerFactura);
 
 /**
  * @swagger
@@ -62,7 +66,7 @@ router.get("/:id", verificarToken, obtenerFactura);
  *               type: string
  *               format: binary
  */
-router.get("/pdf/:id", verificarToken, descargarFacturaPDF);
+router.get("/pdf/:id", verificarToken, validateIdParam, pdfLimiter, descargarFacturaPDF);
 
 /**
  * @swagger
@@ -81,7 +85,7 @@ router.get("/pdf/:id", verificarToken, descargarFacturaPDF);
  *       200:
  *         description: Factura enviada por WhatsApp
  */
-router.get("/whatsapp/:id", verificarToken, enviarWhatsapp);
+router.get("/whatsapp/:id", verificarToken, validateIdParam, enviarWhatsapp);
 
 /**
  * @swagger
@@ -105,6 +109,6 @@ router.get("/whatsapp/:id", verificarToken, enviarWhatsapp);
  *               type: string
  *               format: binary
  */
-router.get("/:id/recibo", verificarToken, reciboSalida);
+router.get("/:id/recibo", verificarToken, validateIdParam, pdfLimiter, reciboSalida);
 
 export default router;

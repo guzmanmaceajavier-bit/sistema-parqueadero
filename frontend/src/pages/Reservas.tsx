@@ -10,6 +10,7 @@ import Toast from "../components/Toast";
 import FormModal from "../components/ui/FormModal";
 import ExportButton from "../components/ExportButton";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { TableSkeleton } from "../components/Skeleton";
 
 const ESTADOS = [
   { value: "PENDIENTE", label: "Pendiente", bg: "bg-amber-50 dark:bg-amber-900/20", text: "text-amber-700 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800", dot: "bg-amber-500" },
@@ -214,7 +215,7 @@ export default function Reservas() {
     window.open(`https://wa.me/57${telefono}?text=${encodeURIComponent(lineas.join("\n"))}`, "_blank");
   };
 
-  if (cargando) return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full dark:border-teal-400" /></div>;
+  if (cargando) return <TableSkeleton rows={8} cols={6} />;
 
   return (
     <div className="space-y-6 dark:bg-slate-900 min-h-screen p-6">

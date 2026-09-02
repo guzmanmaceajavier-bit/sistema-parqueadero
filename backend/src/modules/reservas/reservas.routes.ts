@@ -1,6 +1,7 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearReservaSchema, actualizarReservaSchema } from "../../schemas/reserva.schema.js";
 import {
   crearReserva,
@@ -77,8 +78,8 @@ router.get("/", verificarToken, obtenerReservas);
  *       404:
  *         description: Reserva no encontrada
  */
-router.get("/:id", verificarToken, obtenerReserva);
-router.put("/:id", verificarToken, validate(actualizarReservaSchema), actualizarReserva);
+router.get("/:id", verificarToken, validateIdParam, obtenerReserva);
+router.put("/:id", verificarToken, validateIdParam, validate(actualizarReservaSchema), actualizarReserva);
 
 /**
  * @swagger
@@ -97,7 +98,7 @@ router.put("/:id", verificarToken, validate(actualizarReservaSchema), actualizar
  *       200:
  *         description: Estado actualizado
  */
-router.put("/:id/estado", verificarToken, cambiarEstado);
+router.put("/:id/estado", verificarToken, validateIdParam, cambiarEstado);
 
 /**
  * @swagger
@@ -116,7 +117,7 @@ router.put("/:id/estado", verificarToken, cambiarEstado);
  *       200:
  *         description: Reserva cancelada
  */
-router.put("/cancelar/:id", verificarToken, cancelarReserva);
+router.put("/cancelar/:id", verificarToken, validateIdParam, cancelarReserva);
 
 /**
  * @swagger
@@ -135,7 +136,7 @@ router.put("/cancelar/:id", verificarToken, cancelarReserva);
  *       200:
  *         description: Reserva eliminada
  */
-router.delete("/:id", verificarToken, eliminarReserva);
+router.delete("/:id", verificarToken, validateIdParam, eliminarReserva);
 
 /**
  * @swagger

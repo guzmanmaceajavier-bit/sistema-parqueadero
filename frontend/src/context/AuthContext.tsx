@@ -1,10 +1,29 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import api from "../services/api";
 
-const AuthContext = createContext(null);
+interface User {
+  id: number;
+  nombre: string;
+  usuario: string;
+  correo: string;
+  rol: string;
+}
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+interface AuthContextType {
+  user: User | null;
+  login: (userData: User) => void;
+  logout: () => Promise<void>;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  isSupervisor: boolean;
+  isEmpleado: boolean;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const loginadoRef = useRef(false);
 
@@ -15,12 +34,6 @@ export function AuthProvider({ children }) {
       loginadoRef.current = false;
     };
     window.addEventListener("auth:expired", onAuthExpired);
-
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setLoading(false);
-      return () => window.removeEventListener("auth:expired", onAuthExpired);
-    }
 
     api.get("/usuarios/perfil")
       .then((res) => {
@@ -39,7 +52,7 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("auth:expired", onAuthExpired);
   }, []);
 
-  const login = useCallback((userData) => {
+  const login = useCallback((userData: User) => {
     loginadoRef.current = true;
     setUser(userData);
     setLoading(false);
@@ -47,7 +60,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     loginadoRef.current = false;
-    try { await api.post("/usuarios/logout"); } catch {}
+    try { await api.post("/usuarios/logout"); } catch { /* ignore */ }
     setUser(null);
   }, []);
 

@@ -5,31 +5,16 @@ import useDebounce from "../hooks/useDebounce";
 import ScrollLock from "../components/ScrollLock";
 import api from "../services/api";
 import SelectWithOther from "../components/SelectWithOther";
-import { MARCAS_VEHICULO } from "../constants/vehiculo";
+import { useListas } from "../context/ListasContext";
 import ExportButton from "../components/ExportButton";
 import Pagination from "../components/Pagination";
 import Toast from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ClientSearch from "../components/ClientSearch";
+import { TableSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
-
-const TIPOS_VEHICULO = [
-  { value: "moto", label: "Moto" },
-  { value: "carro", label: "Carro" },
-  { value: "camioneta", label: "Camioneta" },
-  { value: "bicicleta", label: "Bicicleta" },
-];
-
-const CLASES_VEHICULO = [
-  { value: "particular", label: "Particular" },
-  { value: "publico", label: "Público" },
-  { value: "carga", label: "Carga" },
-  { value: "electrico", label: "Eléctrico" },
-  { value: "deportivo", label: "Deportivo" },
-  { value: "especial", label: "Especial" },
-];
 
 function IconCar() {
     return <Car className="w-4 h-4" />;
@@ -61,6 +46,7 @@ function TipoBadge({ tipo }) {
 }
 
 export default function Vehiculos() {
+  const { listas } = useListas();
   const [vehiculos, setVehiculos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
@@ -73,6 +59,7 @@ export default function Vehiculos() {
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
   const [confirm, setConfirm] = useState({ abierto: false, titulo: "", mensaje: "", onConfirm: () => {} });
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
 
@@ -87,6 +74,7 @@ export default function Vehiculos() {
       setVehiculos(res.data.vehiculos || []);
       setPagination(res.data.pagination || {});
     } catch (error) { console.log(error); }
+    finally { setInitialLoading(false); }
   };
 
   const cargarClientes = async () => {
@@ -173,6 +161,7 @@ export default function Vehiculos() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={7} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -228,6 +217,7 @@ export default function Vehiculos() {
         </div>
         <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
+      )}
 
       <FormModal
         open={mostrarModal}
@@ -257,7 +247,7 @@ export default function Vehiculos() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <SelectWithOther label="Marca" name="marca" value={form.marca} onChange={handleChange} options={MARCAS_VEHICULO} otherLabel="Otra marca" />
+              <SelectWithOther label="Marca" name="marca" value={form.marca} onChange={handleChange} options={listas.marcasVehiculo} otherLabel="Otra marca" />
             </div>
             <div>
               <label className={labelClass}>Modelo</label>
@@ -266,10 +256,10 @@ export default function Vehiculos() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <SelectWithOther label="Tipo" name="tipo" value={form.tipo} onChange={handleChange} options={TIPOS_VEHICULO} otherLabel="Otro tipo" />
+              <SelectWithOther label="Tipo" name="tipo" value={form.tipo} onChange={handleChange} options={listas.tiposVehiculo} otherLabel="Otro tipo" />
             </div>
             <div>
-              <SelectWithOther label="Clase" name="clase" value={form.clase} onChange={handleChange} options={CLASES_VEHICULO} otherLabel="Otra clase" />
+              <SelectWithOther label="Clase" name="clase" value={form.clase} onChange={handleChange} options={listas.clasesVehiculo} otherLabel="Otra clase" />
             </div>
           </div>
           <div>

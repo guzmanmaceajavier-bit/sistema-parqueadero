@@ -3,6 +3,7 @@ import { Search, Download, MessageCircle, Eye, FileText, X, Truck } from "lucide
 import api from "../services/api";
 import Pagination from "../components/Pagination";
 import ExportButton from "../components/ExportButton";
+import { TableSkeleton } from "../components/Skeleton";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters";
 
 function IconReceipt() {
@@ -28,25 +29,25 @@ function IconEye() {
 export default function Facturas() {
   const [facturas, setFacturas] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaDebounced, setBusquedaDebounced] = useState("");
   const [facturaDetalle, setFacturaDetalle] = useState(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  const cargarFacturas = async (p = 1) => {
+  const cargarFacturas = async (p = 1, q = "") => {
     try {
-      const res = await api.get("/facturas", { params: { page: p } });
+      const params = { page: p };
+      if (q.trim()) params.q = q.trim();
+      const res = await api.get("/facturas", { params });
       setFacturas(res.data.facturas || []);
       setPagination(res.data.pagination || {});
-    } catch {}
+    } catch {} finally { setInitialLoading(false); }
   };
 
-  useEffect(() => { cargarFacturas(page); }, [page]);
-
-  const filtrados = facturas.filter(f => {
-    const r = f.origen === "MENSUALIDAD" ? f.mensualidad : f.ingreso;
-    return `${f.numero} ${f.origen} ${r?.cliente?.nombres || ""} ${r?.cliente?.apellidos || ""} ${r?.vehiculo?.placa || ""}`
-      .toLowerCase().includes(busqueda.toLowerCase());
-  });
+  useEffect(() => { const t = setTimeout(() => setBusquedaDebounced(busqueda), 300); return () => clearTimeout(t); }, [busqueda]);
+  useEffect(() => { setPage(1); }, [busquedaDebounced]);
+  useEffect(() => { cargarFacturas(page, busquedaDebounced); }, [page, busquedaDebounced]);
 
   const formatValor = (v) => formatCurrency(v);
 
@@ -83,7 +84,7 @@ export default function Facturas() {
           <h1 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Facturas</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Historial de facturación generada automáticamente</p>
         </div>
-        <ExportButton data={filtrados.map(f => { const r = f.origen === "MENSUALIDAD" ? f.mensualidad : f.ingreso; return { Factura: `#${f.numero}`, Origen: f.origen === "MENSUALIDAD" ? "Tarifa Fija" : "Ingreso", Cliente: `${r?.cliente?.nombres || ""} ${r?.cliente?.apellidos || ""}`.trim(), Placa: r?.vehiculo?.placa || "", Metodo: (f.metodoPago || "efectivo").charAt(0).toUpperCase() + (f.metodoPago || "efectivo").slice(1), Total: `$${(f.valor || 0).toLocaleString()}` }; })} filename="facturas" title="Facturas" columns={[{ key: 'Factura', label: 'Factura' }, { key: 'Origen', label: 'Origen' }, { key: 'Cliente', label: 'Cliente' }, { key: 'Placa', label: 'Placa' }, { key: 'Metodo', label: 'Método Pago' }, { key: 'Total', label: 'Total' }]} />
+        <ExportButton data={facturas.map(f => { const r = f.origen === "MENSUALIDAD" ? f.mensualidad : f.ingreso; return { Factura: `#${f.numero}`, Origen: f.origen === "MENSUALIDAD" ? "Tarifa Fija" : "Ingreso", Cliente: `${r?.cliente?.nombres || ""} ${r?.cliente?.apellidos || ""}`.trim(), Placa: r?.vehiculo?.placa || "", Metodo: (f.metodoPago || "efectivo").charAt(0).toUpperCase() + (f.metodoPago || "efectivo").slice(1), Total: `$${(f.valor || 0).toLocaleString()}` }; })} filename="facturas" title="Facturas" columns={[{ key: 'Factura', label: 'Factura' }, { key: 'Origen', label: 'Origen' }, { key: 'Cliente', label: 'Cliente' }, { key: 'Placa', label: 'Placa' }, { key: 'Metodo', label: 'Método Pago' }, { key: 'Total', label: 'Total' }]} />
       </div>
 
       <div className="p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 dark:bg-slate-800 mb-5">
@@ -93,6 +94,7 @@ export default function Facturas() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={6} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -109,10 +111,10 @@ export default function Facturas() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {filtrados.length === 0 ? (
+              {facturas.length === 0 ? (
                 <tr><td colSpan={9} className="px-4 py-16 text-center"><p className="text-slate-400 dark:text-slate-500 text-sm">No hay facturas generadas</p></td></tr>
               ) : (
-                filtrados.map((f) => {
+                facturas.map((f) => {
                   const r = f.origen === "MENSUALIDAD" ? f.mensualidad : f.ingreso;
                   return (
                   <tr key={f.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50">
@@ -160,6 +162,7 @@ export default function Facturas() {
         </div>
         <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
+      )}
 
       {facturaDetalle && (() => {
         const f = facturaDetalle;

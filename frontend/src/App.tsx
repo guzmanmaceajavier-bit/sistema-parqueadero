@@ -1,6 +1,7 @@
 import AppRouter from "./routes/AppRouter";
 import { NotificacionProvider } from "./context/NotificacionContext";
 import { ConfigProvider, useConfig } from "./context/ConfigContext";
+import { ListasProvider } from "./context/ListasContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { useEffect } from "react";
 
@@ -104,11 +105,13 @@ function App() {
   return (
     <ErrorBoundary>
       <ConfigProvider>
-        <ThemeApplier>
-          <NotificacionProvider>
-            <AppRouter />
-          </NotificacionProvider>
-        </ThemeApplier>
+        <ListasProvider>
+          <ThemeApplier>
+            <NotificacionProvider>
+              <AppRouter />
+            </NotificacionProvider>
+          </ThemeApplier>
+        </ListasProvider>
       </ConfigProvider>
     </ErrorBoundary>
   );

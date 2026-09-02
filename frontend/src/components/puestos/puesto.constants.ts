@@ -5,6 +5,7 @@ export const TIPOS_PUESTO = [
   { value: "bicicleta", label: "Bicicleta" },
   { value: "discapacitado", label: "Discapacitado" },
   { value: "carga", label: "Carga" },
+  { value: "otro", label: "Otro" },
 ];
 
 export const ZONAS = [

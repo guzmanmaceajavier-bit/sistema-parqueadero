@@ -3,13 +3,18 @@ import api from "../services/api";
 import Toast from "../components/Toast";
 import Select from "../components/ui/Select";
 import { useConfig } from "../context/ConfigContext";
+import { useListas, LISTAS_POR_DEFECTO } from "../context/ListasContext";
 import { syncFormatterConfig } from "../utils/formatters";
+import ListasTab from "../components/ListasTab";
+import { PageSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
 
 export default function Configuracion() {
   const { recargarConfig } = useConfig();
+  const { listas, guardarListas, recargarListas } = useListas();
+  const [listasForm, setListasForm] = useState(listas);
   const [form, setForm] = useState({
     nombreParqueadero: "", nit: "", direccion: "", ciudad: "", telefono: "", whatsapp: "", correo: "", logo: "", fondoLogin: "",
     colorFondoLogin: "#f0fdf4", colorPrincipal: "#0d9488", colorSecundario: "#14b8a6", colorFondo: "#f8fafc", modoOscuro: false, tamanoFuente: "medium",
@@ -20,6 +25,7 @@ export default function Configuracion() {
     pieFactura: "", metodosPago: "efectivo,tarjeta,transferencia", intentosMaximos: 10,
   });
   const [cargando, setCargando] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
   const [subiendoLogo, setSubiendoLogo] = useState(false);
   const [subiendoFondo, setSubiendoFondo] = useState(false);
@@ -40,10 +46,11 @@ export default function Configuracion() {
           return { ...prev, ...data };
         });
       }
-    } catch { }
+    } catch { } finally { setInitialLoading(false); }
   };
 
   useEffect(() => { cargarConfig(); }, []);
+  useEffect(() => { setListasForm(listas); }, [listas]);
 
   const CAMPOS_NUMERICOS = ["paginacionPorDefecto", "iva", "intentosMaximos"];
 
@@ -62,9 +69,11 @@ export default function Configuracion() {
       payload.paginacionPorDefecto = Number(payload.paginacionPorDefecto);
       payload.iva = Number(payload.iva);
       payload.intentosMaximos = Number(payload.intentosMaximos);
+      payload.listasConfiguracion = listasForm;
       await api.post("/configuracion", payload);
       syncFormatterConfig(payload);
       recargarConfig();
+      guardarListas(listasForm);
       setModificado(false);
       mostrarToast("Configuración guardada correctamente", "success");
     } catch (e) {
@@ -146,6 +155,7 @@ export default function Configuracion() {
     { id: "mensajes", label: "Mensajes WhatsApp", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
     { id: "operativa", label: "Operativa", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
     { id: "seguridad", label: "Seguridad", icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" },
+    { id: "listas", label: "Listas", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
   ];
 
   const PLANTILLAS_PREDETERMINADAS = {
@@ -166,6 +176,8 @@ export default function Configuracion() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 lg:p-8">
       <div className="max-w-6xl mx-auto">
+        {initialLoading ? <PageSkeleton /> : (
+        <>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl lg:text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Configuración</h1>
@@ -642,8 +654,14 @@ export default function Configuracion() {
                 </div>
               </div>
             )}
+
+            {tab === "listas" && (
+              <ListasTab listasForm={listasForm} setListasForm={setListasForm} setModificado={setModificado} />
+            )}
           </div>
         </div>
+        </>
+        )}
       </div>
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
     </div>

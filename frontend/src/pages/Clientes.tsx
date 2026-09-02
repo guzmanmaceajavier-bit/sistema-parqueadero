@@ -1,17 +1,18 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { AlertTriangle, CalendarDays, Car, CheckCircle, MessageCircle, Pencil, Plus, RefreshCw, Search, Trash2, Upload, User, UserPlus, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Car, CheckCircle, MessageCircle, Pencil, Plus, RefreshCw, Search, Trash2, Upload, User, UserPlus, X, ChevronDown, Filter } from "lucide-react";
 import { Link } from "react-router-dom";
 import useDebounce from "../hooks/useDebounce";
 import ScrollLock from "../components/ScrollLock";
 import api from "../services/api";
 import SelectWithOther from "../components/SelectWithOther";
 import Select from "../components/ui/Select";
-import { MARCAS_VEHICULO } from "../constants/vehiculo";
+import { useListas } from "../context/ListasContext";
 import ExportButton from "../components/ExportButton";
 import Pagination from "../components/Pagination";
 import FormModal from "../components/ui/FormModal";
 import Toast from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { TableSkeleton } from "../components/Skeleton";
 
 const ESTADOS_CLIENTE = [
   { value: "ACTIVO", label: "Activo", bg: "bg-emerald-50 dark:bg-emerald-900/20", text: "text-emerald-700 dark:text-emerald-400", border: "border-emerald-200 dark:border-emerald-800", dot: "bg-emerald-500" },
@@ -21,12 +22,7 @@ const ESTADOS_CLIENTE = [
   { value: "MOROSO", label: "Moroso", bg: "bg-rose-50 dark:bg-rose-900/20", text: "text-rose-700 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800", dot: "bg-rose-500" },
 ];
 
-const TIPOS_VEHICULO_BASE = [
-  { value: "moto", label: "Moto" },
-  { value: "carro", label: "Carro" },
-  { value: "camioneta", label: "Camioneta" },
-  { value: "bicicleta", label: "Bicicleta" },
-];
+const TIPOS_VEHICULO_BASE = [];
 
 const CLASES_VEHICULO = [
   { value: "", label: "Seleccionar..." },
@@ -81,9 +77,59 @@ function IconX() {
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
 
+function FiltroDropdown({ label, opciones, valor, onChange, color = "teal" }) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef(null);
+  const seleccionado = opciones.find(o => o.value === valor);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const cerrar = (e) => { if (ref.current && !ref.current.contains(e.target)) setAbierto(false); };
+    document.addEventListener("mousedown", cerrar);
+    return () => document.removeEventListener("mousedown", cerrar);
+  }, [abierto]);
+
+  const colores = {
+    teal: { active: "bg-teal-600 text-white border-teal-600", hover: "hover:bg-teal-50 dark:hover:bg-teal-900/20" },
+    indigo: { active: "bg-indigo-600 text-white border-indigo-600", hover: "hover:bg-indigo-50 dark:hover:bg-indigo-900/20" },
+  };
+  const c = colores[color] || colores.teal;
+  const isActive = valor !== "";
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setAbierto(!abierto)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+          isActive
+            ? `${c.active} shadow-md`
+            : `bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-600 ${c.hover}`
+        }`}>
+        <Filter className="w-3 h-3" />
+        {seleccionado?.label || label}
+        <ChevronDown className={`w-3 h-3 transition-transform ${abierto ? "rotate-180" : ""}`} />
+      </button>
+      {abierto && (
+        <div className="absolute z-50 mt-1 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl overflow-hidden">
+          {opciones.map(o => (
+            <button key={o.value} onClick={() => { onChange(o.value); setAbierto(false); }}
+              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                valor === o.value
+                  ? "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300 font-medium"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+              }`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Componente Principal ─── */
 
 export default function Clientes() {
+  const { listas } = useListas();
   const [clientes, setClientes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda);
@@ -109,13 +155,14 @@ export default function Clientes() {
   const existenteRef = useRef({ mensualidadId: null, reservaId: null, ingresoId: null });
 
   const tiposVehiculo = useMemo(() => {
-    if (!tarifas.length) return [{ value: "", label: "Seleccionar..." }, ...TIPOS_VEHICULO_BASE];
+    const base = listas.tiposVehiculo;
+    if (!tarifas.length) return [{ value: "", label: "Seleccionar..." }, ...base];
     const disponibles = new Set(tarifas.map(t => t.tipoVehiculo));
-    if (disponibles.has("todos")) return [{ value: "", label: "Seleccionar..." }, ...TIPOS_VEHICULO_BASE];
-    const filtrados = TIPOS_VEHICULO_BASE.filter(t => disponibles.has(t.value));
-    if (!filtrados.length) return [{ value: "", label: "Seleccionar..." }, ...TIPOS_VEHICULO_BASE];
+    if (disponibles.has("todos")) return [{ value: "", label: "Seleccionar..." }, ...base];
+    const filtrados = base.filter(t => disponibles.has(t.value));
+    if (!filtrados.length) return [{ value: "", label: "Seleccionar..." }, ...base];
     return [{ value: "", label: "Seleccionar..." }, ...filtrados];
-  }, [tarifas]);
+  }, [tarifas, listas.tiposVehiculo]);
 
   const [renovarCli, setRenovarCli] = useState(null);
   const [renovarPlanId, setRenovarPlanId] = useState("");
@@ -146,6 +193,7 @@ export default function Clientes() {
 
   const [form, setForm] = useState(formVacio);
 
+  const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
 
@@ -167,6 +215,8 @@ export default function Clientes() {
       setPagination(response.data.pagination || {});
     } catch (error) {
       console.log(error);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -486,34 +536,38 @@ export default function Clientes() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-2">
-        {[
-          { value: "", label: "Todos" },
-          { value: "ACTIVO", label: "Activos" },
-          { value: "AUSENTE", label: "Ausentes" },
-          { value: "VENCIDO", label: "Vencidos" },
-          { value: "SUSPENDIDO", label: "Suspendidos" },
-          { value: "MOROSO", label: "Morosos" },
-        ].map(f => (
-          <button key={f.value} onClick={() => { setFiltroRapido(f.value); setPage(1); }} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${filtroRapido === f.value ? "bg-teal-600 text-white shadow-md" : "bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600"}`}>
-            {f.label}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <FiltroDropdown
+          label="Estado"
+          opciones={[
+            { value: "", label: "Todos" },
+            ...ESTADOS_CLIENTE.map(e => ({ value: e.value, label: e.label })),
+          ]}
+          valor={filtroRapido}
+          onChange={(v) => { setFiltroRapido(v); setPage(1); }}
+          color="teal"
+        />
+        <FiltroDropdown
+          label="Condición"
+          opciones={[
+            { value: "", label: "Sin filtro" },
+            { value: "CON_PLAN", label: "Con plan" },
+            { value: "SIN_PLAN", label: "Sin plan" },
+            { value: "CON_RESERVA", label: "Con reserva" },
+            { value: "SIN_RESERVA", label: "Sin reserva" },
+            { value: "CON_VEHICULO", label: "Con vehículo" },
+            { value: "SIN_VEHICULO", label: "Sin vehículo" },
+          ]}
+          valor={filtroExtra}
+          onChange={(v) => { setFiltroExtra(v); setPage(1); }}
+          color="indigo"
+        />
+        {(filtroRapido || filtroExtra) && (
+          <button onClick={() => { setFiltroRapido(""); setFiltroExtra(""); setPage(1); }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+            <X className="w-3 h-3" /> Limpiar
           </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-2 mb-5">
-        {[
-          { value: "", label: "Sin filtro" },
-          { value: "CON_PLAN", label: "Con plan" },
-          { value: "SIN_PLAN", label: "Sin plan" },
-          { value: "CON_RESERVA", label: "Con reserva" },
-          { value: "SIN_RESERVA", label: "Sin reserva" },
-          { value: "CON_VEHICULO", label: "Con vehículo" },
-          { value: "SIN_VEHICULO", label: "Sin vehículo" },
-        ].map(f => (
-          <button key={f.value} onClick={() => { setFiltroExtra(f.value); setPage(1); }} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${filtroExtra === f.value ? "bg-indigo-600 text-white shadow-md" : "bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600"}`}>
-            {f.label}
-          </button>
-        ))}
+        )}
       </div>
 
       <div className="p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 dark:bg-slate-800 mb-5">
@@ -531,6 +585,7 @@ export default function Clientes() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={10} /> : (
       <div className="rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -682,6 +737,7 @@ export default function Clientes() {
 
         <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
+      )}
 
       <FormModal
         open={mostrarModal}
@@ -791,7 +847,7 @@ export default function Clientes() {
                   <SelectWithOther label="Clase" name={`vehiculos.${idx}.clase`} value={v.clase} onChange={handleChange} options={CLASES_VEHICULO} otherLabel="Otra clase" />
                 </div>
                 <div>
-                  <SelectWithOther label="Marca" name={`vehiculos.${idx}.marca`} value={v.marca} onChange={handleChange} options={MARCAS_VEHICULO} otherLabel="Otra marca" />
+                  <SelectWithOther label="Marca" name={`vehiculos.${idx}.marca`} value={v.marca} onChange={handleChange} options={listas.marcasVehiculo} otherLabel="Otra marca" />
                 </div>
                 <div>
                   <label className={labelClass}>Color</label>

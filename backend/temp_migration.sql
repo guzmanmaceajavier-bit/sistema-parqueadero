@@ -1,0 +1,1 @@
+ALTER TABLE "Configuracion" ADD COLUMN IF NOT EXISTS "listasConfiguracion" JSONB;

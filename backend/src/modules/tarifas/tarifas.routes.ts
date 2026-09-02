@@ -2,6 +2,7 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
+import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearTarifaSchema, actualizarTarifaSchema } from "../../schemas/tarifa.schema.js";
 import { crearTarifa, obtenerTarifas, obtenerTarifa, actualizarTarifa, eliminarTarifa } from "./tarifas.controller.js";
 
@@ -67,8 +68,8 @@ router.get("/", verificarToken, obtenerTarifas);
  *       404:
  *         description: Tarifa no encontrada
  */
-router.get("/:id", verificarToken, obtenerTarifa);
-router.put("/:id", verificarToken, verificarRol("admin"), validate(actualizarTarifaSchema), actualizarTarifa);
+router.get("/:id", verificarToken, validateIdParam, obtenerTarifa);
+router.put("/:id", verificarToken, validateIdParam, verificarRol("admin"), validate(actualizarTarifaSchema), actualizarTarifa);
 
 /**
  * @swagger
@@ -89,6 +90,6 @@ router.put("/:id", verificarToken, verificarRol("admin"), validate(actualizarTar
  *       404:
  *         description: Tarifa no encontrada
  */
-router.delete("/:id", verificarToken, verificarRol("admin"), eliminarTarifa);
+router.delete("/:id", verificarToken, validateIdParam, verificarRol("admin"), eliminarTarifa);
 
 export default router;

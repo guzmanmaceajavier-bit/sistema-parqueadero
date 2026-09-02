@@ -9,16 +9,13 @@ import Toast from "../components/Toast";
 import ScrollLock from "../components/ScrollLock";
 import ExportButton from "../components/ExportButton";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { useListas } from "../context/ListasContext";
+import { TableSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
 
-const TIPOS_VEHICULO_CHECKBOX = [
-  { value: "moto", label: "Moto" },
-  { value: "carro", label: "Carro" },
-  { value: "camioneta", label: "Camioneta" },
-  { value: "bicicleta", label: "Bicicleta" },
-];
+const TIPOS_VEHICULO_CHECKBOX = [];
 
 function parseTipos(tipoVehiculo) {
   if (!tipoVehiculo) return [];
@@ -86,6 +83,7 @@ function ModalidadBadge({ modalidad }) {
 }
 
 export default function Tarifas() {
+  const { listas } = useListas();
   const [tarifas, setTarifas] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda);
@@ -96,6 +94,7 @@ export default function Tarifas() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
 
@@ -201,6 +200,7 @@ export default function Tarifas() {
       setTarifas(res.data.tarifas || []);
       setPagination(res.data.pagination || {});
     } catch (error) { console.log(error); }
+    finally { setInitialLoading(false); }
   };
 
   useEffect(() => { cargarTarifas(page); }, [page]);
@@ -244,7 +244,7 @@ export default function Tarifas() {
     setModoEdicion(true);
     setTarifaId(tarifa.id);
     const tipos = parseTipos(tarifa.tipoVehiculo);
-    const predef = TIPOS_VEHICULO_CHECKBOX.map(t => t.value);
+    const predef = listas.tiposVehiculo.map(t => t.value);
     const presets = tipos.filter(t => predef.includes(t));
     const custom = tipos.filter(t => !predef.includes(t)).join(", ");
     setTiposSeleccionados(presets);
@@ -313,6 +313,8 @@ export default function Tarifas() {
         </div>
       </div>
 
+      {initialLoading ? <TableSkeleton rows={8} cols={5} /> : (
+      <>
       {tarifas.length === 0 ? (
         <div className="rounded-xl border border-slate-100 dark:border-slate-700 dark:bg-slate-800 p-16 text-center shadow-sm">
           <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-4">
@@ -358,6 +360,8 @@ export default function Tarifas() {
         </div>
       )}
       <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
+      </>
+      )}
 
       <FormModal
         open={mostrarModal}
@@ -384,7 +388,7 @@ export default function Tarifas() {
                 <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-teal-600 dark:group-hover:text-teal-400">Todos los tipos</span>
               </label>
               <hr className="border-slate-100 dark:border-slate-700" />
-              {TIPOS_VEHICULO_CHECKBOX.map(t => (
+              {listas.tiposVehiculo.map(t => (
                 <label key={t.value} className="flex items-center gap-2 cursor-pointer group">
                   <input type="checkbox" checked={tiposSeleccionados.includes(t.value)} onChange={() => handleTipoChange(t.value)} className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-teal-600 focus:ring-teal-500/20 cursor-pointer" />
                   <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-teal-600 dark:group-hover:text-teal-400">{t.label}</span>

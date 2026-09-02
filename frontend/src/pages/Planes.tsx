@@ -8,6 +8,7 @@ import Toast from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Pagination from "../components/Pagination";
 import ExportButton from "../components/ExportButton";
+import { useListas } from "../context/ListasContext";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
@@ -19,12 +20,7 @@ const TIPOS_PLAN = [
   { value: "mensual", label: "Plan Mensual", dias: 30 },
 ];
 
-const TIPOS_VEHICULO_CHECKBOX = [
-  { value: "moto", label: "Moto" },
-  { value: "carro", label: "Carro" },
-  { value: "camioneta", label: "Camioneta" },
-  { value: "bicicleta", label: "Bicicleta" },
-];
+const TIPOS_VEHICULO_CHECKBOX = [];
 
 function parseTipos(tipoVehiculo) {
   if (!tipoVehiculo) return [];
@@ -42,6 +38,7 @@ function displayTipos(tipoVehiculo) {
 }
 
 export default function Planes() {
+  const { listas } = useListas();
   const [planes, setPlanes] = useState([]);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [editarId, setEditarId] = useState(null);
@@ -160,7 +157,7 @@ export default function Planes() {
   const abrirEditar = (p) => {
     setEditarId(p.id);
     const tipos = parseTipos(p.tipoVehiculo);
-    const predef = TIPOS_VEHICULO_CHECKBOX.map(t => t.value);
+    const predef = listas.tiposVehiculo.map(t => t.value);
     const presets = tipos.filter(t => predef.includes(t));
     const custom = tipos.filter(t => !predef.includes(t)).join(", ");
     setTiposSeleccionados(presets);
@@ -308,7 +305,7 @@ export default function Planes() {
                 <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-teal-600 dark:group-hover:text-teal-400">Todos los tipos</span>
               </label>
               <hr className="border-slate-100 dark:border-slate-700" />
-              {TIPOS_VEHICULO_CHECKBOX.map(t => (
+              {listas.tiposVehiculo.map(t => (
                 <label key={t.value} className="flex items-center gap-2 cursor-pointer group">
                   <input type="checkbox" checked={tiposSeleccionados.includes(t.value)} onChange={() => handleTipoChange(t.value)} className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-teal-600 focus:ring-teal-500/20 cursor-pointer" />
                   <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-teal-600 dark:group-hover:text-teal-400">{t.label}</span>

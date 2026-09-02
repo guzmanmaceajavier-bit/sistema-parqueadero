@@ -1,4 +1,4 @@
-import { X, ParkingCircle, User, Car } from "lucide-react";
+import { X, ParkingCircle, User, Car, Info } from "lucide-react";
 import Select from "../ui/Select";
 import ClientSearch from "../ClientSearch";
 import { getEstadoConfig } from "./puesto.constants";
@@ -6,7 +6,7 @@ import { getEstadoConfig } from "./puesto.constants";
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
 
-export default function PuestoAssignModal({ puesto, clientes, vehiculos, form, onClose, onClientChange, onVehiculoChange, onSave }) {
+export default function PuestoAssignModal({ puesto, clientes, vehiculos, vehiculosActivos, form, onClose, onClientChange, onVehiculoChange, onSave }) {
   if (!puesto) return null;
 
   const tipos = (puesto.tipoPuesto || "").split(",").map(t => t.trim()).filter(Boolean);
@@ -76,6 +76,26 @@ export default function PuestoAssignModal({ puesto, clientes, vehiculos, form, o
                 return tiposPermitidos.length === 0 || tiposPermitidos.includes(v.tipo);
               }).map(v => ({ value: v.id.toString(), label: `${v.placa} - ${v.marca} ${v.modelo}` })),
             ]} placeholder={form.clienteId ? "Seleccionar vehículo" : "Primero selecciona un cliente"} />
+            {vehiculosActivos?.length > 0 && (
+              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-xs">
+                <div className="flex items-start gap-2">
+                  <Info className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-blue-700 dark:text-blue-300">{vehiculosActivos.length} vehículo{vehiculosActivos.length > 1 ? "s" : ""} ya registrado{vehiculosActivos.length > 1 ? "s" : ""} en el parqueadero</p>
+                    <div className="mt-1.5 space-y-1">
+                      {vehiculosActivos.map(ing => (
+                        <div key={ing.id} className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                          <span className="font-mono font-bold">{ing.vehiculo?.placa}</span>
+                          <span className="text-blue-300 dark:text-blue-600">→</span>
+                          <span>{ing.puesto?.codigo || "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-blue-500 dark:text-blue-400 italic">Solo se muestran vehículos disponibles (no ocupados).</p>
+                  </div>
+                </div>
+              </div>
+            )}
             {form.vehiculoId && (() => {
               const v = vehiculos.find(ve => ve.id === parseInt(form.vehiculoId));
               if (!v) return null;

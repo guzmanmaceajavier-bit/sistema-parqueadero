@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Car, Calendar, Clock, DollarSign, User, Phone, Mail, MapPin, Receipt, MessageCircle } from "lucide-react";
 import api from "../services/api";
+import { formatCurrency, formatDate, formatTime } from "../utils/formatters";
 
 export default function PerfilCliente() {
   const { id } = useParams();
@@ -57,12 +58,12 @@ export default function PerfilCliente() {
               <div className="text-xs text-slate-400 dark:text-slate-500">Visitas</div>
             </div>
             <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl px-4 py-3">
-              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">${(data.totalGastado || 0).toFixed(0)}</div>
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(data.totalGastado || 0)}</div>
               <div className="text-xs text-slate-400 dark:text-slate-500">Gastado</div>
             </div>
             <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl px-4 py-3">
               <div className={`text-2xl font-bold ${data.deudaPendiente > 0 ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-white"}`}>
-                ${(data.deudaPendiente || 0).toFixed(0)}
+                {formatCurrency(data.deudaPendiente || 0)}
               </div>
               <div className="text-xs text-slate-400 dark:text-slate-500">Deuda</div>
             </div>
@@ -102,12 +103,12 @@ export default function PerfilCliente() {
             <tbody>
               {(data.historial || []).map((item, i) => (
                 <tr key={i} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                  <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{new Date(item.fechaEntrada).toLocaleDateString("es-CO")}</td>
+                  <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{formatDate(item.fechaEntrada)}</td>
                   <td className="py-2 px-2 font-mono font-bold text-slate-800 dark:text-white">{item.placa}</td>
                   <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{item.puesto?.codigo || "—"}</td>
-                  <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{new Date(item.fechaEntrada).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hourCycle: "h12" })}</td>
-                  <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{item.fechaSalida ? new Date(item.fechaSalida).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hourCycle: "h12" }) : "—"}</td>
-                  <td className="py-2 px-2 text-right font-medium text-slate-800 dark:text-white">${(item.factura?.valor || 0).toFixed(0)}</td>
+                  <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{formatTime(item.fechaEntrada)}</td>
+                  <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{item.fechaSalida ? formatTime(item.fechaSalida) : "—"}</td>
+                  <td className="py-2 px-2 text-right font-medium text-slate-800 dark:text-white">{formatCurrency(item.factura?.valor || 0)}</td>
                 </tr>
               ))}
               {(data.historial || []).length === 0 && (
@@ -134,10 +135,10 @@ export default function PerfilCliente() {
               <tbody>
                 {data.pagos.map((p, i) => (
                   <tr key={i} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                    <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{new Date(p.fecha).toLocaleDateString("es-CO")}</td>
+                    <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{formatDate(p.fecha)}</td>
                     <td className="py-2 px-2 text-slate-800 dark:text-white font-medium">{p.concepto}</td>
                     <td className="py-2 px-2 text-slate-600 dark:text-slate-300 capitalize">{p.metodo || "—"}</td>
-                    <td className="py-2 px-2 text-right font-bold text-slate-800 dark:text-white">${p.valor.toFixed(0)}</td>
+                    <td className="py-2 px-2 text-right font-bold text-slate-800 dark:text-white">{formatCurrency(p.valor)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -165,7 +166,7 @@ export default function PerfilCliente() {
                   <tr key={i} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                     <td className="py-2 px-2 font-mono font-bold text-slate-800 dark:text-white">{m.placa}</td>
                     <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{m.plan?.nombre || "—"}</td>
-                    <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{m.periodoInicio ? new Date(m.periodoInicio).toLocaleDateString("es-CO") : "—"} - {m.periodoFin ? new Date(m.periodoFin).toLocaleDateString("es-CO") : "—"}</td>
+                    <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{m.periodoInicio ? formatDate(m.periodoInicio) : "—"} - {m.periodoFin ? formatDate(m.periodoFin) : "—"}</td>
                     <td className="py-2 px-2">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         m.estado === "pagado" ? "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" :
@@ -173,7 +174,7 @@ export default function PerfilCliente() {
                         "bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400"
                       }`}>{m.estado}</span>
                     </td>
-                    <td className="py-2 px-2 text-right font-medium text-slate-800 dark:text-white">${(m.valorPagado || m.valor || 0).toFixed(0)}</td>
+                    <td className="py-2 px-2 text-right font-medium text-slate-800 dark:text-white">{formatCurrency(m.valorPagado || m.valor || 0)}</td>
                   </tr>
                 ))}
               </tbody>

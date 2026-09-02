@@ -63,11 +63,11 @@ export const login = asyncHandler(async (req, res) => {
     secure: NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
   });
 
   res.json({
     ok: true,
-    token,
     usuario: { id: usuarioDb.id, nombre: usuarioDb.nombre, usuario: usuarioDb.usuario, correo: usuarioDb.correo, rol: usuarioDb.rol },
   });
 });
@@ -171,7 +171,16 @@ export const cambiarEstadoUsuario = asyncHandler(async (req, res) => {
 
 export const eliminarUsuario = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  await prisma.usuario.delete({ where: { id: Number(id) } });
+  const targetId = Number(id);
+  if (targetId === req.usuario.id) {
+    throw new AppError("No puedes eliminar tu propia cuenta", 400);
+  }
+  const adminCount = await prisma.usuario.count({ where: { rol: "admin", estado: true } });
+  const target = await prisma.usuario.findUnique({ where: { id: targetId }, select: { rol: true } });
+  if (target?.rol === "admin" && adminCount <= 1) {
+    throw new AppError("No puedes eliminar el último administrador", 400);
+  }
+  await prisma.usuario.delete({ where: { id: targetId } });
   res.json({ ok: true, message: "Usuario eliminado" });
 });
 
@@ -225,6 +234,10 @@ export const invalidarSesiones = asyncHandler(async (req, res) => {
 
 export const logout = asyncHandler(async (req, res) => {
   const NODE_ENV = process.env.NODE_ENV || "development";
+  await prisma.usuario.update({
+    where: { id: req.usuario.id },
+    data: { tokenVersion: { increment: 1 } },
+  });
   res.clearCookie("token", { httpOnly: true, secure: NODE_ENV === "production", sameSite: "lax", path: "/" });
   res.json({ ok: true, message: "Sesion cerrada" });
 });
@@ -256,8 +269,9 @@ export const refreshToken = asyncHandler(async (req, res) => {
     secure: NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
-  res.json({ ok: true, token: nuevoToken });
+  res.json({ ok: true });
 });
 
 export const resetPassword = asyncHandler(async (req, res) => {

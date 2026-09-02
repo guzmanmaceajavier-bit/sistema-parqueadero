@@ -36,6 +36,7 @@ export const TIPOS_VEHICULO = [
   { value: "carro", label: "Carro" },
   { value: "camioneta", label: "Camioneta" },
   { value: "bicicleta", label: "Bicicleta" },
+  { value: "otro", label: "Otro" },
 ];
 
 export const CLASES_VEHICULO = [

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const VAPID_PUBLIC_KEY = "BFVxs8Qy8XK9Rc8JX7H5W0z3T2p6a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4";
+const VAPID_PUBLIC_KEY = process.env.REACT_APP_VAPID_KEY || "";
 
 export function useNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>(Notification.permission);

@@ -3,11 +3,13 @@ import { ChevronDown, X, ParkingCircle } from "lucide-react";
 import SelectWithOther from "../SelectWithOther";
 import { TIPOS_PUESTO, ZONAS, ESTADOS_PUESTO } from "./puesto.constants";
 import { combinarTipos } from "./puesto.helpers";
+import { useListas } from "../../context/ListasContext";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
 
 export default function PuestoFormModal({ abierto, modoEdicion, form, tiposSeleccionados, otrosTipos, onClose, onSave, onChange, onTipoChange, onOtrosChange, cargando }) {
+  const { listas } = useListas();
   const [tipoDropdown, setTipoDropdown] = useState(false);
   const tipoRef = useRef(null);
 
@@ -60,7 +62,7 @@ export default function PuestoFormModal({ abierto, modoEdicion, form, tiposSelec
                 </button>
                 {tipoDropdown && (
                   <div className="mt-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl p-3 space-y-1.5 shadow-lg">
-                    {TIPOS_PUESTO.map(t => (
+                    {listas.tiposPuesto.map(t => (
                       <label key={t.value} className="flex items-center gap-2 cursor-pointer group px-1 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-600">
                         <input type="checkbox" checked={tiposSeleccionados.includes(t.value)} onChange={() => onTipoChange(t.value)} className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-teal-600 focus:ring-teal-500/20 cursor-pointer" />
                         <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-teal-600 dark:group-hover:text-teal-400">{t.label}</span>
@@ -85,7 +87,7 @@ export default function PuestoFormModal({ abierto, modoEdicion, form, tiposSelec
           </div>
 
           <div className="bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 p-4">
-            <SelectWithOther label="Zona" name="zona" value={form.zona} onChange={onChange} options={ZONAS} otherLabel="Otra zona" />
+            <SelectWithOther label="Zona" name="zona" value={form.zona} onChange={onChange} options={listas.zonas} otherLabel="Otra zona" />
           </div>
 
           <div className="bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 p-4">
