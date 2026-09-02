@@ -23,7 +23,7 @@ Sistema integral de gestión de parqueaderos con facturación automática, plane
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, React Router v6, Socket.IO Client | Vercel |
 | **Backend** | Node.js 20, Express 5, TypeScript, Prisma ORM, JWT, Socket.IO, PDFKit | Render (Docker) |
 | **Base de datos** | PostgreSQL 16 | Render Managed Database |
-| **Auth** | JWT + httpOnly cookies, Google OAuth 2.0 | — |
+| **Auth** | JWT + httpOnly cookies | — |
 | **Seguridad** | Helmet, rate limiting, input sanitization, parameterized queries | — |
 
 ## Funcionalidades
@@ -36,7 +36,6 @@ Sistema integral de gestión de parqueaderos con facturación automática, plane
 - **Ausencias** — Programación con descuento automático de días del plan
 - **Facturación** — Generación de facturas con PDF
 - **Usuarios** — Roles admin/supervisor/empleado con control de acceso
-- **Google Auth** — Inicio de sesión con cuenta Google (OAuth 2.0)
 - **Notificaciones** — WebSocket para actualizaciones en tiempo real
 - **Reportes** — Exportación de datos y reportes financieros
 - **Backup** — Sistema de respaldo y restauración de datos
@@ -76,7 +75,6 @@ npm run dev
 DATABASE_URL=postgresql://...
 JWT_SECRET=tu-secreto-seguro-min-32-chars
 ADMIN_PASSWORD=TuPasswordSeguro123!
-GOOGLE_CLIENT_ID=tu-google-client-id
 NODE_ENV=development
 ```
 
@@ -84,7 +82,6 @@ NODE_ENV=development
 
 ```env
 VITE_API_URL=http://localhost:3000
-VITE_GOOGLE_CLIENT_ID=tu-google-client-id
 ```
 
 ## Despliegue

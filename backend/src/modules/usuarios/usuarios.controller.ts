@@ -1,7 +1,6 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { OAuth2Client } from "google-auth-library";
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
@@ -70,66 +69,6 @@ export const login = asyncHandler(async (req, res) => {
   res.json({
     ok: true,
     usuario: { id: usuarioDb.id, nombre: usuarioDb.nombre, usuario: usuarioDb.usuario, correo: usuarioDb.correo, rol: usuarioDb.rol },
-  });
-});
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
-export const googleLogin = asyncHandler(async (req, res) => {
-  const { credential } = req.body;
-  if (!credential) throw new AppError("Token de Google requerido", 400);
-
-  const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
-  const payload = ticket.getPayload();
-  if (!payload) throw new AppError("Token de Google inválido", 401);
-
-  const { sub: googleId, email, name } = payload;
-  const NODE_ENV = process.env.NODE_ENV || "development";
-
-  let usuario = await prisma.usuario.findFirst({
-    where: { OR: [{ googleId }, { correo: email }] },
-  });
-
-  if (usuario) {
-    if (!usuario.googleId) {
-      await prisma.usuario.update({ where: { id: usuario.id }, data: { googleId } });
-    }
-    if (!usuario.estado) throw new AppError("Cuenta desactivada", 403);
-  } else {
-    const baseUsuario = email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "");
-    let usuarioNombre = baseUsuario;
-    let counter = 1;
-    while (await prisma.usuario.findUnique({ where: { usuario: usuarioNombre } })) {
-      usuarioNombre = `${baseUsuario}${counter++}`;
-    }
-    usuario = await prisma.usuario.create({
-      data: { nombre: name || usuarioNombre, usuario: usuarioNombre, correo: email, googleId, password: null, rol: "empleado" },
-    });
-  }
-
-  await prisma.usuario.update({ where: { id: usuario.id }, data: { ultimoAcceso: new Date() } });
-
-  const token = jwt.sign(
-    { id: usuario.id, usuario: usuario.usuario, rol: usuario.rol, tokenVersion: usuario.tokenVersion },
-    JWT_SECRET,
-    { expiresIn: "4h" }
-  );
-
-  await prisma.acceso.create({
-    data: { usuarioId: usuario.id, usuario: usuario.usuario, actividad: "INICIO SESIÓN (Google)", ip: req.ip, dispositivo: req.headers["user-agent"] },
-  });
-
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: NODE_ENV === "production",
-    sameSite: NODE_ENV === "production" ? "none" : "lax",
-    path: "/",
-    maxAge: 4 * 60 * 60 * 1000,
-  });
-
-  res.json({
-    ok: true,
-    usuario: { id: usuario.id, nombre: usuario.nombre, usuario: usuario.usuario, correo: usuario.correo, rol: usuario.rol },
   });
 });
 
