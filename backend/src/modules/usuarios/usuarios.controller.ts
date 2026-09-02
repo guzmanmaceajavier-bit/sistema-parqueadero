@@ -118,6 +118,9 @@ export const obtenerUsuarios = asyncHandler(async (req, res) => {
 });
 
 export const obtenerPerfil = asyncHandler(async (req, res) => {
+  if (!req.usuario) {
+    return res.json({ ok: false, usuario: null });
+  }
   const usuario = await prisma.usuario.findUnique({
     where: { id: req.usuario.id },
     select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, ultimoAcceso: true, createdAt: true },

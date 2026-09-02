@@ -1,6 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { verificarToken } from "../../middlewares/auth.middleware.js";
+import { verificarToken, verificarTokenOpcional } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { crearUsuarioSchema, loginSchema, actualizarUsuarioSchema, cambiarEstadoUsuarioSchema, solicitarResetPasswordSchema, resetPasswordSchema, verificarPasswordSchema } from "../../schemas/usuario.schema.js";
@@ -180,7 +180,7 @@ router.post("/invalidar-sesiones", verificarToken, invalidarSesiones);
  *       401:
  *         description: No autenticado
  */
-router.get("/perfil", verificarToken, obtenerPerfil);
+router.get("/perfil", verificarTokenOpcional, obtenerPerfil);
 
 /**
  * @swagger

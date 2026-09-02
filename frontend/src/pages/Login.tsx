@@ -266,7 +266,15 @@ export default function Login() {
             </div>
 
             <h1 className="text-2xl font-bold mb-0.5" style={{ color: "#0f172a" }}>Iniciar sesión</h1>
-            <p className="text-sm text-slate-400 mb-5">Ingresa tus credenciales para acceder</p>
+            <p className="text-sm text-slate-400 mb-4">Ingresa tus credenciales para acceder</p>
+
+            <div className="w-full max-w-[280px] mb-4 p-3 rounded-xl border border-dashed" style={{ borderColor: `${accent}40`, background: `${accent}06` }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: accent }}>Credenciales de acceso</p>
+              <div className="space-y-0.5">
+                <p className="text-xs text-slate-500"><span className="font-semibold text-slate-700">Usuario:</span> admin</p>
+                <p className="text-xs text-slate-500"><span className="font-semibold text-slate-700">Contraseña:</span> Admin123</p>
+              </div>
+            </div>
 
             <form onSubmit={handleLogin} className="w-full flex flex-col items-center gap-3.5">
               <div className="inp-wrap">

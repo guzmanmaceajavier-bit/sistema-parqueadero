@@ -45,7 +45,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     rawApi.get("/usuarios/perfil")
       .then((res) => {
         if (loginadoRef.current) return;
-        setUser(res.data?.usuario || null);
+        if (res.data?.ok && res.data?.usuario) {
+          setUser(res.data.usuario);
+        } else {
+          setUser(null);
+        }
       })
       .catch(() => {
         if (loginadoRef.current) return;
