@@ -75,22 +75,22 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     sucursalId
       ? prisma.$queryRawUnsafe(
           `SELECT v.placa, v.tipo, v.color, c.nombres as cliente, COUNT(*) as total
-           FROM Ingreso i
-           JOIN Vehiculo v ON v.id = i.vehiculoId
-           LEFT JOIN Cliente c ON c.id = v.clienteId
-           LEFT JOIN Puesto p ON p.id = i.puestoId
-           WHERE i.estado = 'FINALIZADO' AND p.sucursalId = $1
+           FROM "Ingreso" i
+           JOIN "Vehiculo" v ON v.id = i."vehiculoId"
+           LEFT JOIN "Cliente" c ON c.id = v."clienteId"
+           LEFT JOIN "Puesto" p ON p.id = i."puestoId"
+           WHERE i.estado = 'FINALIZADO' AND p."sucursalId" = $1
            GROUP BY v.id ORDER BY total DESC LIMIT 8`,
           sucursalId
-        )
+        ).catch(() => [])
       : prisma.$queryRawUnsafe(
           `SELECT v.placa, v.tipo, v.color, c.nombres as cliente, COUNT(*) as total
-           FROM Ingreso i
-           JOIN Vehiculo v ON v.id = i.vehiculoId
-           LEFT JOIN Cliente c ON c.id = v.clienteId
+           FROM "Ingreso" i
+           JOIN "Vehiculo" v ON v.id = i."vehiculoId"
+           LEFT JOIN "Cliente" c ON c.id = v."clienteId"
            WHERE i.estado = 'FINALIZADO'
            GROUP BY v.id ORDER BY total DESC LIMIT 8`
-        ),
+        ).catch(() => []),
     prisma.caja.findFirst({ where: { estado: "ABIERTA", ...sucursalFilter }, select: { id: true, apertura: true, createdAt: true } }),
 
     prisma.reserva.groupBy({ by: ["estado"], _count: true, where: { createdAt: { gte: hoy }, ...sucursalFilter } }),
