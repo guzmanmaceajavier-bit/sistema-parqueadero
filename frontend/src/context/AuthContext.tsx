@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+import axios from "axios";
 import api from "../services/api";
 
 interface User {
@@ -35,7 +36,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener("auth:expired", onAuthExpired);
 
-    api.get("/usuarios/perfil")
+    const rawApi = axios.create({
+      baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : "/api",
+      withCredentials: true,
+      timeout: 120000,
+    });
+
+    rawApi.get("/usuarios/perfil")
       .then((res) => {
         if (loginadoRef.current) return;
         setUser(res.data?.usuario || null);

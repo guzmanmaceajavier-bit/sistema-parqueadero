@@ -60,10 +60,6 @@ const forgotPasswordLimiter = rateLimit({
  */
 router.post("/login", loginLimiter, validate(loginSchema), login);
 
-router.get("/test-credentials", async (_req, res) => {
-  res.json({ ok: true, credentials: [{ usuario: "admin", password: "admin123", rol: "admin" }] });
-});
-
 /**
  * @swagger
  * /usuarios:
