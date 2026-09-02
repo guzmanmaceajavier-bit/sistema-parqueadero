@@ -61,8 +61,10 @@ const limiter = rateLimit({
 });
 
 app.use(helmet());
-const CORS_ORIGINS = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",") : ["http://localhost:5173", "http://localhost:3000"];
-app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
+const CORS_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS === "*" ? "*" : process.env.CORS_ORIGINS.split(",")
+  : ["http://localhost:5173", "http://localhost:3000"];
+app.use(cors({ origin: CORS_ORIGINS, credentials: CORS_ORIGINS !== "*" }));
 app.use(limiter);
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
@@ -116,8 +118,24 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-initSocket(server);
-iniciarScheduler();
+
+if (!process.env.DATABASE_URL) {
+  console.error("FATAL: DATABASE_URL no está definido");
+  process.exit(1);
+}
+
+try {
+  initSocket(server);
+} catch (e) {
+  console.error("Error al iniciar socket:", e);
+}
+
+try {
+  iniciarScheduler();
+} catch (e) {
+  console.error("Error al iniciar scheduler:", e);
+}
+
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
