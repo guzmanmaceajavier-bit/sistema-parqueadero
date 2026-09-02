@@ -61,9 +61,9 @@ export const login = asyncHandler(async (req, res) => {
   res.cookie("token", token, {
     httpOnly: true,
     secure: NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: NODE_ENV === "production" ? "none" : "lax",
     path: "/",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   res.json({
@@ -238,7 +238,7 @@ export const logout = asyncHandler(async (req, res) => {
     where: { id: req.usuario.id },
     data: { tokenVersion: { increment: 1 } },
   });
-  res.clearCookie("token", { httpOnly: true, secure: NODE_ENV === "production", sameSite: "lax", path: "/" });
+  res.clearCookie("token", { httpOnly: true, secure: NODE_ENV === "production", sameSite: NODE_ENV === "production" ? "none" : "lax", path: "/" });
   res.json({ ok: true, message: "Sesion cerrada" });
 });
 
@@ -267,7 +267,7 @@ export const refreshToken = asyncHandler(async (req, res) => {
   res.cookie("token", nuevoToken, {
     httpOnly: true,
     secure: NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: NODE_ENV === "production" ? "none" : "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
