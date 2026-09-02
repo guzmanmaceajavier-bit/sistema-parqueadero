@@ -60,13 +60,13 @@ const limiter = rateLimit({
   message: { ok: false, message: "Demasiadas peticiones, intente de nuevo en 1 minuto" },
 });
 
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 const CORS_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS === "*" ? true : process.env.CORS_ORIGINS.split(",")
   : ["http://localhost:5173", "http://localhost:3000"];
 app.use(cors({
   origin: CORS_ORIGINS === true
-    ? (origin, cb) => cb(null, true)
+    ? true
     : CORS_ORIGINS,
   credentials: true,
 }));
