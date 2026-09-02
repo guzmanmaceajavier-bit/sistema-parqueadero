@@ -3,7 +3,6 @@ services:
     name: parqueadero-backend
     runtime: docker
     plan: free
-    dockerfilePath: ./backend/Dockerfile
     envVars:
       - key: NODE_ENV
         value: production
