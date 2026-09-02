@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import api from "../services/api";
+import { rawApi } from "../services/api";
 
 const ListasContext = createContext(null);
 
@@ -110,7 +110,7 @@ export function ListasProvider({ children }) {
 
   const cargarListas = useCallback(async () => {
     try {
-      const res = await api.get("/configuracion");
+      const res = await rawApi.get("/configuracion");
       const config = res.data.configuracion;
       if (config?.listasConfiguracion) {
         setListas(mergeListas(config.listasConfiguracion, LISTAS_POR_DEFECTO));

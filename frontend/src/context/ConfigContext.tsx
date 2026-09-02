@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import api from "../services/api";
+import api, { rawApi } from "../services/api";
 import { syncFormatterConfig } from "../utils/formatters";
 
 const ConfigContext = createContext(null);
@@ -9,7 +9,7 @@ export function ConfigProvider({ children }) {
 
   const cargarConfig = async () => {
     try {
-      const res = await api.get("/configuracion");
+      const res = await rawApi.get("/configuracion");
       if (res.data.configuracion) {
         setConfig(res.data.configuracion);
         syncFormatterConfig(res.data.configuracion);
@@ -22,7 +22,7 @@ export function ConfigProvider({ children }) {
   const toggleModoOscuro = useCallback(async () => {
     try {
       const nuevoValor = !config?.modoOscuro;
-      await api.post("/configuracion", { ...config, modoOscuro: nuevoValor });
+      await rawApi.post("/configuracion", { ...config, modoOscuro: nuevoValor });
       document.documentElement.classList.toggle("dark", nuevoValor);
       await cargarConfig();
     } catch {}

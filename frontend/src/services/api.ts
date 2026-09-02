@@ -12,6 +12,12 @@ const api = axios.create({
   timeout: 120000,
 });
 
+export const rawApi = axios.create({
+  baseURL,
+  withCredentials: true,
+  timeout: 120000,
+});
+
 let refreshPromise: Promise<boolean> | null = null;
 let isRefreshing = false;
 let loggedOut = false;
@@ -45,7 +51,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       try {
         if (!refreshPromise) {
-          refreshPromise = api.post("/usuarios/refresh-token").then(() => true).catch(() => false);
+          refreshPromise = rawApi.post("/usuarios/refresh-token").then(() => true).catch(() => false);
         }
         const ok = await refreshPromise;
         refreshPromise = null;

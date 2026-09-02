@@ -229,4 +229,38 @@ router.delete("/fondo", verificarToken, async (req, res) => {
   }
 });
 
+router.post("/fix-listas", verificarToken, verificarRol("admin"), async (req, res) => {
+  try {
+    const config = await service.obtenerConfiguracion();
+    if (!config) return res.json({ ok: true, message: "No hay configuracion" });
+
+    const updates: Record<string, unknown> = {};
+
+    if (config.formatoHora === "24h") {
+      updates.formatoHora = "12h";
+    }
+
+    if (config.listasConfiguracion && typeof config.listasConfiguracion === "object") {
+      const listas = JSON.parse(JSON.stringify(config.listasConfiguracion));
+      if (listas.tiposVehiculo && Array.isArray(listas.tiposVehiculo)) {
+        listas.tiposVehiculo = listas.tiposVehiculo.map((item: { value: string; label: string }) => {
+          if (item.value === "aviones" || item.label?.toLowerCase() === "aviones") {
+            return { value: "avion", label: "Avion" };
+          }
+          return item;
+        });
+      }
+      updates.listasConfiguracion = listas;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await service.actualizarConfiguracion(config.id, updates);
+    }
+
+    res.json({ ok: true, message: "Datos corregidos", updates });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
 export default router;
