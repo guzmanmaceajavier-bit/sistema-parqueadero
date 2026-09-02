@@ -18,7 +18,7 @@ export default function Configuracion() {
   const [form, setForm] = useState({
     nombreParqueadero: "", nit: "", direccion: "", ciudad: "", telefono: "", whatsapp: "", correo: "", logo: "", fondoLogin: "",
     colorFondoLogin: "#f0fdf4", colorPrincipal: "#0d9488", colorSecundario: "#14b8a6", colorFondo: "#f8fafc", modoOscuro: false, tamanoFuente: "medium",
-    formatoFecha: "DD/MM/YYYY", formatoHora: "24h", formatoMoneda: "COP", zonaHoraria: "America/Bogota", monedaSimbolo: "$", idioma: "es",
+    formatoFecha: "DD/MM/YYYY", formatoHora: "12h", formatoMoneda: "COP", zonaHoraria: "America/Bogota", monedaSimbolo: "$", idioma: "es",
     notificarWhatsappIngreso: false, notificarWhatsappSalida: false, notificarWhatsappReserva: false, notificarWhatsappVencimiento: false, notificarEmail: false,
     mensajeWhatsappIngreso: "", mensajeWhatsappSalida: "", mensajeWhatsappFactura: "", mensajeWhatsappReserva: "", mensajeWhatsappRecordatorio: "", mensajeWhatsappVencida: "", mensajeWhatsappBienvenida: "",
     horarioApertura: "06:00", horarioCierre: "22:00", paginacionPorDefecto: 15, iva: 0, minutosGracia: 0,

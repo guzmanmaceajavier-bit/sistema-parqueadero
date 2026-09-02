@@ -25,7 +25,7 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
   const [sSuscripciones, setSSuscripciones] = useState(true);
   const [sCaja, setSCaja] = useState(true);
   const [sAuditoria, setSAuditoria] = useState(false);
-  const [sConfig, setSConfig] = useState(false);
+  const [sConfig, setSConfig] = useState(true);
   const [mostrarLogout, setMostrarLogout] = useState(false);
   const [popoverSeccion, setPopoverSeccion] = useState(null);
   const popoverRef = useRef(null);
