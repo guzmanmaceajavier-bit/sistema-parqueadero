@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import { useAuth } from "./AuthContext";
 import api from "../services/api";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || undefined;
+const SOCKET_URL = import.meta.env.VITE_API_URL || undefined;
 
 interface Notificacion {
   id: number;
