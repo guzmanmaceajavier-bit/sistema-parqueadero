@@ -24,8 +24,8 @@ export function initSocket(server) {
   io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
-        if (NODE_ENV !== "production") return callback(null, true);
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        const allowAll = allowedOrigins.includes("*") || allowedOrigins.length === 0;
+        if (allowAll || !origin || allowedOrigins.includes(origin)) return callback(null, true);
         callback(new Error("Not allowed by CORS"));
       },
       methods: ["GET", "POST"],

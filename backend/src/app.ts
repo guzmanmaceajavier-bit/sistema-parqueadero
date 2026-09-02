@@ -72,14 +72,9 @@ const limiter = rateLimit({
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use((req, res, next) => {
   const origin = req.headers.origin || "";
-  if (NODE_ENV === "production") {
-    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
-      res.header("Access-Control-Allow-Origin", origin);
-    } else if (allowedOrigins.length === 0) {
-      res.header("Access-Control-Allow-Origin", origin);
-    }
-  } else {
-    res.header("Access-Control-Allow-Origin", origin);
+  const allowAll = allowedOrigins.includes("*") || allowedOrigins.length === 0;
+  if (allowAll || (origin && allowedOrigins.includes(origin))) {
+    res.header("Access-Control-Allow-Origin", origin || "*");
   }
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
