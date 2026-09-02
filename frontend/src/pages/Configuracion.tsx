@@ -70,6 +70,15 @@ export default function Configuracion() {
       payload.iva = Number(payload.iva);
       payload.intentosMaximos = Number(payload.intentosMaximos);
       payload.listasConfiguracion = listasForm;
+      if (!payload.correo?.trim()) payload.correo = null;
+      if (!payload.nit?.trim()) payload.nit = null;
+      if (!payload.direccion?.trim()) payload.direccion = null;
+      if (!payload.ciudad?.trim()) payload.ciudad = null;
+      if (!payload.telefono?.trim()) payload.telefono = null;
+      if (!payload.whatsapp?.trim()) payload.whatsapp = null;
+      if (!payload.pieFactura?.trim()) payload.pieFactura = null;
+      if (!payload.logo?.trim()) payload.logo = null;
+      if (!payload.fondoLogin?.trim()) payload.fondoLogin = null;
       await api.post("/configuracion", payload);
       syncFormatterConfig(payload);
       recargarConfig();
@@ -77,7 +86,7 @@ export default function Configuracion() {
       setModificado(false);
       mostrarToast("Configuración guardada correctamente", "success");
     } catch (e) {
-      const msg = e.response?.data?.error || e.response?.data?.message || "Error al guardar configuración";
+      const msg = e.response?.data?.errors?.[0]?.message || e.response?.data?.message || "Error al guardar configuración";
       mostrarToast(msg, "error");
     } finally {
       setCargando(false);
