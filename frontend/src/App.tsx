@@ -1,3 +1,4 @@
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import AppRouter from "./routes/AppRouter";
 import { NotificacionProvider } from "./context/NotificacionContext";
 import { ConfigProvider, useConfig } from "./context/ConfigContext";
@@ -102,17 +103,20 @@ function ThemeApplier({ children }) {
 }
 
 function App() {
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
   return (
     <ErrorBoundary>
-      <ConfigProvider>
-        <ListasProvider>
-          <ThemeApplier>
-            <NotificacionProvider>
-              <AppRouter />
-            </NotificacionProvider>
-          </ThemeApplier>
-        </ListasProvider>
-      </ConfigProvider>
+      <GoogleOAuthProvider clientId={googleClientId}>
+        <ConfigProvider>
+          <ListasProvider>
+            <ThemeApplier>
+              <NotificacionProvider>
+                <AppRouter />
+              </NotificacionProvider>
+            </ThemeApplier>
+          </ListasProvider>
+        </ConfigProvider>
+      </GoogleOAuthProvider>
     </ErrorBoundary>
   );
 }

@@ -12,7 +12,8 @@ model Usuario {
   nombre            String
   usuario           String    @unique
   correo            String    @unique
-  password          String
+  password          String?
+  googleId          String?   @unique
   rol               String    @default("empleado")
   estado            Boolean   @default(true)
   intentosFallidos  Int       @default(0)

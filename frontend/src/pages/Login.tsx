@@ -6,6 +6,7 @@ import {
   Eye, EyeOff, Loader2, LogIn, AlertCircle, Mail, CheckCircle,
   Sparkles, KeyRound, Info
 } from "lucide-react";
+import { GoogleLogin } from "@react-oauth/google";
 import api from "../services/api";
 
 export default function Login() {
@@ -37,6 +38,17 @@ export default function Login() {
   const [fMsg, setFMsg] = useState("");
   const [fLoading, setfLoading] = useState(false);
   const [fSent, setFSent] = useState(false);
+
+  const handleGoogleLogin = async (credentialResponse) => {
+    try {
+      const res = await api.post("/usuarios/google", { credential: credentialResponse.credential });
+      if (res.data?.ok) {
+        login(res.data.usuario);
+      }
+    } catch {
+      setError("Error al iniciar sesión con Google");
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -314,6 +326,25 @@ export default function Login() {
                 {loading ? <Loader2 size={17} className="animate-spin" /> : <LogIn size={17} />}
                 {loading ? "Entrando..." : "Entrar"}
               </button>
+
+              {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                <div className="w-full max-w-[280px] flex flex-col items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2 w-full">
+                    <div className="flex-1 h-px bg-slate-200" />
+                    <span className="text-[10px] text-slate-400 uppercase">o</span>
+                    <div className="flex-1 h-px bg-slate-200" />
+                  </div>
+                  <GoogleLogin
+                    onSuccess={handleGoogleLogin}
+                    onError={() => setError("Error al iniciar sesión con Google")}
+                    theme="outline"
+                    size="large"
+                    width="280"
+                    text="continue_with"
+                    shape="pill"
+                  />
+                </div>
+              )}
             </form>
           </div>
         </div>

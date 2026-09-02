@@ -58,3 +58,20 @@ coverage/
 
 # ─── Docker ───
 .docker/
+
+# ─── Temp / Migrations ───
+*.sql
+temp_*
+fix-*
+unlock-*
+check-*
+
+# ─── Uploads (runtime) ───
+backend/uploads/
+
+# ─── Server logs ───
+server.log
+server.err.log
+
+# ─── Backup scripts ───
+scripts/

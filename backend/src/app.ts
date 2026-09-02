@@ -39,6 +39,15 @@ import { iniciarScheduler } from "./services/scheduler.js";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
+// CORS origins allowlist
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map(o => o.trim())
+  .filter(Boolean);
+if (NODE_ENV !== "production") {
+  allowedOrigins.push("http://localhost:5173", "http://localhost:3000");
+}
+
 // Validar JWT_SECRET al iniciar
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const isWeak = JWT_SECRET.length < 32 || ["parqueadero_super_secret", "secret", "jwt_secret"].includes(JWT_SECRET);
@@ -62,7 +71,16 @@ const limiter = rateLimit({
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  const origin = req.headers.origin || "";
+  if (NODE_ENV === "production") {
+    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
+    } else if (allowedOrigins.length === 0) {
+      res.header("Access-Control-Allow-Origin", origin);
+    }
+  } else {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -91,7 +109,9 @@ app.use("/uploads", (req, res, next) => {
   res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.sendFile(filePath);
 });
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
+if (NODE_ENV !== "production") {
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
+}
 app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/configuracion", configuracionRoutes);
 app.use("/api/clientes", clientesRoutes);

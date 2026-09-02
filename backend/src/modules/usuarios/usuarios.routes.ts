@@ -4,7 +4,7 @@ import { verificarToken, verificarTokenOpcional } from "../../middlewares/auth.m
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { crearUsuarioSchema, loginSchema, actualizarUsuarioSchema, cambiarEstadoUsuarioSchema, solicitarResetPasswordSchema, resetPasswordSchema, verificarPasswordSchema } from "../../schemas/usuario.schema.js";
-import { login, crearUsuario, crearAdmin, obtenerPerfil, obtenerUsuarios, obtenerAccesos, actualizarUsuario, cambiarEstadoUsuario, eliminarUsuario, solicitarResetPassword, resetPassword, verificarPassword, invalidarSesiones, refreshToken, logout } from "./usuarios.controller.js";
+import { login, crearUsuario, crearAdmin, obtenerPerfil, obtenerUsuarios, obtenerAccesos, actualizarUsuario, cambiarEstadoUsuario, eliminarUsuario, solicitarResetPassword, resetPassword, verificarPassword, invalidarSesiones, refreshToken, logout, googleLogin } from "./usuarios.controller.js";
 import prisma from "../../config/prisma.js";
 
 const router = express.Router();
@@ -59,6 +59,7 @@ const forgotPasswordLimiter = rateLimit({
  *         description: Credenciales incorrectas
  */
 router.post("/login", loginLimiter, validate(loginSchema), login);
+router.post("/google", googleLogin);
 
 /**
  * @swagger
@@ -180,7 +181,7 @@ router.post("/invalidar-sesiones", verificarToken, invalidarSesiones);
  *       401:
  *         description: No autenticado
  */
-router.get("/perfil", verificarToken, obtenerPerfil);
+router.get("/perfil", verificarTokenOpcional, obtenerPerfil);
 
 /**
  * @swagger

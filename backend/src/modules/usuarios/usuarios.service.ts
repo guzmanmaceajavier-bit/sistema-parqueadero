@@ -30,5 +30,4 @@ export const crearUsuarioAdmin = async () => {
   });
 
   console.log("Administrador creado correctamente");
-  console.log(admin);
 };
