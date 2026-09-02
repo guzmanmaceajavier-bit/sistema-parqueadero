@@ -12,22 +12,9 @@ function parseCookies(header) {
 }
 
 export function initSocket(server) {
-  const NODE_ENV = process.env.NODE_ENV || "development";
-  const allowedOrigins = (process.env.CORS_ORIGINS || "")
-    .split(",")
-    .map(o => o.trim())
-    .filter(Boolean);
-  if (NODE_ENV !== "production") {
-    allowedOrigins.push("http://localhost:5173", "http://localhost:3000");
-  }
-
   io = new Server(server, {
     cors: {
-      origin: (origin, callback) => {
-        const allowAll = allowedOrigins.includes("*") || allowedOrigins.length === 0;
-        if (allowAll || !origin || allowedOrigins.includes(origin)) return callback(null, true);
-        callback(new Error("Not allowed by CORS"));
-      },
+      origin: true,
       methods: ["GET", "POST"],
       credentials: true,
     },

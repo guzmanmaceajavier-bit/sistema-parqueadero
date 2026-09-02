@@ -1,14 +1,12 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import path from "path";
 import fs from "fs";
-import crypto from "crypto";
 import http from "http";
 import { swaggerSpec, swaggerUi } from "./config/swagger.js";
 import usuariosRoutes from "./modules/usuarios/usuarios.routes.js";
@@ -39,15 +37,6 @@ import { iniciarScheduler } from "./services/scheduler.js";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
-// CORS origins allowlist
-const allowedOrigins = (process.env.CORS_ORIGINS || "")
-  .split(",")
-  .map(o => o.trim())
-  .filter(Boolean);
-if (NODE_ENV !== "production") {
-  allowedOrigins.push("http://localhost:5173", "http://localhost:3000");
-}
-
 // Validar JWT_SECRET al iniciar
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const isWeak = JWT_SECRET.length < 32 || ["parqueadero_super_secret", "secret", "jwt_secret"].includes(JWT_SECRET);
@@ -71,10 +60,9 @@ const limiter = rateLimit({
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use((req, res, next) => {
-  const origin = req.headers.origin || "";
-  const allowAll = allowedOrigins.includes("*") || allowedOrigins.length === 0;
-  if (allowAll || (origin && allowedOrigins.includes(origin))) {
-    res.header("Access-Control-Allow-Origin", origin || "*");
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header("Access-Control-Allow-Origin", origin);
   }
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
