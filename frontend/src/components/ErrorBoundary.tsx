@@ -7,12 +7,12 @@ export default class ErrorBoundary extends Component {
   }
 
   static getDerivedStateFromError(error) {
-    if (error?.name === "NotFoundError") return null;
+    if (error?.name === "NotFoundError" || String(error).includes("insertBefore")) return null;
     return { hasError: true };
   }
 
   componentDidCatch(error, info) {
-    if (error?.name === "NotFoundError") return;
+    if (error?.name === "NotFoundError" || String(error).includes("insertBefore")) return;
     console.error("ErrorBoundary caught:", error, info);
   }
 

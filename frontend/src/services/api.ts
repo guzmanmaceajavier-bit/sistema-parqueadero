@@ -20,7 +20,8 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     const originalRequest = error.config;
-    if (error.response.status === 401 && !originalRequest._retry && originalRequest.url !== "/usuarios/refresh-token") {
+    const skipRefresh = ["/usuarios/perfil", "/usuarios/refresh-token", "/usuarios/test-credentials"];
+    if (error.response.status === 401 && !originalRequest._retry && !skipRefresh.includes(originalRequest.url)) {
       if (isRefreshing) return Promise.reject(error);
       isRefreshing = true;
       originalRequest._retry = true;

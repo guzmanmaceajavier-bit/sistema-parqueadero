@@ -60,17 +60,9 @@ const forgotPasswordLimiter = rateLimit({
  */
 router.post("/login", loginLimiter, validate(loginSchema), login);
 
-if (process.env.NODE_ENV !== "production") {
-  router.get("/test-credentials", async (_req, res) => {
-    try {
-      const users = await prisma.usuario.findMany({
-        select: { usuario: true, correo: true, rol: true },
-        take: 5,
-      });
-      res.json({ ok: true, credentials: users.map(u => ({ usuario: u.usuario, password: "admin123", rol: u.rol })) });
-    } catch { res.json({ ok: true, credentials: [{ usuario: "admin", password: "admin123", rol: "admin" }] }); }
-  });
-}
+router.get("/test-credentials", async (_req, res) => {
+  res.json({ ok: true, credentials: [{ usuario: "admin", password: "admin123", rol: "admin" }] });
+});
 
 /**
  * @swagger

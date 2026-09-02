@@ -8,7 +8,7 @@ import { CajaProvider } from "./context/CajaContext";
 
 ReactDOM.createRoot(document.getElementById("root"), {
   onRecoverableError(error, errorInfo) {
-    if (error?.name === "NotFoundError") return;
+    if (error?.name === "NotFoundError" || String(error).includes("insertBefore")) return;
     console.error("Recoverable error:", error, errorInfo);
   }
 }).render(
