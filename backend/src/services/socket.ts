@@ -13,7 +13,8 @@ function parseCookies(header) {
 
 export function initSocket(server) {
   io = new Server(server, {
-    cors: { origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",") : ["http://localhost:5173", "http://localhost:3000"], methods: ["GET", "POST"], credentials: true },
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    transports: ["websocket", "polling"],
   });
 
   io.use((socket, next) => {
