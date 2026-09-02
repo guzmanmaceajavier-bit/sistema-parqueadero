@@ -253,9 +253,9 @@ export const refreshToken = asyncHandler(async (req, res) => {
   }
   let decoded;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
   } catch {
-    throw new AppError("Token invalido o expirado", 401);
+    throw new AppError("Token invalido", 401);
   }
   const usuario = await prisma.usuario.findUnique({ where: { id: decoded.id } });
   if (!usuario || !usuario.estado) throw new AppError("Usuario no encontrado o inactivo", 401);

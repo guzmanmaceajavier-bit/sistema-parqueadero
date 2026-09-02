@@ -24,9 +24,7 @@ window.addEventListener("auth:expired", () => {
 
 api.interceptors.request.use(
   (config) => {
-    if (loggedOut) {
-      return Promise.reject(new axios.Cancel("Logged out"));
-    }
+    if (loggedOut) return Promise.reject(new axios.Cancel("Logged out"));
     config.signal = logoutController?.signal;
     return config;
   },
@@ -38,6 +36,7 @@ api.interceptors.response.use(
   async (error) => {
     if (axios.isCancel(error) || loggedOut) return Promise.reject(error);
     if (!error.response) return Promise.reject(error);
+    if (error.config?.url?.includes("/usuarios/perfil")) return Promise.reject(error);
 
     const originalRequest = error.config;
     if (error.response.status === 401 && !originalRequest._retry) {
@@ -54,6 +53,7 @@ api.interceptors.response.use(
       } finally {
         isRefreshing = false;
       }
+      loggedOut = true;
       window.dispatchEvent(new Event("auth:expired"));
     }
     return Promise.reject(error);
