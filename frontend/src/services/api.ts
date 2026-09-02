@@ -11,24 +11,30 @@ const api = axios.create({
 });
 
 let refreshPromise: Promise<boolean> | null = null;
+let isRefreshing = false;
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (!error.response) {
-      console.warn("API no disponible (servidor apagado)");
       return Promise.reject(error);
     }
     const originalRequest = error.config;
     if (error.response.status === 401 && !originalRequest._retry && originalRequest.url !== "/usuarios/refresh-token") {
+      if (isRefreshing) return Promise.reject(error);
+      isRefreshing = true;
       originalRequest._retry = true;
-      if (!refreshPromise) {
-        refreshPromise = api.post("/usuarios/refresh-token").then(() => true).catch(() => false);
-      }
-      const ok = await refreshPromise;
-      refreshPromise = null;
-      if (ok) {
-        return api(originalRequest);
+      try {
+        if (!refreshPromise) {
+          refreshPromise = api.post("/usuarios/refresh-token").then(() => true).catch(() => false);
+        }
+        const ok = await refreshPromise;
+        refreshPromise = null;
+        if (ok) {
+          return api(originalRequest);
+        }
+      } finally {
+        isRefreshing = false;
       }
       window.dispatchEvent(new Event("auth:expired"));
     }

@@ -271,7 +271,13 @@ export default function Login() {
             </div>
 
             <h1 className="text-2xl font-bold mb-0.5" style={{ color: "#0f172a" }}>Iniciar sesión</h1>
-            <p className="text-sm text-slate-400 mb-5">Ingresa tus credenciales para acceder</p>
+            <p className="text-sm text-slate-400 mb-3">Ingresa tus credenciales para acceder</p>
+
+            <div className="w-full max-w-[280px] mb-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center">
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Credenciales de acceso</p>
+              <p className="text-xs text-slate-600"><span className="font-semibold">Usuario:</span> admin</p>
+              <p className="text-xs text-slate-600"><span className="font-semibold">Contraseña:</span> Admin123</p>
+            </div>
 
             <form onSubmit={handleLogin} className="w-full flex flex-col items-center gap-3.5">
               <div className="inp-wrap">
