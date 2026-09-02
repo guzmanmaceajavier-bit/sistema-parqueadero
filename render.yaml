@@ -1,10 +1,9 @@
 services:
   - type: web
     name: parqueadero-backend
-    runtime: node
+    runtime: docker
     plan: free
-    buildCommand: npm install && npx prisma generate
-    startCommand: npm start
+    dockerfilePath: ./backend/Dockerfile
     envVars:
       - key: NODE_ENV
         value: production
@@ -17,7 +16,7 @@ services:
           name: parqueadero-db
           property: connectionString
       - key: CORS_ORIGINS
-        value: https://tu-frontend.vercel.app
+        value: *
 
 databases:
   - name: parqueadero-db
