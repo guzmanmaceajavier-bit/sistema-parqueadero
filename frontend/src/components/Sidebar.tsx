@@ -264,10 +264,6 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
           <div className="flex-1 min-h-0" />
             <div className="flex flex-col items-center gap-0.5 px-1 pt-1">
               <div className={`w-5 h-px ${borderSub} mb-1`} />
-              <button title={rol === "admin" ? "Admin" : "Trabajador"}
-                className={`p-2 rounded-lg transition-all duration-200 cursor-pointer ${hoverClass} ${rol === "admin" ? "text-amber-500" : "text-blue-500"}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              </button>
               <button onClick={toggleModoOscuro} title={oscuro ? "Modo claro" : "Modo oscuro"}
               className={`p-2 rounded-lg transition-all duration-200 cursor-pointer ${hoverClass}`}>
               {oscuro
@@ -348,10 +344,6 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
                 <p className={`text-[10px] capitalize truncate ${textSecondary}`}>{rol === "admin" ? "admin" : rol === "supervisor" ? "supervisor" : "trabajador"}</p>
               </div>
               <div className="flex items-center gap-0.5">
-                <button title={rol === "admin" ? "Admin" : "Trabajador"}
-                  className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${hoverClass} ${rol === "admin" ? "text-amber-500" : "text-blue-500"}`}>
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </button>
                 <button onClick={toggleModoOscuro} title={oscuro ? "Modo claro" : "Modo oscuro"}
                   className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${hoverClass}`}>
                   {oscuro

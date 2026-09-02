@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import axios from "axios";
-import api, { resetAuthState } from "../services/api";
+import api, { resetAuthState, prepareLogout } from "../services/api";
 
 interface User {
   id: number;
@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    prepareLogout();
     loginadoRef.current = false;
     try { await api.post("/usuarios/logout"); } catch { /* ignore */ }
     setUser(null);

@@ -4,6 +4,8 @@ const baseURL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : "/api";
 
+let logoutController: AbortController | null = null;
+
 const api = axios.create({
   baseURL,
   withCredentials: true,
@@ -16,13 +18,26 @@ let loggedOut = false;
 
 window.addEventListener("auth:expired", () => {
   loggedOut = true;
+  logoutController?.abort();
+  logoutController = null;
 });
+
+api.interceptors.request.use(
+  (config) => {
+    if (loggedOut) {
+      return Promise.reject(new axios.Cancel("Logged out"));
+    }
+    config.signal = logoutController?.signal;
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (axios.isCancel(error) || loggedOut) return Promise.reject(error);
     if (!error.response) return Promise.reject(error);
-    if (loggedOut) return Promise.reject(error);
 
     const originalRequest = error.config;
     if (error.response.status === 401 && !originalRequest._retry) {
@@ -35,9 +50,7 @@ api.interceptors.response.use(
         }
         const ok = await refreshPromise;
         refreshPromise = null;
-        if (ok) {
-          return api(originalRequest);
-        }
+        if (ok) return api(originalRequest);
       } finally {
         isRefreshing = false;
       }
@@ -47,8 +60,14 @@ api.interceptors.response.use(
   }
 );
 
+export function prepareLogout() {
+  loggedOut = false;
+  logoutController = new AbortController();
+}
+
 export function resetAuthState() {
   loggedOut = false;
+  logoutController = null;
 }
 
 export default api;
