@@ -12,16 +12,20 @@ const api = axios.create({
 
 let refreshPromise: Promise<boolean> | null = null;
 let isRefreshing = false;
+let loggedOut = false;
+
+window.addEventListener("auth:expired", () => {
+  loggedOut = true;
+});
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (!error.response) {
-      return Promise.reject(error);
-    }
+    if (!error.response) return Promise.reject(error);
+    if (loggedOut) return Promise.reject(error);
+
     const originalRequest = error.config;
-    const skipRefresh = ["/usuarios/perfil", "/usuarios/refresh-token", "/usuarios/test-credentials"];
-    if (error.response.status === 401 && !originalRequest._retry && !skipRefresh.includes(originalRequest.url)) {
+    if (error.response.status === 401 && !originalRequest._retry) {
       if (isRefreshing) return Promise.reject(error);
       isRefreshing = true;
       originalRequest._retry = true;
@@ -42,5 +46,9 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export function resetAuthState() {
+  loggedOut = false;
+}
 
 export default api;

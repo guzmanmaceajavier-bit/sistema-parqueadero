@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import axios from "axios";
-import api from "../services/api";
+import api, { resetAuthState } from "../services/api";
 
 interface User {
   id: number;
@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback((userData: User) => {
+    resetAuthState();
     loginadoRef.current = true;
     setUser(userData);
     setLoading(false);

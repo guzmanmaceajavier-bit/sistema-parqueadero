@@ -180,7 +180,7 @@ router.post("/invalidar-sesiones", verificarToken, invalidarSesiones);
  *       401:
  *         description: No autenticado
  */
-router.get("/perfil", verificarTokenOpcional, obtenerPerfil);
+router.get("/perfil", verificarToken, obtenerPerfil);
 
 /**
  * @swagger
