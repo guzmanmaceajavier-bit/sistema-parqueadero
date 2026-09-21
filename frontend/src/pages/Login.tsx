@@ -1,9 +1,176 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useConfig } from "../context/ConfigContext";
-import { Eye, EyeOff, Loader2, LogIn, AlertCircle, User, Lock } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn, AlertCircle, User, Lock, ShieldCheck } from "lucide-react";
 import api from "../services/api";
 
+/* ─── Anillo SVG con progreso ─── */
+function RingLoader({ progress, accent, spinning, size = 220, stroke = 3.5 }) {
+  const svgRef = useRef(null);
+  const glowRef = useRef(null);
+
+  // SVG circle math
+  const r = (size - stroke * 2) / 2;
+  const c = 2 * Math.PI * r;
+
+  // Offset: 0 = full circle, c = empty
+  const offset = c - (progress / 100) * c;
+
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const circle = svgRef.current.querySelector("circle.progress");
+    if (!circle) return;
+    circle.style.strokeDasharray = `${c}`;
+    circle.style.strokeDashoffset = `${offset}`;
+    circle.style.transition = spinning ? "none" : "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)";
+  }, [c, offset, spinning]);
+
+  // Glow filter follows progress
+  useEffect(() => {
+    if (!glowRef.current) return;
+    glowRef.current.style.opacity = progress >= 100 ? "1" : "0";
+    glowRef.current.style.transition = "opacity 0.6s ease";
+  }, [progress]);
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+      <div className="relative" style={{ width: size, height: size }}>
+        {/* Glow difuso */}
+        <svg
+          ref={glowRef}
+          className="absolute inset-0"
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          style={{ opacity: 0, filter: `blur(12px)` }}
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={accent}
+            strokeWidth={stroke + 6}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            style={{
+              transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
+              transform: "rotate(-90deg)",
+              transformOrigin: "center",
+            }}
+          />
+        </svg>
+
+        {/* Anillo principal */}
+        <svg
+          ref={svgRef}
+          className={`absolute inset-0 ${spinning ? "animate-[ring-rotate_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" : ""}`}
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+        >
+          {/* Pista de fondo */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={accent}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={0}
+            opacity={0.1}
+          />
+          {/* Progreso */}
+          <circle
+            className="progress"
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={accent}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            style={{
+              transform: "rotate(-90deg)",
+              transformOrigin: "center",
+              strokeDasharray: c,
+              strokeDashoffset: c,
+            }}
+          />
+        </svg>
+      </div>
+
+      <style>{`
+        @keyframes ring-rotate {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ─── Overlay de bienvenida ─── */
+function WelcomeOverlay({ nombre, accent }) {
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-3xl overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${accent}ee, ${accent}cc)`,
+        backdropFilter: "blur(12px)",
+        animation: "welcome-fade 0.35s ease-out forwards",
+      }}
+    >
+      <style>{`
+        @keyframes welcome-fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes welcome-pop {
+          0% { transform: scale(0); opacity: 0; }
+          60% { transform: scale(1.15); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes welcome-text {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* Check icon */}
+      <div
+        className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mb-5"
+        style={{ animation: "welcome-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 0.1s) both" }}
+      >
+        <ShieldCheck className="w-8 h-8 text-white" strokeWidth={2} />
+      </div>
+
+      <h2
+        className="text-2xl font-bold text-white mb-1"
+        style={{ animation: "welcome-text 0.4s ease-out 0.2s both" }}
+      >
+        Bienvenido, {nombre || "Usuario"}!
+      </h2>
+      <p
+        className="text-sm text-white/70 mb-5"
+        style={{ animation: "welcome-text 0.4s ease-out 0.3s both" }}
+      >
+        Acceso autorizado
+      </p>
+      <div
+        className="flex items-center gap-2 text-xs text-white/60"
+        style={{ animation: "welcome-text 0.4s ease-out 0.4s both" }}
+      >
+        <Loader2 size={13} className="animate-spin" />
+        Cargando panel...
+      </div>
+    </div>
+  );
+}
+
+/* ─── Login principal ─── */
 export default function Login() {
   const { login } = useAuth();
   const { config } = useConfig();
@@ -20,24 +187,38 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Progreso del anillo: 0-100
+  const progress = useCallback(() => {
+    let p = 0;
+    if (user.trim().length > 0) p += 50;
+    if (pass.length > 0) p += 50;
+    return p;
+  }, [user, pass])();
+
+  const isComplete = progress === 100;
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const payload = user.includes("@") ? { correo: user, password: pass } : { usuario: user, password: pass };
+      const payload = user.includes("@")
+        ? { correo: user, password: pass }
+        : { usuario: user, password: pass };
       const res = await api.post("/usuarios/login", payload);
       if (res.data?.ok) {
         if (rememberMe) localStorage.setItem("rememberedUser", user);
         else localStorage.removeItem("rememberedUser");
-        login(res.data.usuario);
+        setShowWelcome(true);
+        setTimeout(() => login(res.data.usuario), 1500);
         return;
       }
       setError(res.data?.message || "Credenciales incorrectas");
+      setLoading(false);
     } catch (err) {
       setError(err.response?.data?.message || "Error de conexion");
-    } finally {
       setLoading(false);
     }
   };
@@ -52,6 +233,7 @@ export default function Login() {
           : "bg-gradient-to-br from-slate-50 via-white to-slate-100"
       }`}
     >
+      {/* Fondo */}
       {bgImage ? (
         <>
           <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-110" style={{ backgroundImage: `url(${bgImage})` }} />
@@ -66,111 +248,134 @@ export default function Login() {
         </div>
       )}
 
-      <div
-        className={`relative overflow-hidden rounded-3xl shadow-2xl w-[400px] max-w-[calc(100vw-32px)] ${
-          isDark
-            ? "bg-slate-800/80 ring-1 ring-slate-700/50 backdrop-blur-xl"
-            : "bg-white/95 ring-1 ring-slate-200/50 backdrop-blur-xl"
-        }`}
-      >
-        <div className="h-1 w-full" style={{ background: accentGrad }} />
+      {/* Tarjeta */}
+      <div className="relative z-10">
+        {/* Anillo de progreso — detrás de la tarjeta */}
+        <RingLoader
+          progress={progress}
+          accent={accent}
+          spinning={loading}
+          size={240}
+          stroke={3.5}
+        />
 
-        <div className="flex flex-col items-center px-10 py-10 text-center">
-          <div className="relative mb-5">
-            {logo ? (
-              <img src={logo} alt="Logo" className={`w-16 h-16 rounded-2xl shadow-lg object-cover ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ boxShadow: `0 4px 20px ${accent}30` }} />
-            ) : (
-              <div className={`w-16 h-16 rounded-2xl shadow-lg flex items-center justify-center ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ background: accentGrad, boxShadow: `0 4px 20px ${accent}30` }}>
-                <span className="text-white font-bold text-2xl tracking-tight">P</span>
-              </div>
-            )}
-          </div>
+        {/* Tarjeta */}
+        <div
+          className={`relative overflow-hidden rounded-3xl shadow-2xl w-[400px] max-w-[calc(100vw-32px)] z-10 ${
+            isDark
+              ? "bg-slate-800/90 ring-1 ring-slate-700/50 backdrop-blur-xl"
+              : "bg-white/95 ring-1 ring-slate-200/50 backdrop-blur-xl"
+          }`}
+          style={{
+            transition: "box-shadow 0.5s ease",
+            boxShadow: isComplete && !loading
+              ? `0 8px 40px ${accent}20, 0 0 50px ${accent}08`
+              : undefined,
+          }}
+        >
+          {/* Welcome overlay */}
+          {showWelcome && <WelcomeOverlay nombre={user} accent={accent} />}
 
-          <h1 className={`text-2xl font-bold mb-1 ${isDark ? "text-white" : "text-slate-900"}`}>
-            Iniciar sesion
-          </h1>
-          <p className={`text-sm mb-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-            Ingresa tus credenciales para acceder
-          </p>
+          <div className="h-1 w-full" style={{ background: accentGrad }} />
 
-          <form onSubmit={handleLogin} className="w-full flex flex-col items-center gap-3.5">
-            <div className="relative w-full group">
-              <div className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-                <User size={18} />
-              </div>
-              <input
-                className={`w-full border-2 rounded-xl py-3 pl-12 pr-4 text-sm outline-none transition-all duration-200 ${
-                  isDark
-                    ? "bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-teal-400 focus:bg-slate-700/80 focus:shadow-[0_0_0_4px_rgba(45,212,191,0.1)]"
-                    : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.1)]"
-                }`}
-                type="text"
-                value={user}
-                onChange={(e) => setUser(e.target.value)}
-                placeholder="Usuario o correo"
-                autoComplete="username"
-              />
+          <div className="flex flex-col items-center px-10 py-10 text-center relative z-20">
+            {/* Logo */}
+            <div className="relative mb-5">
+              {logo ? (
+                <img src={logo} alt="Logo" className={`w-16 h-16 rounded-2xl shadow-lg object-cover ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ boxShadow: `0 4px 20px ${accent}30` }} />
+              ) : (
+                <div className={`w-16 h-16 rounded-2xl shadow-lg flex items-center justify-center ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ background: accentGrad, boxShadow: `0 4px 20px ${accent}30` }}>
+                  <span className="text-white font-bold text-2xl tracking-tight">P</span>
+                </div>
+              )}
             </div>
 
-            <div className="relative w-full group">
-              <div className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-                <Lock size={18} />
+            <h1 className={`text-2xl font-bold mb-1 ${isDark ? "text-white" : "text-slate-900"}`}>
+              Iniciar sesion
+            </h1>
+            <p className={`text-sm mb-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              Ingresa tus credenciales para acceder
+            </p>
+
+            <form onSubmit={handleLogin} className="w-full flex flex-col items-center gap-3.5">
+              <div className="relative w-full">
+                <div className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                  <User size={18} />
+                </div>
+                <input
+                  className={`w-full border-2 rounded-xl py-3 pl-12 pr-4 text-sm outline-none transition-all duration-200 ${
+                    isDark
+                      ? "bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-teal-400 focus:bg-slate-700/80 focus:shadow-[0_0_0_4px_rgba(45,212,191,0.1)]"
+                      : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.1)]"
+                  }`}
+                  type="text"
+                  value={user}
+                  onChange={(e) => setUser(e.target.value)}
+                  placeholder="Usuario o correo"
+                  autoComplete="username"
+                />
               </div>
-              <input
-                className={`w-full border-2 rounded-xl py-3 pl-12 pr-12 text-sm outline-none transition-all duration-200 ${
-                  isDark
-                    ? "bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-teal-400 focus:bg-slate-700/80 focus:shadow-[0_0_0_4px_rgba(45,212,191,0.1)]"
-                    : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.1)]"
-                }`}
-                type={showPass ? "text" : "password"}
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                placeholder="Contrasena"
-                autoComplete="current-password"
-              />
+
+              <div className="relative w-full">
+                <div className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                  <Lock size={18} />
+                </div>
+                <input
+                  className={`w-full border-2 rounded-xl py-3 pl-12 pr-12 text-sm outline-none transition-all duration-200 ${
+                    isDark
+                      ? "bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-teal-400 focus:bg-slate-700/80 focus:shadow-[0_0_0_4px_rgba(45,212,191,0.1)]"
+                      : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.1)]"
+                  }`}
+                  type={showPass ? "text" : "password"}
+                  value={pass}
+                  onChange={(e) => setPass(e.target.value)}
+                  placeholder="Contrasena"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors cursor-pointer bg-transparent border-none p-0 ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}
+                >
+                  {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none self-start ml-1">
+                <div
+                  className="w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition-all"
+                  style={{ borderColor: rememberMe ? accent : isDark ? "#475569" : "#cbd5e1", background: rememberMe ? accent : "transparent" }}
+                >
+                  {rememberMe && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <input type="checkbox" checked={rememberMe} onChange={() => setRememberMe(!rememberMe)} className="hidden" />
+                <span className={`text-xs font-medium transition-colors ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}>
+                  Recordar usuario
+                </span>
+              </label>
+
+              {error && (
+                <div className={`w-full p-3 rounded-xl text-xs flex items-center gap-2.5 ${isDark ? "bg-red-900/20 border border-red-800/50 text-red-400" : "bg-red-50 border border-red-200 text-red-600"}`}>
+                  <AlertCircle size={14} className="shrink-0" />
+                  {error}
+                </div>
+              )}
+
               <button
-                type="button"
-                onClick={() => setShowPass(!showPass)}
-                className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors cursor-pointer bg-transparent border-none p-0 ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}
+                type="submit"
+                disabled={loading || !user || !pass || showWelcome}
+                className="w-full text-white font-semibold text-sm py-3 rounded-xl cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none inline-flex items-center justify-center gap-2"
+                style={{ background: accentGrad, boxShadow: `0 4px 15px ${accent}40` }}
               >
-                {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                {loading ? <Loader2 size={17} className="animate-spin" /> : <LogIn size={17} />}
+                {loading ? "Entrando..." : "Entrar"}
               </button>
-            </div>
-
-            <label className="flex items-center gap-2 cursor-pointer select-none self-start ml-1">
-              <div
-                className="w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition-all"
-                style={{ borderColor: rememberMe ? accent : isDark ? "#475569" : "#cbd5e1", background: rememberMe ? accent : "transparent" }}
-              >
-                {rememberMe && (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </div>
-              <input type="checkbox" checked={rememberMe} onChange={() => setRememberMe(!rememberMe)} className="hidden" />
-              <span className={`text-xs font-medium transition-colors ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}>
-                Recordar usuario
-              </span>
-            </label>
-
-            {error && (
-              <div className={`w-full p-3 rounded-xl text-xs flex items-center gap-2.5 ${isDark ? "bg-red-900/20 border border-red-800/50 text-red-400" : "bg-red-50 border border-red-200 text-red-600"}`}>
-                <AlertCircle size={14} className="shrink-0" />
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !user || !pass}
-              className="w-full text-white font-semibold text-sm py-3 rounded-xl cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none inline-flex items-center justify-center gap-2 relative overflow-hidden"
-              style={{ background: accentGrad, boxShadow: `0 4px 15px ${accent}40` }}
-            >
-              {loading ? <Loader2 size={17} className="animate-spin" /> : <LogIn size={17} />}
-              {loading ? "Entrando..." : "Entrar"}
-            </button>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
     </div>
