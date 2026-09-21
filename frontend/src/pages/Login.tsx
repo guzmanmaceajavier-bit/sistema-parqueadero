@@ -33,7 +33,7 @@ function RingLoader({ progress, accent, spinning, size = 220, stroke = 3.5 }) {
   }, [progress]);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+    <div className="absolute pointer-events-none z-0 flex items-center justify-center" style={{ top: "-30px", left: "-30px", right: "-30px", bottom: "-30px" }}>
       <div className="relative" style={{ width: size, height: size }}>
         {/* Glow difuso */}
         <svg
@@ -227,7 +227,7 @@ export default function Login() {
 
   return (
     <div
-      className={`h-screen w-screen flex items-center justify-center overflow-hidden relative ${
+      className={`h-screen w-screen flex items-center justify-center relative ${
         isDark
           ? "bg-gradient-to-br from-slate-900 via-slate-950 to-slate-800"
           : "bg-gradient-to-br from-slate-50 via-white to-slate-100"
@@ -249,14 +249,14 @@ export default function Login() {
       )}
 
       {/* Tarjeta */}
-      <div className="relative z-10">
+      <div className="relative z-10" style={{ overflow: "visible" }}>
         {/* Anillo de progreso — detrás de la tarjeta */}
         <RingLoader
           progress={progress}
           accent={accent}
           spinning={loading}
-          size={240}
-          stroke={3.5}
+          size={460}
+          stroke={4}
         />
 
         {/* Tarjeta */}
