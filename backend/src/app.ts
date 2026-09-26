@@ -34,6 +34,7 @@ import { errorHandler } from "./middlewares/error.middleware.js";
 import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import { initSocket } from "./services/socket.js";
 import { iniciarScheduler } from "./services/scheduler.js";
+import { crearUsuarioAdmin } from "./modules/usuarios/usuarios.service.js";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -133,6 +134,14 @@ const server = http.createServer(app);
 if (!process.env.DATABASE_URL) {
   console.error("FATAL: DATABASE_URL no está definido");
   process.exit(1);
+}
+
+// Primer arranque en el PC del cliente (BD vacía): crea el usuario admin
+// con ADMIN_PASSWORD del .env. Si ya existe un admin, no hace nada.
+try {
+  await crearUsuarioAdmin();
+} catch (e) {
+  console.error("No se pudo verificar/crear el admin inicial:", e instanceof Error ? e.message : e);
 }
 
 try {

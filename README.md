@@ -93,6 +93,24 @@ Solo definiría `VITE_API_URL` si el frontend se sirve sin ese proxy:
 # VITE_API_URL=http://localhost:3001
 ```
 
+## Entrega a un cliente (PC del parqueadero)
+
+1. Instalar Node 20 + PostgreSQL 16 en el PC.
+2. Ejecutar `instalar.bat` como Administrador (instala dependencias, compila el
+   frontend, crea las tablas con `prisma db push`, genera `JWT_SECRET`,
+   programa el backup diario 23:00 y deja el arranque automático con Windows).
+3. Abrir con `iniciar-parqueadero.bat` (también arranca solo al prender el PC).
+4. Entrar con `admin` + `ADMIN_PASSWORD` de `backend/.env`. El backend crea el
+   admin solo en el primer arranque si no existe.
+
+### Backups
+
+- Automático diario en `C:\Parqueadero\backups` (se conservan 30 días).
+- Restaurar: `powershell -ExecutionPolicy Bypass -File restaurar-backup.ps1`
+  (usa el más reciente o `-Archivo <ruta>`; pide confirmación con `SI`).
+- Pendiente por cliente: configurar SMTP real en `backend/.env` para que
+  funcione "olvidé mi contraseña" por correo; sin eso queda desactivado.
+
 ## Despliegue local con Docker (opcional)
 
 Alternativa a los dos `npm run dev`: levanta db + backend + frontend juntos.
@@ -129,7 +147,11 @@ Los datos persisten en el volumen `pgdata` y los uploads en `backend/uploads`.
 │   └── vite.config.js
 ├── docker-compose.yml      # Docker local (db + backend + frontend)
 ├── .env.example            # Vars para docker-compose (DB_PASSWORD, JWT_SECRET…)
-└── frontend/.env.example   # Vars opcionales del frontend
+├── frontend/.env.example   # Vars opcionales del frontend
+├── instalar.bat            # Instalador único en PC del cliente
+├── iniciar-parqueadero.bat # Arranque diario con doble clic
+├── backup-diario.ps1       # Backup completo pg_dump (tarea 23:00)
+└── restaurar-backup.ps1    # Restore con confirmación
 ```
 
 ## Licencia
