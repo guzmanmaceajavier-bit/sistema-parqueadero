@@ -2,31 +2,28 @@
 
 Sistema integral de gestión de parqueaderos con facturación automática, planes mensuales, reservas, control de caja y dashboard en tiempo real.
 
-**Production:** [https://sistema-parqueadero-st8t.vercel.app](https://sistema-parqueadero-st8t.vercel.app)
+Uso local: frontend + backend + PostgreSQL corriendo en el mismo PC, sin nube.
 
 ## Arquitectura
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   Frontend   │────▶│     Backend      │────▶│    PostgreSQL    │
-│  React/Vite  │     │  Express/Prisma  │     │ Neon (nube) o    │
-│ Vercel/local │     │  Render/local    │     │ local (dev)      │
+│  React/Vite  │     │  Express/Prisma  │     │   16 en el PC    │
+│ localhost:   │     │  localhost:      │     │  localhost:      │
+│ 5173         │     │ 3001             │     │ 5432             │
 └─────────────┘     └──────────────────┘     └─────────────────┘
-     SPA +              REST API +                Persistent
-     TailwindCSS         WebSocket               Storage
+     SPA +              REST API +              Datos locales
+     TailwindCSS         WebSocket              persistentes
 ```
-
-> **Nota Oct-2026:** la BD gratuita de Render se suspende el 2-oct.
-> En nube se usa **Neon** (`DATABASE_URL` manual en Render, ver `render.yaml`).
-> En local se usa **PostgreSQL 16** en `localhost:5432`.
 
 ## Stack Tecnológico
 
-| Capa | Tecnología | Despliegue |
-|------|-----------|------------|
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, React Router v6, Socket.IO Client | Vercel |
-| **Backend** | Node.js 20, Express 5, TypeScript, Prisma ORM, JWT, Socket.IO, PDFKit | Render (Docker) |
-| **Base de datos** | PostgreSQL 16 | Neon (nube) / local `localhost:5432` |
+| Capa | Tecnología | Local |
+|------|-----------|-------|
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, React Router v6, Socket.IO Client | `http://localhost:5173` |
+| **Backend** | Node.js 20, Express 5, TypeScript, Prisma ORM, JWT, Socket.IO, PDFKit | `http://localhost:3001` |
+| **Base de datos** | PostgreSQL 16 | `localhost:5432/parqueadero_db` |
 | **Auth** | JWT + httpOnly cookies | — |
 | **Seguridad** | Helmet, rate limiting, input sanitization, parameterized queries | — |
 
@@ -47,7 +44,7 @@ Sistema integral de gestión de parqueaderos con facturación automática, plane
 ## Seguridad
 
 - JWT con httpOnly cookies (sameSite: none, secure en producción)
-- Rate limiting global (60 req/min) y por endpoint (login: 5/min)
+- Rate limiting global (600 req/min en desarrollo, 60 en producción) y login limitado
 - Helmet con cross-origin resource policy
 - CORS restringido a orígenes permitidos
 - Sanitización de inputs contra XSS
@@ -64,7 +61,7 @@ Requiere Node 20 + PostgreSQL 16 corriendo en el PC.
 # Terminal 1 — Backend (http://localhost:3001)
 cd backend
 npm install
-npm run dev   # espera "Servidor corriendo en puerto 3000|3001"
+npm run dev   # espera "Servidor corriendo en puerto 3001"
 
 # Terminal 2 — Frontend (http://localhost:5173)
 cd frontend
@@ -74,14 +71,7 @@ npm run dev
 
 Entrar con usuario `admin` y la clave de `ADMIN_PASSWORD` del `backend/.env`.
 En dev no necesitas `frontend/.env`: Vite ya redirige `/api` al backend.
-El rate-limit es amplio en desarrollo (600/min) y estricto en producción (60/min).
-
-### Respaldo de Render (antes del 2-oct)
-
-```powershell
-.\respaldo-render.ps1 -DatabaseUrl "postgresql://..."
-.\restaurar-local.ps1
-```
+Los datos quedan guardados en el PostgreSQL local, persisten entre reinicios.
 
 ## Variables de entorno
 
@@ -94,30 +84,25 @@ ADMIN_PASSWORD=TuPasswordSeguro123!
 NODE_ENV=development
 ```
 
-### Frontend (.env)
+### Frontend (.env, opcional)
+
+En desarrollo no se necesita: Vite redirige `/api` al backend.
+Solo definiría `VITE_API_URL` si el frontend se sirve sin ese proxy:
 
 ```env
-VITE_API_URL=http://localhost:3000
+# VITE_API_URL=http://localhost:3001
 ```
 
-## Despliegue
+## Despliegue local con Docker (opcional)
 
-### Docker (producción)
+Alternativa a los dos `npm run dev`: levanta db + backend + frontend juntos.
 
 ```bash
-docker build -t parqueadero .
-docker run -p 3000:3000 --env-file .env parqueadero
+Copy-Item .env.example .env   # y ajusta DB_PASSWORD / JWT_SECRET
+docker compose up -d --build  # app en http://localhost (puerto 80)
 ```
 
-### Render + Vercel + Neon
-
-- **Backend:** Docker en Render (plan free, se duerme sin uso: primer request ~30-50s)
-- **Base de datos:** Neon gratis — crear proyecto en `neon.tech` y pegar la
-  pooled connection string en Render → Environment → `DATABASE_URL`, luego Redeploy.
-  (`render.yaml` ya no crea DB en Render; `DATABASE_URL` es `sync: false`.)
-- **Esquema en Neon:** `npx prisma migrate deploy` con la URL directa de Neon.
-- **Frontend:** Vercel con SPA rewrite (sin cambios, apunta al backend de Render)
-- **Variables de entorno:** Configurar en el dashboard de cada plataforma
+Los datos persisten en el volumen `pgdata` y los uploads en `backend/uploads`.
 
 ## Estructura del proyecto
 
@@ -142,13 +127,9 @@ docker run -p 3000:3000 --env-file .env parqueadero
 │   │   ├── services/       # API client (Axios)
 │   │   └── routes/         # Rutas protegidas/guest
 │   └── vite.config.js
-├── render.yaml             # Deploy config (Render, sin DB: usa Neon)
-├── vercel.json             # SPA rewrite (Vercel)
-├── docker-compose.yml      # Alternativa Docker local (db + backend + frontend)
+├── docker-compose.yml      # Docker local (db + backend + frontend)
 ├── .env.example            # Vars para docker-compose (DB_PASSWORD, JWT_SECRET…)
-├── frontend/.env.example   # Vars opcionales del frontend
-├── respaldo-render.ps1     # Backup de Render (pg_dump, antes del 2-oct)
-└── restaurar-local.ps1     # Restore al Postgres local
+└── frontend/.env.example   # Vars opcionales del frontend
 ```
 
 ## Licencia
