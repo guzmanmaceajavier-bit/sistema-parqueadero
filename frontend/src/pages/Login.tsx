@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useConfig } from "../context/ConfigContext";
 import { Eye, EyeOff, Loader2, LogIn, AlertCircle, User, Lock, ShieldCheck } from "lucide-react";
-import api from "../services/api";
+import api, { resetAuthState } from "../services/api";
 
 /* ─── Anillo SVG con progreso ─── */
 function RingLoader({ progress, accent, spinning, size = 220, stroke = 3.5 }) {
@@ -203,6 +203,9 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    // Tras un logout, api queda en estado "Logged out" y cancelaría
+    // esta petición (se ve como "Error de conexion"). Lo limpiamos antes.
+    resetAuthState();
     try {
       const payload = user.includes("@")
         ? { correo: user, password: pass }

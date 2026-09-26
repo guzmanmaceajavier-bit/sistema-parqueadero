@@ -11,14 +11,12 @@ services:
       - key: ADMIN_PASSWORD
         value: admin123
       - key: DATABASE_URL
-        fromDatabase:
-          name: parqueadero-db
-          property: connectionString
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
 
-databases:
-  - name: parqueadero-db
-    plan: free
-    databaseName: parqueadero_db
-    user: admin
+# Base de datos: Neon (gratis, sin suspender como Render).
+# 1. Crea el proyecto en neon.tech y copia la POOLED connection string
+#    postgresql://user:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/parqueadero_db?sslmode=require
+# 2. En el dashboard Render -> parqueadero-backend -> Environment -> DATABASE_URL = esa URL
+# 3. Redeploy. La DB free de Render se elimina el 2-oct, ya no se usa.

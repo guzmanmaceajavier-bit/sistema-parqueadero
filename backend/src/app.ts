@@ -50,9 +50,11 @@ if (isWeak) {
 
 const app = express();
 
+// En desarrollo el SPA + StrictMode dispara decenas de llamadas a la vez;
+// 60/min lo bloquea todo con 429. Límite amplio en dev, estricto en prod.
 const limiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: NODE_ENV === "production" ? 60 : 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, message: "Demasiadas peticiones, intente de nuevo en 1 minuto" },

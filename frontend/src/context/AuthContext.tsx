@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import axios from "axios";
-import api, { resetAuthState, prepareLogout } from "../services/api";
+import { rawApi, resetAuthState, prepareLogout } from "../services/api";
 
 interface User {
   id: number;
@@ -73,7 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     prepareLogout();
     loginadoRef.current = false;
-    try { await api.post("/usuarios/logout"); } catch { /* ignore */ }
+    // rawApi: el guard de "Logged out" de `api` bloquearía esta petición,
+    // ya que prepareLogout() se ejecuta justo antes.
+    try { await rawApi.post("/usuarios/logout"); } catch { /* ignore */ }
     setUser(null);
   }, []);
 
