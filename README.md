@@ -1,79 +1,73 @@
 # ParkAdmin
 
-Sistema de gestión de parqueaderos: entradas y salidas con cobro automático,
-planes mensuales, reservas, caja con arqueo, facturación en PDF y dashboard
-en tiempo real.
+Sistema para llevar un parqueadero: entradas y salidas con cobro automático,
+mensualidades, reservas, caja, facturas en PDF y un dashboard para ver cómo
+va el día. Corre todo en el mismo PC, no depende de internet.
 
-Funciona 100% en local: frontend + backend + PostgreSQL en el mismo PC.
+## Qué se necesita
 
-## Requisitos
+- Node 20
+- PostgreSQL 16 instalado y corriendo
 
-- Node.js 20
-- PostgreSQL 16 corriendo en el equipo
+La base se llama `parqueadero_db`. Si no existe, el backend la usa igual
+después de hacer el `db push` (abajo está el comando).
 
-## Cómo ejecutarlo
+## Cómo lo prendo
 
-Dos terminales:
+Hacen falta dos consolas abiertas al tiempo.
+
+Consola 1, el backend:
 
 ```bash
-# Terminal 1 — backend (http://localhost:3001)
 cd backend
-npm install   # solo la primera vez
+npm install   # la primera vez nada más
 npm run dev
 ```
+
+Cuando veas `Servidor corriendo en puerto 3001` ya quedó. La primera vez
+se demora un poco compilando, es normal.
+
+Consola 2, el frontend:
 
 ```bash
-# Terminal 2 — frontend (http://localhost:5173)
 cd frontend
-npm install   # solo la primera vez
+npm install   # la primera vez nada más
 npm run dev
 ```
 
-Abre `http://localhost:5173` y entra con el usuario `admin` y la clave
-definida en `ADMIN_PASSWORD` dentro de `backend/.env`.
+Abre `http://localhost:5173` y entra con:
 
-Notas:
+- usuario: `admin`
+- clave: la que esté en `ADMIN_PASSWORD` dentro de `backend/.env`
 
-- No hace falta crear `frontend/.env`: en desarrollo Vite ya redirige
-  `/api` al backend.
-- En el primer arranque con base de datos vacía, el backend crea el
-  usuario admin automáticamente.
-- Los datos se guardan en el PostgreSQL local (`parqueadero_db`) y
-  persisten entre reinicios.
+Si la base está vacía, el backend crea el admin solo en ese primer arranque.
 
-## Respaldo manual (recomendado de vez en cuando)
+Ojo con dos cosas que me pasaron: si el puerto 5173 sale ocupado es porque
+quedó otro proceso de antes abierto (cierra las consolas viejas), y en el
+frontend no hay que crear ningún `.env`, Vite ya manda todo lo de `/api`
+al backend.
+
+## Por si algo se daña
+
+De vez en cuando saco copia de la base con:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File backup-diario.ps1
 ```
 
-Guarda copia completa en `C:\Parqueadero\backups` (se conservan 30 días).
-Para restaurar: `restaurar-backup.ps1` (pide confirmación).
+Queda en `C:\Parqueadero\backups` y guarda las de los últimos 30 días. Para
+devolver una copia está `restaurar-backup.ps1`, que pregunta antes de
+sobrescribir.
 
-## Estructura del proyecto
+## Qué hay en cada carpeta
 
-```
-├── backend/                # API Express + Prisma + Socket.IO
-│   ├── src/
-│   │   ├── modules/        # Dominios: auth, caja, facturas, ingresos…
-│   │   ├── middlewares/    # Auth, validación, sanitización, errores
-│   │   ├── schemas/        # Validación con Zod
-│   │   ├── services/       # Socket.IO, mail, scheduler, PDF
-│   │   ├── helpers/        # Utilidades compartidas
-│   │   └── config/         # Cliente Prisma, Swagger
-│   └── prisma/
-│       └── schema.prisma   # Esquema de la base de datos
-├── frontend/               # React 19 + Vite + Tailwind
-│   └── src/
-│       ├── pages/          # Pantallas
-│       ├── components/     # Componentes reutilizables
-│       ├── context/        # Auth, Config, Caja, Socket…
-│       ├── services/       # Cliente Axios
-│       └── routes/         # Rutas protegidas
-├── docker-compose.yml      # Alternativa: todo con Docker
-├── .env.example            # Variables para docker-compose
-└── frontend/.env.example   # Variables opcionales del frontend
-```
+- `backend/` — la API (Express + Prisma + Socket.IO). El esquema de la base
+  está en `backend/prisma/schema.prisma`.
+- `frontend/` — la app en React con Vite y Tailwind.
+- `docker-compose.yml` — por si algún día lo quiero levantar con Docker
+  en vez de los dos `npm run dev`.
+- Los `.env.example` son la guía de qué variables lleva cada lado. Los
+  `.env` de verdad no se suben al repo.
 
 ## Licencia
 
