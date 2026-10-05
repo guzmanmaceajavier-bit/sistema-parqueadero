@@ -71,7 +71,9 @@ frontend/src/services # cliente Axios con refresh de token
 
 ## Capturas
 
-![Login](docs/login.png)
+![Login]
+<img width="1195" height="594" alt="image" src="https://github.com/user-attachments/assets/f0f58ade-5fa8-40d1-ba70-70e1455a2f91" />
+
 ![Dashboard](docs/dashboard.png)
 ![Caja](docs/caja.png)
 
