@@ -1,80 +1,89 @@
 # ParkAdmin
 
-Sistema de gestión de parqueaderos: entradas y salidas con cobro automático,
-planes mensuales, reservas, caja con arqueo, facturación en PDF y dashboard
-en tiempo real.
+Sistema web para administrar parqueaderos: entradas y salidas con cobro
+automático, planes mensuales, reservas, caja y facturación en PDF.
+Lo hice pensando en el computador del parqueadero, corriendo todo en local.
 
-Funciona 100% en local: frontend + backend + PostgreSQL en el mismo PC.
+**Demo:** https://sistema-parqueadero-mu.vercel.app
+**Para entrar a la demo:** usuario `admin`, clave `Admin123`
 
-## Requisitos
+## Qué hace
 
-- Node.js 20
-- PostgreSQL 16 corriendo en el equipo
+- Registro de entradas y salidas, calcula el cobro por tiempo solo.
+- Planes mensuales con puesto fijo y control de días.
+- Reservas de puestos con fecha.
+- Caja: apertura, movimientos del día y cierre con arqueo.
+- Facturas en PDF.
+- Dashboard con ocupación e ingresos del día.
+- Usuarios con roles (admin, supervisor, empleado).
 
-## Cómo ejecutarlo
+## Con qué está hecho
 
-Dos terminales:
+- Frontend: React 19, Vite, Tailwind CSS, React Router, Axios.
+- Backend: Node.js 20, Express 5, Prisma ORM.
+- Base de datos: PostgreSQL 16.
+- Extras: Socket.IO para avisos en tiempo real, JWT en cookies httpOnly,
+  validaciones con Zod, PDFKit para las facturas.
+- Opcional: Docker Compose para levantarlo todo junto.
+
+## Cómo correrlo
+
+Necesitas Node 20 y PostgreSQL 16 corriendo en el equipo.
 
 ```bash
-# Terminal 1 — backend (http://localhost:3001)
+# 1. Backend (http://localhost:3001)
 cd backend
-npm install   # solo la primera vez
+npm install
+# backend/.env mínimo:
+# DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_db"
+# JWT_SECRET=un-secreto-largo-generado-con-crypto
+# ADMIN_PASSWORD=clave-inicial-del-admin
+npx prisma db push
 npm run dev
 ```
 
 ```bash
-# Terminal 2 — frontend (http://localhost:5173)
+# 2. Frontend (http://localhost:5173), en otra consola
 cd frontend
-npm install   # solo la primera vez
+npm install
 npm run dev
 ```
 
-Abre `http://localhost:5173` y entra con el usuario `admin` y la clave
-definida en `ADMIN_PASSWORD` dentro de `backend/.env`.
+Entra con `admin` y la clave que pusiste en `ADMIN_PASSWORD`. Si la base
+estaba vacía, el backend crea ese admin solo en el primer arranque.
 
-Notas:
+En desarrollo no hace falta `frontend/.env`: Vite ya manda `/api` al backend.
 
-- No hace falta crear `frontend/.env`: en desarrollo Vite ya redirige
-  `/api` al backend.
-- En el primer arranque con base de datos vacía, el backend crea el
-  usuario admin automáticamente.
-- Los datos se guardan en el PostgreSQL local (`parqueadero_db`) y
-  persisten entre reinicios.
-
-## Respaldo manual (recomendado de vez en cuando)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File backup-diario.ps1
-```
-
-Guarda copia completa en `C:\Parqueadero\backups` (se conservan 30 días).
-Para restaurar: `restaurar-backup.ps1` (pide confirmación).
-
-## Estructura del proyecto
+## Estructura
 
 ```
-├── backend/                # API Express + Prisma + Socket.IO
-│   ├── src/
-│   │   ├── modules/        # Dominios: auth, caja, facturas, ingresos…
-│   │   ├── middlewares/    # Auth, validación, sanitización, errores
-│   │   ├── schemas/        # Validación con Zod
-│   │   ├── services/       # Socket.IO, mail, scheduler, PDF
-│   │   ├── helpers/        # Utilidades compartidas
-│   │   └── config/         # Cliente Prisma, Swagger
-│   └── prisma/
-│       └── schema.prisma   # Esquema de la base de datos
-├── frontend/               # React 19 + Vite + Tailwind
-│   └── src/
-│       ├── pages/          # Pantallas
-│       ├── components/     # Componentes reutilizables
-│       ├── context/        # Auth, Config, Caja, Socket…
-│       ├── services/       # Cliente Axios
-│       └── routes/         # Rutas protegidas
-├── docker-compose.yml      # Alternativa: todo con Docker
-├── .env.example            # Variables para docker-compose
-└── frontend/.env.example   # Variables opcionales del frontend
+backend/src/modules   # cada cosa (ingresos, caja, tarifas…) vive en su módulo
+backend/src/schemas   # validaciones Zod
+backend/prisma        # esquema de la base de datos
+frontend/src/pages    # pantallas
+frontend/src/services # cliente Axios con refresh de token
 ```
 
-## Licencia
+## Lo que más me costó (y cómo salió)
 
-Uso interno.
+- **El login me devolvía 401 en cascada al cerrar sesión.** Resultó ser
+  una condición de carrera: el frontend pedía el refresh con un token que
+  el backend ya había invalidado. Lo arreglé cancelando las peticiones en
+  vuelo al cerrar sesión y limpiando el estado de auth antes de volver a entrar.
+- **429 por todos lados en desarrollo.** El rate-limit global (60/min)
+  no aguanta un SPA con StrictMode que dispara 10 llamadas a la vez.
+  Quedó amplio en desarrollo (600/min) y estricto en producción.
+- **Migraciones vs esquema desfasados.** La base local se había creado con
+  `db push` y le faltaban columnas a las migraciones; en una base nueva
+  fallaba el seed. Desde entonces verifico contra base limpia.
+- **Las variables de Vercel no aplican sin redeploy.** Cambié el backend
+  de URL y la demo seguía hablando con el viejo hasta reconstruir.
+
+## Estado
+
+Funciona en local y hay demo en línea. Pendiente: configurar correo real
+para recuperar contraseña, y más adelante facturación electrónica.
+
+## Autor
+
+Javier Guzmán — guzmanmaceajavier@gmail.com
