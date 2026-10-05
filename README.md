@@ -69,28 +69,11 @@ frontend/src/pages    # pantallas
 frontend/src/services # cliente Axios con refresh de token
 ```
 
-## Lo que más me costó (y cómo salió)
+## Capturas
 
-- **El login me devolvía 401 en cascada al cerrar sesión.** Resultó ser
-  una condición de carrera: el frontend pedía el refresh con un token que
-  el backend ya había invalidado. Lo arreglé cancelando las peticiones en
-  vuelo al cerrar sesión y limpiando el estado de auth antes de volver a entrar.
-- **429 por todos lados en desarrollo.** El rate-limit global (60/min)
-  no aguanta un SPA con StrictMode que dispara 10 llamadas a la vez.
-  Quedó amplio en desarrollo (600/min) y estricto en producción.
-- **Migraciones vs esquema desfasados.** La base local se había creado con
-  `db push` y le faltaban columnas a las migraciones; en una base nueva
-  fallaba el seed. Desde entonces verifico contra base limpia.
-- **Las variables de Vercel no aplican sin redeploy.** Cambié el backend
-  de URL y la demo seguía hablando con el viejo hasta reconstruir.
-
-## Estado
-
-Funciona en local y hay demo en línea.
-
-- [x] Parqueadero operable (caja, planes, facturas, dashboard)
-- [ ] Correo real para recuperar contraseña
-- [ ] Facturación electrónica (fase 2)
+![Login](docs/login.png)
+![Dashboard](docs/dashboard.png)
+![Caja](docs/caja.png)
 
 ## Autor
 
