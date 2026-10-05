@@ -220,21 +220,12 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         animation: "welcome-fade 0.4s ease-out forwards",
       }}
     >
-      {/* Velo: centro limpio, humo hacia los bordes */}
+      {/* Fondo sólido: sin velos ni humo, lectura total */}
       <div className="absolute inset-0" style={{
-        background: "radial-gradient(62% 58% at 50% 46%, rgba(3,11,22,0.28) 0%, rgba(3,11,22,0.55) 55%, rgba(2,7,15,0.9) 100%)",
-        backdropFilter: "blur(3px)",
-        WebkitBackdropFilter: "blur(3px)",
+        background: `linear-gradient(135deg, ${accent} 0%, #0b2b4d 100%)`,
       }} />
-      {/* Humo en los bordes (solo bordes, nunca sobre el texto) */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full welcome-smoke-a" style={{ background: `${accent}66`, filter: "blur(60px)" }} />
-        <div className="absolute -bottom-24 -right-16 w-80 h-80 rounded-full welcome-smoke-b" style={{ background: "#1d4ed866", filter: "blur(70px)" }} />
-        <div className="absolute top-1/3 -right-24 w-64 h-64 rounded-full welcome-smoke-a" style={{ background: `${accent}44`, filter: "blur(60px)", animationDelay: "-4s" }} />
-        <div className="absolute -bottom-20 -left-16 w-64 h-64 rounded-full welcome-smoke-b" style={{ background: "#0ea5e955", filter: "blur(60px)", animationDelay: "-6s" }} />
-      </div>
 
-      {/* Contenido nítido */}
+      {/* Contenido */}
       <div className="relative h-full flex flex-col items-center justify-center">
       <style>{`
         @keyframes welcome-fade {
