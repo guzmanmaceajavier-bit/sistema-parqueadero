@@ -272,17 +272,17 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         </svg>
       </div>
 
-      <h2 className="text-3xl font-extrabold text-white mb-2" style={{ animation: "welcome-rise 0.4s ease-out 0.3s both" }}>
+      <h2 className="text-3xl font-extrabold text-white mb-2">
         Bienvenido, {nombre || "Usuario"}
       </h2>
       <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full bg-white/20 text-white mb-5"
-        style={{ animation: "welcome-rise 0.4s ease-out 0.45s both", border: "1px solid rgba(255,255,255,0.35)" }}>
+        style={{ border: "1px solid rgba(255,255,255,0.35)" }}>
         {ROL_LABEL[rol] || "Acceso autorizado"}
       </span>
       <div className="w-44 h-1 rounded-full bg-white/15 overflow-hidden" style={{ animation: "welcome-rise 0.45s ease-out 0.7s both" }}>
         <div className="h-full w-1/3 rounded-full bg-white/90" style={{ animation: "welcome-shimmer 1.1s ease-in-out infinite" }} />
       </div>
-      <span className="mt-3 text-[11px] tracking-wide text-white/60" style={{ animation: "welcome-rise 0.45s ease-out 0.75s both" }}>
+      <span className="mt-3 text-[11px] tracking-wide text-white/60">
         Entrando al panel…
       </span>
       </div>
