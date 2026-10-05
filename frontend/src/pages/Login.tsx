@@ -212,17 +212,30 @@ const ROL_LABEL = { admin: "Administrador", supervisor: "Supervisor", empleado: 
 /* ─── Overlay de bienvenida: cierra la secuencia del halo ─── */
 function WelcomeOverlay({ nombre, rol, accent, leaving }) {
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden"
+    <div className="absolute inset-0 z-30 overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${accent} 0%, #0b2b4d 100%)`,
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-        animation: "welcome-fade 0.4s ease-out forwards",
         opacity: leaving ? 0 : 1,
         transform: leaving ? "scale(1.02)" : "scale(1)",
         transition: "opacity 0.4s ease, transform 0.4s ease",
+        animation: "welcome-fade 0.4s ease-out forwards",
       }}
     >
+      {/* Velo: centro limpio, humo hacia los bordes */}
+      <div className="absolute inset-0" style={{
+        background: "radial-gradient(62% 58% at 50% 46%, rgba(3,11,22,0.28) 0%, rgba(3,11,22,0.55) 55%, rgba(2,7,15,0.9) 100%)",
+        backdropFilter: "blur(3px)",
+        WebkitBackdropFilter: "blur(3px)",
+      }} />
+      {/* Humo en los bordes (solo bordes, nunca sobre el texto) */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full welcome-smoke-a" style={{ background: `${accent}66`, filter: "blur(60px)" }} />
+        <div className="absolute -bottom-24 -right-16 w-80 h-80 rounded-full welcome-smoke-b" style={{ background: "#1d4ed866", filter: "blur(70px)" }} />
+        <div className="absolute top-1/3 -right-24 w-64 h-64 rounded-full welcome-smoke-a" style={{ background: `${accent}44`, filter: "blur(60px)", animationDelay: "-4s" }} />
+        <div className="absolute -bottom-20 -left-16 w-64 h-64 rounded-full welcome-smoke-b" style={{ background: "#0ea5e955", filter: "blur(60px)", animationDelay: "-6s" }} />
+      </div>
+
+      {/* Contenido nítido */}
+      <div className="relative h-full flex flex-col items-center justify-center">
       <style>{`
         @keyframes welcome-fade {
           from { opacity: 0; transform: scale(1.02); }
@@ -243,6 +256,16 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
           0% { transform: translateX(-110%); }
           100% { transform: translateX(320%); }
         }
+        @keyframes welcome-smoke-a {
+          0%, 100% { transform: translate(0, 0); opacity: 0.75; }
+          50% { transform: translate(26px, 18px); opacity: 1; }
+        }
+        @keyframes welcome-smoke-b {
+          0%, 100% { transform: translate(0, 0); opacity: 1; }
+          50% { transform: translate(-24px, -16px); opacity: 0.75; }
+        }
+        .welcome-smoke-a { animation: welcome-smoke-a 9s ease-in-out infinite; }
+        .welcome-smoke-b { animation: welcome-smoke-b 11s ease-in-out infinite; }
       `}</style>
 
       {/* Check con trazo dibujado */}
@@ -269,9 +292,10 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
       <div className="w-44 h-1 rounded-full bg-white/15 overflow-hidden" style={{ animation: "welcome-rise 0.45s ease-out 0.7s both" }}>
         <div className="h-full w-1/3 rounded-full bg-white/90" style={{ animation: "welcome-shimmer 1.1s ease-in-out infinite" }} />
       </div>
-      <span className="mt-3 text-[11px] tracking-wide text-white/50" style={{ animation: "welcome-rise 0.45s ease-out 0.75s both" }}>
+      <span className="mt-3 text-[11px] tracking-wide text-white/60" style={{ animation: "welcome-rise 0.45s ease-out 0.75s both" }}>
         Entrando al panel…
       </span>
+      </div>
     </div>
   );
 }
