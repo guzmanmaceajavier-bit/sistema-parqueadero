@@ -75,16 +75,14 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
     const BORDER = '#e2e8f0';
     const BG = '#f8fafc';
 
-    // ═══════════════════════════════════════
-    //  HEADER
-    // ═══════════════════════════════════════
-    // Accent bar top
+    // encabezado
+    // franja de arriba
     doc.rect(0, 0, W, 4).fill(PRIMARY);
 
-    // Dark header
+    // fondo oscuro del encabezado
     doc.rect(0, 4, W, 70).fill(DARK);
 
-    // Logo or initials
+    // logo, o la inicial si no hay logo
     if (data.logoBase64) {
       try {
         const imgData = Buffer.from(data.logoBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
@@ -100,7 +98,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
         .text(data.parqueadero.charAt(0).toUpperCase(), M, 24, { width: 40, align: 'center' });
     }
 
-    // Business name + details
+    // nombre y datos del parqueadero
     const textX = M + 52;
     doc.font('Helvetica-Bold').fontSize(18).fillColor(WHITE)
       .text(data.parqueadero.toUpperCase(), textX, 18, { width: 300 });
@@ -116,7 +114,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
     doc.font('Helvetica').fontSize(7).fillColor(GRAY_L)
       .text(infoLines.join('  ·  '), textX, 50, { width: 320 });
 
-    // Document type badge
+    // cuadro del tipo de documento
     const tipoLabel = data.tipo === 'entrada' ? 'TICKET DE ENTRADA' : 'FACTURA DE SALIDA';
     const badgeW = 155;
     const badgeX = W - M - badgeW;
@@ -130,14 +128,12 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
 
     y = 84;
 
-    // ═══════════════════════════════════════
-    //  CLIENT DATA (if exists)
-    // ═══════════════════════════════════════
+    // datos del cliente, si hay
     if (data.cliente) {
       doc.roundedRect(M, y, cW, 52, 4).fill(WHITE);
       doc.roundedRect(M, y, cW, 52, 4).lineWidth(0.5).stroke(BORDER);
 
-      // Left accent bar
+      // barrita lateral
       doc.rect(M, y + 4, 3, 44).fill(PRIMARY);
 
       doc.font('Helvetica-Bold').fontSize(7).fillColor(PRIMARY)
@@ -156,11 +152,9 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
       y += 64;
     }
 
-    // ═══════════════════════════════════════
-    //  DETALLE TABLE
-    // ═══════════════════════════════════════
+    // tabla del detalle
     doc.roundedRect(M, y, cW, 22, 4).fill(PRIMARY);
-    // Fix rounded top corners
+    // tapa las esquinas de arriba para que se vea recto
     doc.rect(M, y + 10, cW, 12).fill(PRIMARY);
     doc.font('Helvetica-Bold').fontSize(8).fillColor(WHITE)
       .text('DETALLE DEL SERVICIO', M + 14, y + 7);
@@ -199,7 +193,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
         doc.save().moveTo(M + 14, ry - 1).lineTo(M + cW - 14, ry - 1).lineWidth(0.3).stroke(BORDER).restore();
       }
 
-      // Dot
+      // puntico de cada fila
       doc.circle(M + 16, ry + 5, 2.5).fill(PRIMARY);
 
       doc.font('Helvetica').fontSize(8).fillColor(GRAY)
@@ -211,9 +205,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
 
     y += tableH + 14;
 
-    // ═══════════════════════════════════════
-    //  TOTAL
-    // ═══════════════════════════════════════
+    // total bien grande
     const tH = 60;
     doc.roundedRect(M, y, cW, tH, 4).fill(PRIMARY_LIGHT);
     doc.roundedRect(M, y, cW, tH, 4).lineWidth(0.5).stroke(PRIMARY);
@@ -232,7 +224,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
         .text(`Base: $${Math.round(subtotal).toLocaleString()}  |  IVA ${data.iva}%: $${Math.round(ivaVal).toLocaleString()}`, M + 16, y + 48);
     }
 
-    // Payment badge
+    // sello de pagado
     if (data.tipo === 'salida') {
       const badgeW = 150;
       const badgeX = M + cW - badgeW - 14;
@@ -243,16 +235,14 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
 
     y += tH + 14;
 
-    // ═══════════════════════════════════════
-    //  CERTIFICATION + PIE DE FACTURA
-    // ═══════════════════════════════════════
+    // cierre y pie
     doc.font('Helvetica').fontSize(7).fillColor(GRAY)
       .text('Este documento certifica el pago realizado.', M, y, { width: cW, align: 'center' });
     y += 12;
     doc.text('Cualquier inquietud no dude en comunicarse con nosotros.', M, y, { width: cW, align: 'center' });
     y += 16;
 
-    // Separator
+    // linecita
     const lineW = 60;
     doc.save().moveTo(M + cW / 2 - lineW / 2, y).lineTo(M + cW / 2 + lineW / 2, y).lineWidth(0.5).stroke(PRIMARY).restore();
     y += 10;
@@ -271,9 +261,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
       y += 14;
     }
 
-    // ═══════════════════════════════════════
-    //  FOOTER
-    // ═══════════════════════════════════════
+    // pie de página
     const fH = 32;
     doc.rect(0, y, W, fH).fill(DARK);
 

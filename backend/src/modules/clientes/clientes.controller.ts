@@ -247,7 +247,7 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
     data: { saldo: { increment: Number(monto) } },
   });
 
-  // Optionally create a caja movement for the recarga
+  // opcional: crear el movimiento de caja de la recarga
   const cajaAbierta = await prisma.caja.findFirst({ where: { estado: "ABIERTA" } });
   if (cajaAbierta) {
     await prisma.cajaMovimiento.create({

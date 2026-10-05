@@ -46,7 +46,7 @@ if (isWeak) {
     console.error("FATAL: JWT_SECRET es débil. Genera uno fuerte con: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
     process.exit(1);
   }
-  console.warn("⚠ JWT_SECRET débil. En producción usa uno de 64+ caracteres hex.");
+  console.warn("AVISO: JWT_SECRET débil. En producción usa uno de 64+ caracteres hex.");
 }
 
 const app = express();

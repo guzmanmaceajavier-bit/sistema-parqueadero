@@ -44,7 +44,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
   let diferencia = 0;
 
   if (conteo) {
-    // Calculate total from conteo
+    // suma el total del conteo
     if (conteo.billetes) {
       for (const [denom, count] of Object.entries(conteo.billetes)) {
         totalConteo += parseInt(denom) * (Number(count) || 0);

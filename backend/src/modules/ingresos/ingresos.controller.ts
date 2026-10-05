@@ -14,7 +14,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   clienteId = Number(clienteId);
   vehiculoId = Number(vehiculoId);
 
-  // Check bloqueado
+  // mira si está bloqueado
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vehiculoId }, include: { cliente: true } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado y no puede ingresar", 400);

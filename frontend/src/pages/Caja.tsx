@@ -70,7 +70,7 @@ export default function Caja() {
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
 
-  // Calculate total conteo
+  // suma el total del conteo
   useEffect(() => {
     let total = 0;
     if (conteo.billetes) {

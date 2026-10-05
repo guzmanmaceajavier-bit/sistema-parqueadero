@@ -13,7 +13,7 @@ export function CajaProvider({ children }) {
   const [cajaPassword, setCajaPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Password modal state (lazy open from other pages)
+  // el modal de clave se abre desde otras páginas
   const [pwOpen, setPwOpen] = useState(false);
   const [pwResolve, setPwResolve] = useState(null);
 
@@ -30,7 +30,7 @@ export function CajaProvider({ children }) {
     else { setCajaAbierta(null); setCajaAuthorized(false); setCajaPassword(""); }
   }, [isAuthenticated, cargarCajaActiva]);
 
-  // Socket listeners
+  // escucha los avisos en vivo
   useEffect(() => {
     if (!isAuthenticated) return;
     const socket = io(import.meta.env.VITE_API_URL || "", {
@@ -44,14 +44,14 @@ export function CajaProvider({ children }) {
     return () => { socket.disconnect(); };
   }, [isAuthenticated, cargarCajaActiva]);
 
-  // Authorize: verify password once, store in memory for reuse
+  // pide la clave una vez y la guarda en memoria
   const authorize = useCallback(async (password) => {
     await api.post("/usuarios/verificar-password", { password });
     setCajaPassword(password);
     setCajaAuthorized(true);
   }, []);
 
-  // Direct open with password + optional apertura
+  // apertura directa con clave
   const abrirCaja = useCallback(async (datos) => {
     setLoading(true);
     try {
@@ -85,7 +85,7 @@ export function CajaProvider({ children }) {
 
   const refrescarCaja = useCallback(() => cargarCajaActiva(), [cargarCajaActiva]);
 
-  // Lazy open: used by Ingresos/Mensualidades/Gastos when they get "Caja cerrada"
+  // lo usan Ingresos/Mensualidades/Gastos cuando sale "Caja cerrada"
   const requestAbrirCaja = useCallback(() => {
     return new Promise((resolve) => {
       setPwResolve(() => resolve);

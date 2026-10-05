@@ -14,7 +14,7 @@ async function asegurarSecuencia(prefijo: string): Promise<string> {
       `CREATE SEQUENCE IF NOT EXISTS "${seqName}" START 1`
     );
   } catch {
-    // Sequence may already exist
+    // la secuencia puede que ya exista
   }
   return seqName;
 }
