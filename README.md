@@ -78,6 +78,7 @@ Dashboard
 <img width="1351" height="620" alt="image" src="https://github.com/user-attachments/assets/9501d680-9747-46ca-8b78-d1f00508f1b0" />
 
 Caja
+<img width="1173" height="607" alt="image" src="https://github.com/user-attachments/assets/fbeb5ef0-a340-4ef0-98ab-146c4391327a" />
 
 ## Autor
 
