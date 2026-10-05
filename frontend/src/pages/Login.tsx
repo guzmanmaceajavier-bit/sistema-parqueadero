@@ -231,16 +231,8 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         <div className="absolute -bottom-16 -left-14 w-60 h-60 rounded-full welcome-smoke-b" style={{ background: "#0ea5e54d", filter: "blur(60px)", animationDelay: "-6s" }} />
       </div>
 
-      {/* Tarjeta flotante: el blur va en SU fondo, las letras quedan nítidas */}
-      <div className="relative flex flex-col items-center px-12 py-9 rounded-3xl"
-        style={{
-          background: "rgba(255,255,255,0.08)",
-          backdropFilter: "blur(14px)",
-          WebkitBackdropFilter: "blur(14px)",
-          border: "1px solid rgba(255,255,255,0.22)",
-          boxShadow: `0 24px 70px rgba(0,0,0,0.45), 0 0 60px ${accent}40`,
-          animation: "welcome-pop 0.55s cubic-bezier(0.3, 1.3, 0.5, 1) backwards",
-        }}>
+      {/* Contenido flotante sin panel: solo humo detrás y letras blancas */}
+      <div className="relative flex flex-col items-center px-6 py-4">
       <style>{`
         @keyframes welcome-fade {
           from { opacity: 0; }
@@ -291,17 +283,17 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         </svg>
       </div>
 
-      <h2 className="text-3xl font-extrabold text-white mb-2">
+      <h2 className="text-3xl font-extrabold text-white mb-2" style={{ textShadow: "0 2px 14px rgba(0,0,0,0.55)" }}>
         Bienvenido, {nombre || "Usuario"}
       </h2>
-      <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full bg-white/20 text-white mb-5"
-        style={{ border: "1px solid rgba(255,255,255,0.35)" }}>
+      <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full text-white mb-5"
+        style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.35)", textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>
         {ROL_LABEL[rol] || "Acceso autorizado"}
       </span>
       <div className="w-44 h-1 rounded-full bg-white/15 overflow-hidden" style={{ animation: "welcome-rise 0.45s ease-out 0.7s both" }}>
         <div className="h-full w-1/3 rounded-full bg-white/90" style={{ animation: "welcome-shimmer 1.1s ease-in-out infinite" }} />
       </div>
-      <span className="mt-3 text-[11px] tracking-wide text-white/60">
+      <span className="mt-3 text-[11px] tracking-wide text-white" style={{ opacity: 0.85 }}>
         Entrando al panel…
       </span>
       </div>
