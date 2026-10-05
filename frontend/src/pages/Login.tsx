@@ -114,21 +114,30 @@ function EnergyHalo({ accent, phase, particleCount, fast, converge }) {
           100% { transform: scale(1); }
         }
         .halo-logo-beat { animation: logo-beat 0.5s ease-out; }
+        .halo-wave-pair {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 0;
+          height: 0;
+          pointer-events: none;
+        }
         .halo-logo-wave {
           position: absolute;
           left: 50%;
           top: 50%;
-          width: 420px;
-          height: 420px;
+          width: 440px;
+          height: 440px;
           translate: -50% -50%;
           border-radius: 9999px;
-          border: 2px solid;
+          border: 3px solid;
           animation: halo-logo-wave 0.65s ease-out forwards;
           pointer-events: none;
         }
+        .halo-logo-echo { animation-delay: 0.12s; border-width: 2px; }
         @keyframes halo-logo-wave {
-          0% { transform: scale(0.12); opacity: 0.5; }
-          100% { transform: scale(1); opacity: 0; }
+          0% { transform: scale(0.12); opacity: 0.75; }
+          100% { transform: scale(1.04); opacity: 0; }
         }
         .halo-logo-release {
           position: absolute;
@@ -176,18 +185,23 @@ function EnergyHalo({ accent, phase, particleCount, fast, converge }) {
   );
 }
 
-/* Ondas que nacen en el centro del logo */
+/* Ondas que nacen en el centro del logo: anillo principal + eco con
+   delay para dar cuerpo, ambos con glow para que se vean. */
 function LogoWaves({ accent, ripples, releaseId, finale }) {
+  const glow = `0 0 26px ${accent}73, inset 0 0 16px ${accent}40`;
   return (
     <>
       {ripples.map((id) => (
-        <span key={id} className="halo-logo-wave" style={{ borderColor: `${accent}66` }} />
+        <span key={id} className="halo-wave-pair">
+          <span className="halo-logo-wave" style={{ borderColor: `${accent}b3`, boxShadow: glow }} />
+          <span className="halo-logo-wave halo-logo-echo" style={{ borderColor: `${accent}73`, boxShadow: `0 0 18px ${accent}59` }} />
+        </span>
       ))}
       {releaseId > 0 && (
-        <span key={releaseId} className="halo-logo-release" style={{ borderColor: `${accent}80` }} />
+        <span key={releaseId} className="halo-logo-release" style={{ borderColor: `${accent}99`, boxShadow: glow }} />
       )}
       {finale && (
-        <span className="halo-logo-finale" style={{ borderColor: `${accent}80` }} />
+        <span className="halo-logo-finale" style={{ borderColor: `${accent}99`, boxShadow: glow }} />
       )}
     </>
   );
@@ -258,7 +272,6 @@ export default function Login() {
   const accent = config?.colorPrincipal || "#0d9488";
   const bgImage = config?.fondoLogin;
   const logo = config?.logo;
-  const isDark = config?.modoOscuro;
 
   const savedUser = localStorage.getItem("rememberedUser") || "";
   const [user, setUser] = useState(savedUser || "admin");
@@ -348,26 +361,25 @@ export default function Login() {
 
   const accentGrad = `linear-gradient(135deg, ${accent}, ${accent}bb)`;
 
+  // Escena fija del login: navy profundo + tarjeta blanca, igual con
+  // tema claro u oscuro. El accent de configuración sigue mandando.
   return (
-    <div
-      className={`h-screen w-screen flex items-center justify-center relative ${
-        isDark
-          ? "bg-gradient-to-br from-slate-900 via-slate-950 to-slate-800"
-          : "bg-gradient-to-br from-slate-50 via-white to-slate-100"
-      }`}
-    >
-      {/* Fondo */}
+    <div className="h-screen w-screen flex items-center justify-center relative overflow-hidden" style={{ background: "#030b16" }}>
+      {/* Fondo cinematográfico fijo */}
       {bgImage ? (
         <>
           <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-110" style={{ backgroundImage: `url(${bgImage})` }} />
-          <div className={`absolute inset-0 ${isDark ? "bg-gradient-to-br from-slate-950/80 via-slate-950/60 to-slate-950/80" : "bg-gradient-to-br from-white/70 via-white/50 to-white/70"}`} />
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-slate-950/65 to-slate-950/85" />
           <div className="absolute inset-0 backdrop-blur-[1px]" />
         </>
       ) : (
         <div className="absolute inset-0">
-          <div className={`absolute inset-0 ${isDark ? "opacity-[0.04]" : "opacity-[0.03]"}`} style={{ backgroundImage: `linear-gradient(${isDark ? "rgba(255,255,255,.1)" : "rgba(0,0,0,.06)"} 1px, transparent 1px), linear-gradient(90deg, ${isDark ? "rgba(255,255,255,.1)" : "rgba(0,0,0,.06)"} 1px, transparent 1px)`, backgroundSize: "60px 60px" }} />
-          <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none" style={{ background: `radial-gradient(circle, ${accent}${isDark ? "33" : "22"}, transparent 70%)`, opacity: isDark ? 0.2 : 0.15 }} />
-          <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full blur-[120px] pointer-events-none" style={{ background: `radial-gradient(circle, ${accent}${isDark ? "22" : "18"}, transparent 70%)`, opacity: isDark ? 0.2 : 0.15 }} />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(1100px 750px at 50% 18%, #0b2b4d 0%, #051322 52%, #02070f 100%)" }} />
+          <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px)", backgroundSize: "56px 56px", maskImage: "radial-gradient(700px 500px at 50% 45%, black 30%, transparent 75%)", WebkitMaskImage: "radial-gradient(700px 500px at 50% 45%, black 30%, transparent 75%)" }} />
+          <div className="absolute -top-48 left-1/2 -translate-x-1/2 w-[640px] h-[420px] rounded-full blur-[130px] pointer-events-none" style={{ background: `radial-gradient(ellipse, ${accent}59 0%, transparent 70%)`, opacity: 0.5 }} />
+          <div className="absolute -bottom-56 -left-40 w-[520px] h-[520px] rounded-full blur-[130px] pointer-events-none" style={{ background: "radial-gradient(circle, #1d4ed866 0%, transparent 70%)", opacity: 0.5 }} />
+          <div className="absolute -bottom-56 -right-40 w-[520px] h-[520px] rounded-full blur-[130px] pointer-events-none" style={{ background: `radial-gradient(circle, ${accent}40 0%, transparent 70%)`, opacity: 0.4 }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(120% 90% at 50% 50%, transparent 55%, rgba(0,0,0,0.5) 100%)" }} />
         </div>
       )}
 
@@ -384,11 +396,7 @@ export default function Login() {
 
         {/* Tarjeta */}
         <div
-          className={`relative overflow-hidden rounded-3xl shadow-2xl w-[400px] max-w-[calc(100vw-32px)] z-10 ${
-            isDark
-              ? "bg-slate-800/90 ring-1 ring-slate-700/50 backdrop-blur-xl"
-              : "bg-white/95 ring-1 ring-slate-200/50 backdrop-blur-xl"
-          }`}
+          className="relative overflow-hidden rounded-3xl shadow-2xl w-[400px] max-w-[calc(100vw-32px)] z-10 bg-white/95 ring-1 ring-white/50 backdrop-blur-xl"
           style={{
             transition: "box-shadow 0.8s ease, opacity 0.6s ease, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), filter 0.6s ease",
             boxShadow: phase === "ready" || converge > 0
@@ -414,33 +422,29 @@ export default function Login() {
               />
               <div key={pulse} className={pulse > 0 ? "halo-logo-beat relative" : "relative"}>
                 {logo ? (
-                  <img src={logo} alt="Logo" className={`w-16 h-16 rounded-2xl shadow-lg object-cover ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ boxShadow: `0 4px 20px ${accent}30` }} />
-                ) : (
-                  <div className={`w-16 h-16 rounded-2xl shadow-lg flex items-center justify-center ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ background: accentGrad, boxShadow: `0 4px 20px ${accent}30` }}>
+                <img src={logo} alt="Logo" className="w-16 h-16 rounded-2xl shadow-lg object-cover ring-2 ring-white" style={{ boxShadow: `0 4px 20px ${accent}30` }} />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl shadow-lg flex items-center justify-center ring-2 ring-white" style={{ background: accentGrad, boxShadow: `0 4px 20px ${accent}30` }}>
                     <span className="text-white font-bold text-2xl tracking-tight">P</span>
                   </div>
                 )}
               </div>
             </div>
 
-            <h1 className={`text-2xl font-bold mb-1 ${isDark ? "text-white" : "text-slate-900"}`}>
+            <h1 className="text-2xl font-bold mb-1 text-slate-900">
               Iniciar sesion
             </h1>
-            <p className={`text-sm mb-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <p className="text-sm mb-6 text-slate-500">
               Ingresa tus credenciales para acceder
             </p>
 
             <form onSubmit={handleLogin} className="w-full flex flex-col items-center gap-3.5">
               <div className="relative w-full group">
-                <div className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 transition-all duration-300 group-focus-within:opacity-100 group-focus-within:translate-x-[2px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 opacity-70 transition-all duration-300 group-focus-within:opacity-100 group-focus-within:translate-x-[2px]">
                   <User size={18} />
                 </div>
                 <input
-                  className={`w-full border-2 rounded-xl py-3 pl-12 pr-4 text-sm outline-none transition-all duration-200 placeholder:transition-opacity placeholder:duration-300 focus:placeholder:opacity-50 ${
-                    isDark
-                      ? "bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-teal-400 focus:bg-slate-700/80 focus:shadow-[0_0_0_4px_rgba(45,212,191,0.1)]"
-                      : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.1)]"
-                  }`}
+                  className="w-full border-2 rounded-xl py-3 pl-12 pr-4 text-sm outline-none transition-all duration-200 placeholder:transition-opacity placeholder:duration-300 focus:placeholder:opacity-50 bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.12)]"
                   type="text"
                   value={user}
                   onChange={(e) => { setUser(e.target.value); keystroke(); }}
@@ -452,15 +456,11 @@ export default function Login() {
               </div>
 
               <div className="relative w-full group">
-                <div className={`absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-70 transition-all duration-300 group-focus-within:opacity-100 group-focus-within:translate-x-[2px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 opacity-70 transition-all duration-300 group-focus-within:opacity-100 group-focus-within:translate-x-[2px]">
                   <Lock size={18} />
                 </div>
                 <input
-                  className={`w-full border-2 rounded-xl py-3 pl-12 pr-12 text-sm outline-none transition-all duration-200 placeholder:transition-opacity placeholder:duration-300 focus:placeholder:opacity-50 ${
-                    isDark
-                      ? "bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-teal-400 focus:bg-slate-700/80 focus:shadow-[0_0_0_4px_rgba(45,212,191,0.1)]"
-                      : "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.1)]"
-                  }`}
+                  className="w-full border-2 rounded-xl py-3 pl-12 pr-12 text-sm outline-none transition-all duration-200 placeholder:transition-opacity placeholder:duration-300 focus:placeholder:opacity-50 bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(13,148,136,0.12)]"
                   type={showPass ? "text" : "password"}
                   value={pass}
                   onChange={(e) => { setPass(e.target.value); keystroke(); }}
@@ -472,7 +472,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors cursor-pointer bg-transparent border-none p-0 ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors cursor-pointer bg-transparent border-none p-0 text-slate-400 hover:text-slate-600"
                 >
                   {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
@@ -481,7 +481,7 @@ export default function Login() {
               <label className="flex items-center gap-2 cursor-pointer select-none self-start ml-1">
                 <div
                   className="w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition-all"
-                  style={{ borderColor: rememberMe ? accent : isDark ? "#475569" : "#cbd5e1", background: rememberMe ? accent : "transparent" }}
+                  style={{ borderColor: rememberMe ? accent : "#cbd5e1", background: rememberMe ? accent : "transparent" }}
                 >
                   {rememberMe && (
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
@@ -490,13 +490,13 @@ export default function Login() {
                   )}
                 </div>
                 <input type="checkbox" checked={rememberMe} onChange={() => setRememberMe(!rememberMe)} className="hidden" />
-                <span className={`text-xs font-medium transition-colors ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}>
+                <span className="text-xs font-medium transition-colors text-slate-400 hover:text-slate-600">
                   Recordar usuario
                 </span>
               </label>
 
               {error && (
-                <div className={`w-full p-3 rounded-xl text-xs flex items-center gap-2.5 ${isDark ? "bg-red-900/20 border border-red-800/50 text-red-400" : "bg-red-50 border border-red-200 text-red-600"}`}>
+                <div className="w-full p-3 rounded-xl text-xs flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-600">
                   <AlertCircle size={14} className="shrink-0" />
                   {error}
                 </div>
