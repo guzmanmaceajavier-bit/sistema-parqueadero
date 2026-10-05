@@ -207,14 +207,20 @@ function LogoWaves({ accent, ripples, releaseId, finale }) {
   );
 }
 
+const ROL_LABEL = { admin: "Administrador", supervisor: "Supervisor", empleado: "Empleado" };
+
 /* ─── Overlay de bienvenida: cierra la secuencia del halo ─── */
-function WelcomeOverlay({ nombre, accent }) {
+function WelcomeOverlay({ nombre, rol, accent, leaving }) {
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden"
       style={{
         background: `linear-gradient(135deg, ${accent}f2 0%, #0b2b4d f2 100%)`,
-        backdropFilter: "blur(10px)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
         animation: "welcome-fade 0.45s ease-out forwards",
+        opacity: leaving ? 0 : 1,
+        transform: leaving ? "scale(1.03)" : "scale(1)",
+        transition: "opacity 0.35s ease, transform 0.35s ease",
       }}
     >
       <style>{`
@@ -253,12 +259,13 @@ function WelcomeOverlay({ nombre, accent }) {
         </svg>
       </div>
 
-      <h2 className="text-2xl font-bold text-white mb-1" style={{ animation: "welcome-rise 0.45s ease-out 0.45s both" }}>
+      <h2 className="text-2xl font-bold text-white mb-2" style={{ animation: "welcome-rise 0.45s ease-out 0.45s both" }}>
         Bienvenido, {nombre || "Usuario"}
       </h2>
-      <p className="text-sm text-white/70 mb-6" style={{ animation: "welcome-rise 0.45s ease-out 0.6s both" }}>
-        Acceso autorizado
-      </p>
+      <span className="inline-block text-[11px] font-semibold tracking-[0.18em] uppercase px-3 py-1.5 rounded-full bg-white/15 text-white mb-4"
+        style={{ animation: "welcome-rise 0.45s ease-out 0.55s both", border: "1px solid rgba(255,255,255,0.25)" }}>
+        {ROL_LABEL[rol] || "Acceso autorizado"}
+      </span>
       <div className="w-44 h-1 rounded-full bg-white/15 overflow-hidden" style={{ animation: "welcome-rise 0.45s ease-out 0.7s both" }}>
         <div className="h-full w-1/3 rounded-full bg-white/90" style={{ animation: "welcome-shimmer 1.1s ease-in-out infinite" }} />
       </div>
@@ -286,6 +293,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeUser, setWelcomeUser] = useState(null);
+  const [welcomeLeaving, setWelcomeLeaving] = useState(false);
 
   // Fase del halo: reposo → usuario → contraseña → listo.
   // Sin porcentajes: la energía se comunica con luz y movimiento.
@@ -352,8 +361,12 @@ export default function Login() {
       if (res.data?.ok) {
         if (rememberMe) localStorage.setItem("rememberedUser", user);
         else localStorage.removeItem("rememberedUser");
+        setWelcomeUser(res.data.usuario);
+        setWelcomeLeaving(false);
         setShowWelcome(true);
-        setTimeout(() => login(res.data.usuario), 1500);
+        // Salida elegante del overlay antes de entrar al panel.
+        setTimeout(() => setWelcomeLeaving(true), 1350);
+        setTimeout(() => login(res.data.usuario), 1650);
         return;
       }
       setError(res.data?.message || "Credenciales incorrectas");
@@ -413,7 +426,14 @@ export default function Login() {
           }}
         >
           {/* Welcome overlay: cubre toda la tarjeta */}
-          {showWelcome && <WelcomeOverlay nombre={user} accent={accent} />}
+          {showWelcome && (
+            <WelcomeOverlay
+              nombre={welcomeUser?.nombre || user}
+              rol={welcomeUser?.rol}
+              accent={accent}
+              leaving={welcomeLeaving}
+            />
+          )}
 
           <div className="absolute top-0 inset-x-0 h-1 z-20" style={{ background: accentGrad }} />
 
@@ -531,7 +551,7 @@ export default function Login() {
 
             <div className="relative">
               <span className="inline-block text-[11px] font-semibold tracking-[0.22em] uppercase px-3 py-1.5 rounded-full" style={{ background: `${accent}26`, color: "#99f6e4", border: `1px solid ${accent}55` }}>
-                ParkAdmin
+                {config?.nombreParqueadero || "ParkAdmin"}
               </span>
               <h2 className="mt-5 text-3xl font-bold leading-tight">
                 Control total de tu parqueadero, en tiempo real.

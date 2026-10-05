@@ -73,10 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     prepareLogout();
     loginadoRef.current = false;
-    // rawApi: el guard de "Logged out" de `api` bloquearía esta petición,
-    // ya que prepareLogout() se ejecuta justo antes.
-    try { await rawApi.post("/usuarios/logout"); } catch { /* ignore */ }
+    // Salida inmediata y segura: se limpia la sesión local YA, sin esperar
+    // la red. Las rutas protegidas redirigen al login al instante y ninguna
+    // petición vuelve a salir (guard "Logged out" + token ya invalidado).
     setUser(null);
+    // Aviso al servidor en segundo plano para invalidar el token allá
+    // también. rawApi porque el guard de `api` bloquearía esta petición.
+    try { await rawApi.post("/usuarios/logout"); } catch { /* ignore */ }
   }, []);
 
   const isAuthenticated = !!user;
