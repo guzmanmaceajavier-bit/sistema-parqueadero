@@ -242,6 +242,11 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
           0% { transform: scale(0.6); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
         }
+        @keyframes welcome-check-ring {
+          0% { transform: scale(0.55); opacity: 0.8; }
+          100% { transform: scale(1.7); opacity: 0; }
+        }
+        .welcome-check-ring { animation: welcome-check-ring 1.1s ease-out 0.5s both; }
         @keyframes welcome-pop {
           0% { transform: scale(0.92); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
@@ -269,9 +274,10 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         .welcome-smoke-b { animation: welcome-smoke-b 11s ease-in-out infinite; }
       `}</style>
 
-      {/* Check con trazo dibujado */}
+      {/* Check con trazo dibujado + anillo único + glow que respira */}
       <div className="relative mb-5" style={{ animation: "welcome-ring 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) both" }}>
-        <div className="absolute inset-0 rounded-full" style={{ boxShadow: `0 0 34px ${accent}aa`, filter: "blur(6px)" }} />
+        <div className="absolute inset-0 rounded-full halo-logo-breathe" style={{ boxShadow: `0 0 34px ${accent}aa`, filter: "blur(6px)" }} />
+        <span className="absolute inset-0 rounded-full welcome-check-ring" style={{ border: `1.5px solid ${accent}99` }} />
         <svg width="76" height="76" viewBox="0 0 76 76" fill="none" className="relative">
           <circle cx="38" cy="38" r="34" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" />
           <circle cx="38" cy="38" r="34" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round"
@@ -286,12 +292,16 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
       <h2 className="text-3xl font-extrabold text-white mb-2" style={{ textShadow: "0 2px 14px rgba(0,0,0,0.55)" }}>
         Bienvenido, {nombre || "Usuario"}
       </h2>
-      <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full text-white mb-5"
-        style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.35)", textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>
-        {ROL_LABEL[rol] || "Acceso autorizado"}
-      </span>
-      <div className="w-44 h-1 rounded-full bg-white/15 overflow-hidden" style={{ animation: "welcome-rise 0.45s ease-out 0.7s both" }}>
-        <div className="h-full w-1/3 rounded-full bg-white/90" style={{ animation: "welcome-shimmer 1.1s ease-in-out infinite" }} />
+      <div className="flex items-center gap-3 mb-5">
+        <span className="block w-10 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(255,255,255,0.5))" }} />
+        <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full text-white"
+          style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.35)", textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>
+          {ROL_LABEL[rol] || "Acceso autorizado"}
+        </span>
+        <span className="block w-10 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(255,255,255,0.5))" }} />
+      </div>
+      <div className="w-44 rounded-full bg-white/15 overflow-hidden" style={{ height: 3, animation: "welcome-rise 0.45s ease-out 0.7s both", boxShadow: "0 0 12px rgba(255,255,255,0.25)" }}>
+        <div className="h-full w-1/3 rounded-full bg-white" style={{ animation: "welcome-shimmer 1.1s ease-in-out infinite", boxShadow: "0 0 10px rgba(255,255,255,0.9)" }} />
       </div>
       <span className="mt-3 text-[11px] tracking-wide text-white" style={{ opacity: 0.85 }}>
         Entrando al panel…
