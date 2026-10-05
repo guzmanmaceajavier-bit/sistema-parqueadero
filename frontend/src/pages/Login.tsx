@@ -215,8 +215,7 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
     <div className="absolute inset-0 z-30 overflow-hidden"
       style={{
         opacity: leaving ? 0 : 1,
-        transform: leaving ? "scale(1.02)" : "scale(1)",
-        transition: "opacity 0.4s ease, transform 0.4s ease",
+        transition: "opacity 0.4s ease",
         animation: "welcome-fade 0.4s ease-out forwards",
       }}
     >
@@ -229,8 +228,8 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
       <div className="relative h-full flex flex-col items-center justify-center">
       <style>{`
         @keyframes welcome-fade {
-          from { opacity: 0; transform: scale(1.02); }
-          to { opacity: 1; transform: scale(1); }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         @keyframes welcome-ring {
           0% { transform: scale(0.6); opacity: 0; }
@@ -240,8 +239,8 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
           to { stroke-dashoffset: 0; }
         }
         @keyframes welcome-rise {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         @keyframes welcome-shimmer {
           0% { transform: translateX(-110%); }
@@ -273,7 +272,7 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         </svg>
       </div>
 
-      <h2 className="text-3xl font-extrabold text-white mb-2" style={{ animation: "welcome-rise 0.4s ease-out 0.3s both", textShadow: "0 2px 18px rgba(0,0,0,0.35)" }}>
+      <h2 className="text-3xl font-extrabold text-white mb-2" style={{ animation: "welcome-rise 0.4s ease-out 0.3s both" }}>
         Bienvenido, {nombre || "Usuario"}
       </h2>
       <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full bg-white/20 text-white mb-5"
