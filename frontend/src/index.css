@@ -69,3 +69,13 @@ body {
 :where(.dark) .hover\:bg-slate-100:hover { background-color: #475569; }
 :where(.dark) .hover\:text-slate-600:hover { color: #e2e8f0; }
 :where(.dark) .hover\:border-slate-200:hover { border-color: #64748b; }
+
+/* ── Login con escena fija: ignora el modo oscuro global ──
+   Doble clase (0,2,0) para ganarle a los overrides de arriba (0,1,0). */
+.login-scope .text-slate-900 { color: #0f172a; }
+.login-scope .text-slate-800 { color: #1e293b; }
+.login-scope .text-slate-500 { color: #64748b; }
+.login-scope .text-slate-400 { color: #94a3b8; }
+.login-scope .bg-slate-50 { background-color: #f8fafc; }
+.login-scope .border-slate-200 { border-color: #e2e8f0; }
+.login-scope .hover\:text-slate-600:hover { color: #475569; }

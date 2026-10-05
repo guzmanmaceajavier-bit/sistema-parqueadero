@@ -417,7 +417,7 @@ export default function Login() {
   // Escena fija del login: navy profundo + tarjeta blanca, igual con
   // tema claro u oscuro. El accent de configuración sigue mandando.
   return (
-    <div className="h-screen w-screen flex items-center justify-center relative overflow-hidden" style={{ background: "#030b16" }}>
+    <div className="login-scope h-screen w-screen flex items-center justify-center relative overflow-hidden" style={{ background: "#030b16" }}>
       {/* Fondo cinematográfico fijo */}
       {bgImage ? (
         <>
