@@ -51,8 +51,7 @@ if (isWeak) {
 
 const app = express();
 
-// En desarrollo el SPA + StrictMode dispara decenas de llamadas a la vez;
-// 60/min lo bloquea todo con 429. Límite amplio en dev, estricto en prod.
+// En desarrollo se dispara el límite con nada, por eso va más alto.
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: NODE_ENV === "production" ? 60 : 600,
@@ -136,8 +135,7 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Primer arranque en el PC del cliente (BD vacía): crea el usuario admin
-// con ADMIN_PASSWORD del .env. Si ya existe un admin, no hace nada.
+// Si la base está vacía crea el admin con ADMIN_PASSWORD del .env.
 try {
   await crearUsuarioAdmin();
 } catch (e) {

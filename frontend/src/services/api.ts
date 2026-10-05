@@ -67,10 +67,7 @@ api.interceptors.response.use(
 );
 
 export function prepareLogout() {
-  // Se llama al hacer clic en "Cerrar sesión": bloquea nuevas peticiones
-  // y cancela las que están en vuelo ANTES de invalidar el token en el
-  // backend. Así no salen 401s en cascada (dashboard, sucursales, puestos…)
-  // en la consola. resetAuthState() lo revierte al volver a entrar.
+  // Al cerrar sesión: frena lo que esté cargando para que no salgan 401s.
   loggedOut = true;
   logoutController?.abort();
   logoutController = new AbortController();

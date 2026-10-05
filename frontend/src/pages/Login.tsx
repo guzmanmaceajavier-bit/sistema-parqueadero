@@ -4,14 +4,8 @@ import { useConfig } from "../context/ConfigContext";
 import { Eye, EyeOff, Loader2, LogIn, AlertCircle, User, Lock, Car, LayoutDashboard, FileText } from "lucide-react";
 import api, { resetAuthState } from "../services/api";
 
-/* ─── Halo energético v2: responde al usuario (solo CSS) ───
-   idle → respiración casi imperceptible · user → ondas desde el logo +
-   partículas progresivas en órbita orgánica · pass → un poco más de
-   energía · ready → secuencia de convergencia en 5 fases · finale →
-   onda desde el logo + fade continuo de la tarjeta. Sin porcentajes. */
-
-/* Semilla de partículas: cada una con órbita, ritmo y brillo propios
-   para que no parezcan un reloj. */
+/* Halo alrededor de la tarjeta: respira en reposo, hace ondas al teclear
+   y se recoge cuando el formulario está completo. Todo con CSS. */
 const PARTICLE_SEED = Array.from({ length: 8 }).map((_, i) => ({
   a0: (i * 47 + 13) % 360,
   r: 418 + ((i * 37) % 26),
@@ -185,8 +179,7 @@ function EnergyHalo({ accent, phase, particleCount, fast, converge }) {
   );
 }
 
-/* Ondas que nacen en el centro del logo: anillo principal + eco con
-   delay para dar cuerpo, ambos con glow para que se vean. */
+/* Ondas que salen del logo con cada tecla (doble anillo). */
 function LogoWaves({ accent, ripples, releaseId, finale }) {
   const glow = `0 0 26px ${accent}73, inset 0 0 16px ${accent}40`;
   return (
@@ -331,8 +324,7 @@ export default function Login() {
   const [welcomeUser, setWelcomeUser] = useState(null);
   const [welcomeLeaving, setWelcomeLeaving] = useState(false);
 
-  // Fase del halo: reposo → usuario → contraseña → listo.
-  // Sin porcentajes: la energía se comunica con luz y movimiento.
+  // En qué punto va el halo según lo que lleva escrito.
   const [focus, setFocus] = useState(null);
   const [pulse, setPulse] = useState(0);
   const [ripples, setRipples] = useState([]);
@@ -357,14 +349,12 @@ export default function Login() {
           ? "user"
           : "idle";
 
-  // Partículas progresivas: pocas al empezar, todas al escribir más.
+  // Más caracteres = más partículas visibles.
   const typedChars = user.trim().length + pass.length;
   const particleCount = typedChars <= 0 ? 0 : typedChars <= 2 ? 2 : typedChars <= 5 ? 4 : typedChars <= 9 ? 6 : 8;
   const fast = phase === "pass";
 
-  // Secuencia de convergencia (~1s en 5 fases) al completar:
-  // órbita que decae → partículas al logo → logo concentra → halo que
-  // se contrae → onda suave de liberación. Se mantiene mientras siga completo.
+  // Cuando se completa, las partículas se recogen hacia el logo.
   const [converge, setConverge] = useState(0);
   const [releaseId, setReleaseId] = useState(0);
   useEffect(() => {
@@ -385,8 +375,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    // Tras un logout, api queda en estado "Logged out" y cancelaría
-    // esta petición (se ve como "Error de conexion"). Lo limpiamos antes.
+    // Limpio el estado por si se viene de un logout.
     resetAuthState();
     try {
       const payload = user.includes("@")
@@ -610,8 +599,7 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Welcome overlay FUERA de la tarjeta: la tarjeta se difumina al
-            entrar, pero la bienvenida debe quedar siempre nítida */}
+        {/* Bienvenida por encima de la tarjeta para que no se difumine */}
         {showWelcome && (
           <div className="absolute inset-0 z-20 overflow-hidden rounded-3xl">
             <WelcomeOverlay

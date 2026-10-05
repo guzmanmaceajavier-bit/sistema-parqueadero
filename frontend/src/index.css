@@ -70,8 +70,7 @@ body {
 :where(.dark) .hover\:text-slate-600:hover { color: #e2e8f0; }
 :where(.dark) .hover\:border-slate-200:hover { border-color: #64748b; }
 
-/* ── Login con escena fija: ignora el modo oscuro global ──
-   Doble clase (0,2,0) para ganarle a los overrides de arriba (0,1,0). */
+/* El login siempre se ve igual, no le pega el modo oscuro. */
 .login-scope .text-slate-900 { color: #0f172a; }
 .login-scope .text-slate-800 { color: #1e293b; }
 .login-scope .text-slate-500 { color: #64748b; }
