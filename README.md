@@ -71,12 +71,15 @@ frontend/src/services # cliente Axios con refresh de token
 
 ## Capturas
 
-![Login]
+Login
 <img width="1195" height="594" alt="image" src="https://github.com/user-attachments/assets/f0f58ade-5fa8-40d1-ba70-70e1455a2f91" />
 
-![Dashboard](docs/dashboard.png)
-![Caja](docs/caja.png)
+Dashboard
+<img width="1351" height="620" alt="image" src="https://github.com/user-attachments/assets/9501d680-9747-46ca-8b78-d1f00508f1b0" />
+
+Caja
 
 ## Autor
 
-Javier Guzmán — guzmanmaceajavier@gmail.com
+Javier Guzmán
+guzmanmaceajavier@gmail.com
