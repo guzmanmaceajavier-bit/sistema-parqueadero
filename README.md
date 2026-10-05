@@ -82,5 +82,4 @@ Caja
 
 ## Autor
 
-Javier Guzmán
 guzmanmaceajavier@gmail.com
