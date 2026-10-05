@@ -61,10 +61,15 @@ coverage/
 
 # ─── Temp / Migrations ───
 *.sql
+*.dump
+*.backup
+backups/
 temp_*
 fix-*
 unlock-*
 check-*
+ver-*.ts
+seed-*.ts
 
 # ─── Uploads (runtime) ───
 backend/uploads/
