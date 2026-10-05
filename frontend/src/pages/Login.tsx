@@ -439,16 +439,6 @@ export default function Login() {
             filter: loading ? "blur(2px)" : "blur(0px)",
           }}
         >
-          {/* Welcome overlay: cubre toda la tarjeta */}
-          {showWelcome && (
-            <WelcomeOverlay
-              nombre={welcomeUser?.nombre || user}
-              rol={welcomeUser?.rol}
-              accent={accent}
-              leaving={welcomeLeaving}
-            />
-          )}
-
           <div className="absolute top-0 inset-x-0 h-1 z-20" style={{ background: accentGrad }} />
 
           {/* Columna del formulario */}
@@ -598,6 +588,19 @@ export default function Login() {
             </p>
           </div>
         </div>
+
+        {/* Welcome overlay FUERA de la tarjeta: la tarjeta se difumina al
+            entrar, pero la bienvenida debe quedar siempre nítida */}
+        {showWelcome && (
+          <div className="absolute inset-0 z-20 overflow-hidden rounded-3xl">
+            <WelcomeOverlay
+              nombre={welcomeUser?.nombre || user}
+              rol={welcomeUser?.rol}
+              accent={accent}
+              leaving={welcomeLeaving}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
