@@ -1,113 +1,129 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useConfig } from "../context/ConfigContext";
 import { Eye, EyeOff, Loader2, LogIn, AlertCircle, User, Lock, ShieldCheck } from "lucide-react";
 import api, { resetAuthState } from "../services/api";
 
-/* ─── Anillo SVG con progreso ─── */
-function RingLoader({ progress, accent, spinning, size = 220, stroke = 3.5 }) {
-  const svgRef = useRef(null);
-  const glowRef = useRef(null);
+/* ─── Halo energético: respiración + ondas por tecla + órbita de partículas ───
+   Fases: idle (reposo) → user (escribiendo usuario) → pass (contraseña,
+   más intenso) → ready (completo: el halo se contrae) → finale (login:
+   onda expansiva final). Sin porcentajes ni barras. */
+const HALO_PARTICULAS = 8;
 
-  // SVG circle math
-  const r = (size - stroke * 2) / 2;
-  const c = 2 * Math.PI * r;
-
-  // Offset: 0 = full circle, c = empty
-  const offset = c - (progress / 100) * c;
-
-  useEffect(() => {
-    if (!svgRef.current) return;
-    const circle = svgRef.current.querySelector("circle.progress");
-    if (!circle) return;
-    circle.style.strokeDasharray = `${c}`;
-    circle.style.strokeDashoffset = `${offset}`;
-    circle.style.transition = spinning ? "none" : "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)";
-  }, [c, offset, spinning]);
-
-  // Glow filter follows progress
-  useEffect(() => {
-    if (!glowRef.current) return;
-    glowRef.current.style.opacity = progress >= 100 ? "1" : "0";
-    glowRef.current.style.transition = "opacity 0.6s ease";
-  }, [progress]);
+function EnergyHalo({ accent, phase, ripples, finale }) {
+  const intenso = phase === "pass" || phase === "ready";
+  const listo = phase === "ready" || finale;
 
   return (
-    <div className="absolute pointer-events-none z-0 flex items-center justify-center" style={{ top: "-30px", left: "-30px", right: "-30px", bottom: "-30px" }}>
-      <div className="relative" style={{ width: size, height: size }}>
-        {/* Glow difuso */}
-        <svg
-          ref={glowRef}
-          className="absolute inset-0"
-          width={size}
-          height={size}
-          viewBox={`0 0 ${size} ${size}`}
-          style={{ opacity: 0, filter: `blur(12px)` }}
-        >
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke={accent}
-            strokeWidth={stroke + 6}
-            strokeLinecap="round"
-            strokeDasharray={c}
-            strokeDashoffset={offset}
-            style={{
-              transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
-              transform: "rotate(-90deg)",
-              transformOrigin: "center",
-            }}
-          />
-        </svg>
+    <div className="absolute pointer-events-none z-0 flex items-center justify-center" style={{ top: "-46px", left: "-46px", right: "-46px", bottom: "-46px" }}>
+      <div className="relative w-full h-full">
+        {/* Respiración base: dos capas de luz difusa */}
+        <div
+          className="absolute inset-0 halo-breathe"
+          style={{
+            borderRadius: "3rem",
+            background: `radial-gradient(ellipse at center, ${accent}2e 0%, ${accent}14 45%, transparent 70%)`,
+            filter: "blur(28px)",
+          }}
+        />
+        <div
+          className="absolute halo-breathe"
+          style={{
+            inset: "-36px",
+            borderRadius: "4rem",
+            background: `radial-gradient(ellipse at center, ${accent}14 0%, transparent 65%)`,
+            filter: "blur(44px)",
+            animationDelay: "-3.5s",
+            opacity: intenso ? 1 : 0.7,
+            transition: "opacity 1.2s ease",
+          }}
+        />
 
-        {/* Anillo principal */}
-        <svg
-          ref={svgRef}
-          className={`absolute inset-0 ${spinning ? "animate-[ring-rotate_1.8s_cubic-bezier(0.4,0,0.2,1)_infinite]" : ""}`}
-          width={size}
-          height={size}
-          viewBox={`0 0 ${size} ${size}`}
-        >
-          {/* Pista de fondo */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke={accent}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={c}
-            strokeDashoffset={0}
-            opacity={0.1}
-          />
-          {/* Progreso */}
-          <circle
-            className="progress"
-            cx={size / 2}
-            cy={size / 2}
-            r={r}
-            fill="none"
-            stroke={accent}
-            strokeWidth={stroke}
-            strokeLinecap="round"
+        {/* Onda expansiva por cada tecla */}
+        {ripples.map((id) => (
+          <div
+            key={id}
+            className="absolute halo-ripple"
             style={{
-              transform: "rotate(-90deg)",
-              transformOrigin: "center",
-              strokeDasharray: c,
-              strokeDashoffset: c,
+              inset: "-18px",
+              borderRadius: "2.6rem",
+              border: `2px solid ${accent}66`,
             }}
           />
-        </svg>
+        ))}
+
+        {/* Partículas en órbita (aparecen al escribir) */}
+        {phase !== "idle" && (
+          <div
+            className={`absolute inset-0 ${intenso ? "halo-orbit-fast" : "halo-orbit-slow"}`}
+            style={{
+              transform: listo ? "scale(0.78)" : "scale(1)",
+              opacity: listo ? 0.95 : 0.8,
+              transition: "transform 1.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 1.1s ease",
+            }}
+          >
+            {Array.from({ length: HALO_PARTICULAS }).map((_, i) => (
+              <span
+                key={i}
+                className="absolute left-1/2 top-1/2"
+                style={{
+                  width: intenso ? 6 : 5,
+                  height: intenso ? 6 : 5,
+                  borderRadius: "9999px",
+                  background: accent,
+                  boxShadow: `0 0 ${intenso ? 10 : 7}px ${accent}`,
+                  opacity: 0.85,
+                  transform: `rotate(${i * (360 / HALO_PARTICULAS)}deg) translateX(252px)`,
+                  filter: "blur(0.4px)",
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Onda final al entrar */}
+        {finale && (
+          <div
+            className="absolute halo-finale"
+            style={{
+              inset: "-10px",
+              borderRadius: "2.4rem",
+              border: `2px solid ${accent}80`,
+            }}
+          />
+        )}
       </div>
 
       <style>{`
-        @keyframes ring-rotate {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+        @keyframes halo-breathe {
+          0%, 100% { transform: scale(1); opacity: 0.55; }
+          50% { transform: scale(1.035); opacity: 0.8; }
         }
+        .halo-breathe { animation: halo-breathe 7s ease-in-out infinite; }
+        @keyframes halo-ripple {
+          0% { transform: scale(0.97); opacity: 0.55; }
+          100% { transform: scale(1.1); opacity: 0; }
+        }
+        .halo-ripple { animation: halo-ripple 1s cubic-bezier(0.2, 0, 0.2, 1) forwards; }
+        @keyframes halo-spin { to { transform: rotate(360deg); } }
+        .halo-orbit-slow { animation: halo-spin 26s linear infinite; }
+        .halo-orbit-fast { animation: halo-spin 11s linear infinite; }
+        @keyframes halo-finale {
+          0% { transform: scale(0.94); opacity: 0.7; }
+          100% { transform: scale(1.22); opacity: 0; }
+        }
+        .halo-finale { animation: halo-finale 1.4s cubic-bezier(0.2, 0, 0.2, 1) forwards; }
+        @keyframes logo-breathe {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.045); }
+        }
+        .halo-logo-breathe { animation: logo-breathe 5s ease-in-out infinite; }
+        @keyframes logo-beat {
+          0% { transform: scale(1); }
+          35% { transform: scale(1.13); }
+          100% { transform: scale(1); }
+        }
+        .halo-logo-beat { animation: logo-beat 0.45s cubic-bezier(0.3, 1.4, 0.5, 1); }
       `}</style>
     </div>
   );
@@ -189,15 +205,31 @@ export default function Login() {
   const [error, setError] = useState("");
   const [showWelcome, setShowWelcome] = useState(false);
 
-  // Progreso del anillo: 0-100
-  const progress = useCallback(() => {
-    let p = 0;
-    if (user.trim().length > 0) p += 50;
-    if (pass.length > 0) p += 50;
-    return p;
-  }, [user, pass])();
+  // Fase del halo: reposo → usuario → contraseña → listo.
+  // Sin porcentajes: la energía se comunica con luz y movimiento.
+  const [focus, setFocus] = useState(null);
+  const [pulse, setPulse] = useState(0);
+  const [ripples, setRipples] = useState([]);
+  const idRef = useRef(0);
 
-  const isComplete = progress === 100;
+  const keystroke = () => {
+    idRef.current += 1;
+    const id = idRef.current;
+    setPulse(id);
+    setRipples((r) => [...r.slice(-5), id]);
+    setTimeout(() => setRipples((r) => r.filter((x) => x !== id)), 1050);
+  };
+
+  const complete = user.trim().length > 0 && pass.length > 0;
+  const phase = loading || showWelcome
+    ? "ready"
+    : complete
+      ? "ready"
+      : focus === "pass" || (pass.length > 0 && !user)
+        ? "pass"
+        : user.length > 0 || focus === "user"
+          ? "user"
+          : "idle";
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -253,13 +285,12 @@ export default function Login() {
 
       {/* Tarjeta */}
       <div className="relative z-10" style={{ overflow: "visible" }}>
-        {/* Anillo de progreso — detrás de la tarjeta */}
-        <RingLoader
-          progress={progress}
+        {/* Halo energético — detrás de la tarjeta */}
+        <EnergyHalo
           accent={accent}
-          spinning={loading}
-          size={460}
-          stroke={4}
+          phase={phase}
+          ripples={ripples}
+          finale={loading || showWelcome}
         />
 
         {/* Tarjeta */}
@@ -270,9 +301,9 @@ export default function Login() {
               : "bg-white/95 ring-1 ring-slate-200/50 backdrop-blur-xl"
           }`}
           style={{
-            transition: "box-shadow 0.5s ease",
-            boxShadow: isComplete && !loading
-              ? `0 8px 40px ${accent}20, 0 0 50px ${accent}08`
+            transition: "box-shadow 0.8s ease",
+            boxShadow: phase === "ready"
+              ? `0 8px 44px ${accent}26, 0 0 60px ${accent}0d`
               : undefined,
           }}
         >
@@ -282,15 +313,21 @@ export default function Login() {
           <div className="h-1 w-full" style={{ background: accentGrad }} />
 
           <div className="flex flex-col items-center px-10 py-10 text-center relative z-20">
-            {/* Logo */}
+            {/* Logo: núcleo del halo — respira y late con cada tecla */}
             <div className="relative mb-5">
-              {logo ? (
-                <img src={logo} alt="Logo" className={`w-16 h-16 rounded-2xl shadow-lg object-cover ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ boxShadow: `0 4px 20px ${accent}30` }} />
-              ) : (
-                <div className={`w-16 h-16 rounded-2xl shadow-lg flex items-center justify-center ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ background: accentGrad, boxShadow: `0 4px 20px ${accent}30` }}>
-                  <span className="text-white font-bold text-2xl tracking-tight">P</span>
-                </div>
-              )}
+              <div
+                className="absolute inset-0 halo-logo-breathe"
+                style={{ borderRadius: "1rem", background: `radial-gradient(circle, ${accent}40 0%, transparent 70%)`, filter: "blur(10px)", transform: "scale(1.4)", opacity: phase === "idle" ? 0.5 : 0.9, transition: "opacity 1s ease" }}
+              />
+              <div key={pulse} className={pulse > 0 ? "halo-logo-beat relative" : "relative"}>
+                {logo ? (
+                  <img src={logo} alt="Logo" className={`w-16 h-16 rounded-2xl shadow-lg object-cover ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ boxShadow: `0 4px 20px ${accent}30` }} />
+                ) : (
+                  <div className={`w-16 h-16 rounded-2xl shadow-lg flex items-center justify-center ring-2 ${isDark ? "ring-slate-600/50" : "ring-white"}`} style={{ background: accentGrad, boxShadow: `0 4px 20px ${accent}30` }}>
+                    <span className="text-white font-bold text-2xl tracking-tight">P</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <h1 className={`text-2xl font-bold mb-1 ${isDark ? "text-white" : "text-slate-900"}`}>
@@ -313,7 +350,9 @@ export default function Login() {
                   }`}
                   type="text"
                   value={user}
-                  onChange={(e) => setUser(e.target.value)}
+                  onChange={(e) => { setUser(e.target.value); keystroke(); }}
+                  onFocus={() => setFocus("user")}
+                  onBlur={() => setFocus(null)}
                   placeholder="Usuario o correo"
                   autoComplete="username"
                 />
@@ -331,7 +370,9 @@ export default function Login() {
                   }`}
                   type={showPass ? "text" : "password"}
                   value={pass}
-                  onChange={(e) => setPass(e.target.value)}
+                  onChange={(e) => { setPass(e.target.value); keystroke(); }}
+                  onFocus={() => setFocus("pass")}
+                  onBlur={() => setFocus(null)}
                   placeholder="Contrasena"
                   autoComplete="current-password"
                 />
