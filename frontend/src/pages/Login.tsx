@@ -214,13 +214,13 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
   return (
     <div className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${accent}f2 0%, #0b2b4d f2 100%)`,
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        animation: "welcome-fade 0.45s ease-out forwards",
+        background: `linear-gradient(135deg, ${accent} 0%, #0b2b4d 100%)`,
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        animation: "welcome-fade 0.4s ease-out forwards",
         opacity: leaving ? 0 : 1,
-        transform: leaving ? "scale(1.03)" : "scale(1)",
-        transition: "opacity 0.35s ease, transform 0.35s ease",
+        transform: leaving ? "scale(1.02)" : "scale(1)",
+        transition: "opacity 0.4s ease, transform 0.4s ease",
       }}
     >
       <style>{`
@@ -259,11 +259,11 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         </svg>
       </div>
 
-      <h2 className="text-2xl font-bold text-white mb-2" style={{ animation: "welcome-rise 0.45s ease-out 0.45s both" }}>
+      <h2 className="text-3xl font-extrabold text-white mb-2" style={{ animation: "welcome-rise 0.4s ease-out 0.3s both", textShadow: "0 2px 18px rgba(0,0,0,0.35)" }}>
         Bienvenido, {nombre || "Usuario"}
       </h2>
-      <span className="inline-block text-[11px] font-semibold tracking-[0.18em] uppercase px-3 py-1.5 rounded-full bg-white/15 text-white mb-4"
-        style={{ animation: "welcome-rise 0.45s ease-out 0.55s both", border: "1px solid rgba(255,255,255,0.25)" }}>
+      <span className="inline-block text-xs font-semibold tracking-[0.18em] uppercase px-4 py-2 rounded-full bg-white/20 text-white mb-5"
+        style={{ animation: "welcome-rise 0.4s ease-out 0.45s both", border: "1px solid rgba(255,255,255,0.35)" }}>
         {ROL_LABEL[rol] || "Acceso autorizado"}
       </span>
       <div className="w-44 h-1 rounded-full bg-white/15 overflow-hidden" style={{ animation: "welcome-rise 0.45s ease-out 0.7s both" }}>
@@ -364,9 +364,9 @@ export default function Login() {
         setWelcomeUser(res.data.usuario);
         setWelcomeLeaving(false);
         setShowWelcome(true);
-        // Salida elegante del overlay antes de entrar al panel.
-        setTimeout(() => setWelcomeLeaving(true), 1350);
-        setTimeout(() => login(res.data.usuario), 1650);
+        // Visible ~2s para leerlo: entra (0.4s) + lectura + salida (0.4s).
+        setTimeout(() => setWelcomeLeaving(true), 2000);
+        setTimeout(() => login(res.data.usuario), 2400);
         return;
       }
       setError(res.data?.message || "Credenciales incorrectas");
