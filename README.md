@@ -5,7 +5,11 @@ automático, planes mensuales, reservas, caja y facturación en PDF.
 Lo hice pensando en el computador del parqueadero, corriendo todo en local.
 
 **Demo:** https://sistema-parqueadero-mu.vercel.app
-**Para entrar a la demo:** usuario `admin`, clave `Admin123`
+
+```
+usuario: admin
+clave:   Admin123
+```
 
 ## Qué hace
 
@@ -19,12 +23,13 @@ Lo hice pensando en el computador del parqueadero, corriendo todo en local.
 
 ## Con qué está hecho
 
-- Frontend: React 19, Vite, Tailwind CSS, React Router, Axios.
-- Backend: Node.js 20, Express 5, Prisma ORM.
-- Base de datos: PostgreSQL 16.
-- Extras: Socket.IO para avisos en tiempo real, JWT en cookies httpOnly,
-  validaciones con Zod, PDFKit para las facturas.
-- Opcional: Docker Compose para levantarlo todo junto.
+| Parte | Tecnologías |
+|---|---|
+| Frontend | React 19, Vite, Tailwind CSS, React Router, Axios |
+| Backend | Node.js 20, Express 5, Prisma ORM, Socket.IO, Zod |
+| Base de datos | PostgreSQL 16 |
+| Auth | JWT en cookies httpOnly, roles por usuario |
+| Extras | PDFKit (facturas), Docker Compose (opcional) |
 
 ## Cómo correrlo
 
@@ -81,8 +86,11 @@ frontend/src/services # cliente Axios con refresh de token
 
 ## Estado
 
-Funciona en local y hay demo en línea. Pendiente: configurar correo real
-para recuperar contraseña, y más adelante facturación electrónica.
+Funciona en local y hay demo en línea.
+
+- [x] Parqueadero operable (caja, planes, facturas, dashboard)
+- [ ] Correo real para recuperar contraseña
+- [ ] Facturación electrónica (fase 2)
 
 ## Autor
 
