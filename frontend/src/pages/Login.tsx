@@ -219,13 +219,28 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         animation: "welcome-fade 0.4s ease-out forwards",
       }}
     >
-      {/* Fondo sólido: sin velos ni humo, lectura total */}
+      {/* Velo ligero para atenuar el login detrás */}
       <div className="absolute inset-0" style={{
-        background: `linear-gradient(135deg, ${accent} 0%, #0b2b4d 100%)`,
+        background: "radial-gradient(70% 65% at 50% 48%, rgba(3,11,22,0.42) 0%, rgba(2,7,15,0.72) 100%)",
       }} />
+      {/* Humo decorativo en las esquinas, lejos del texto */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-16 -left-16 w-72 h-72 rounded-full welcome-smoke-a" style={{ background: `${accent}59`, filter: "blur(70px)" }} />
+        <div className="absolute -bottom-20 -right-14 w-80 h-80 rounded-full welcome-smoke-b" style={{ background: "#1d4ed859", filter: "blur(70px)" }} />
+        <div className="absolute top-1/4 -right-20 w-60 h-60 rounded-full welcome-smoke-a" style={{ background: `${accent}40`, filter: "blur(60px)", animationDelay: "-4s" }} />
+        <div className="absolute -bottom-16 -left-14 w-60 h-60 rounded-full welcome-smoke-b" style={{ background: "#0ea5e54d", filter: "blur(60px)", animationDelay: "-6s" }} />
+      </div>
 
-      {/* Contenido */}
-      <div className="relative h-full flex flex-col items-center justify-center">
+      {/* Tarjeta flotante: el blur va en SU fondo, las letras quedan nítidas */}
+      <div className="relative flex flex-col items-center px-12 py-9 rounded-3xl"
+        style={{
+          background: "rgba(255,255,255,0.08)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          border: "1px solid rgba(255,255,255,0.22)",
+          boxShadow: `0 24px 70px rgba(0,0,0,0.45), 0 0 60px ${accent}40`,
+          animation: "welcome-pop 0.55s cubic-bezier(0.3, 1.3, 0.5, 1) backwards",
+        }}>
       <style>{`
         @keyframes welcome-fade {
           from { opacity: 0; }
@@ -233,6 +248,10 @@ function WelcomeOverlay({ nombre, rol, accent, leaving }) {
         }
         @keyframes welcome-ring {
           0% { transform: scale(0.6); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes welcome-pop {
+          0% { transform: scale(0.92); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
         }
         @keyframes welcome-draw {
