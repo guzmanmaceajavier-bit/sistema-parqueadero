@@ -4,8 +4,6 @@ Sistema web para administrar parqueaderos: entradas y salidas con cobro
 automático, planes mensuales, reservas, caja y facturación en PDF.
 Lo hice pensando en el computador del parqueadero, corriendo todo en local.
 
-**Demo:** 
-(sistema-parqueadero-mu.vercel.app)
 
 ```
 usuario: admin
