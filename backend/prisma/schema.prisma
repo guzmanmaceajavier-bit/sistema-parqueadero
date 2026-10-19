@@ -128,7 +128,7 @@ model Vehiculo {
   clienteId     Int
   sucursalId    Int?
   creadoPorPlan Boolean       @default(false)
-  tipoCobro     String?       // PLAN, TARIFA, NINGUNO
+  tipoCobro     String? // PLAN, TARIFA, NINGUNO
   planId        Int?
   tarifaId      Int?
   createdAt     DateTime      @default(now())
@@ -181,23 +181,24 @@ model Ingreso {
 }
 
 model Tarifa {
-  id                  Int       @id @default(autoincrement())
+  id                  Int        @id @default(autoincrement())
   nombre              String
   tipoVehiculo        String
   modalidad           String
   valor               Float
-  minutosCortesia     Int?      @default(0)
+  minutosCortesia     Int?       @default(0)
   descripcion         String?
-  activa              Boolean   @default(true)
+  activa              Boolean    @default(true)
   sucursalId          Int?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  minutosGratis       Int?      @default(0)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  minutosGratis       Int?       @default(0)
   precioHoraAdicional Float?
   /// ─── Tarifas progresivas ───
   precioPrimeraHora   Float?
   tarifaMaximaDiaria  Float?
-  sucursal            Sucursal? @relation(fields: [sucursalId], references: [id])
+  sucursal            Sucursal?  @relation(fields: [sucursalId], references: [id])
+  vehiculos           Vehiculo[]
 }
 
 model Caja {
@@ -243,6 +244,7 @@ model Plan {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   mensualidades Mensualidad[]
+  vehiculos     Vehiculo[]
 }
 
 model Mensualidad {
