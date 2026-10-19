@@ -49,6 +49,8 @@ export default function Vehiculos() {
   const { listas } = useListas();
   const [vehiculos, setVehiculos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [planes, setPlanes] = useState([]);
+  const [tarifas, setTarifas] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda);
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -63,7 +65,20 @@ export default function Vehiculos() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
 
-  const formVacio = { placa: "", marca: "", modelo: "", color: "", tipo: "carro", clase: "particular", clienteId: "", observaciones: "", bloqueado: false };
+  const formVacio = {
+    placa: "",
+    marca: "",
+    modelo: "",
+    color: "",
+    tipo: "carro",
+    clase: "particular",
+    clienteId: "",
+    observaciones: "",
+    bloqueado: false,
+    tipoCobro: "NINGUNO",
+    planId: "",
+    tarifaId: "",
+  };
   const [form, setForm] = useState(formVacio);
 
   const cargarVehiculos = async (p = 1) => {
@@ -84,9 +99,25 @@ export default function Vehiculos() {
     } catch (error) { console.log(error); }
   };
 
+  const cargarPlanes = async () => {
+    try {
+      const res = await api.get("/planes");
+      setPlanes(res.data.planes || []);
+    } catch (error) { console.log(error); }
+  };
+
+  const cargarTarifas = async () => {
+    try {
+      const res = await api.get("/tarifas");
+      setTarifas(res.data.tarifas || []);
+    } catch (error) { console.log(error); }
+  };
+
   useEffect(() => { cargarVehiculos(page); }, [page]);
   useEffect(() => { cargarVehiculos(1); }, [busquedaDebounced]);
   useEffect(() => { cargarClientes(); }, []);
+  useEffect(() => { cargarPlanes(); }, []);
+  useEffect(() => { cargarTarifas(); }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -97,7 +128,20 @@ export default function Vehiculos() {
     setCargando(true);
     setErrorMsg("");
     try {
-      const payload = { placa: form.placa, marca: form.marca, modelo: form.modelo, color: form.color, tipo: form.tipo, clase: form.clase, clienteId: form.clienteId ? parseInt(form.clienteId) : null, observaciones: form.observaciones, bloqueado: !!form.bloqueado };
+      const payload = {
+        placa: form.placa,
+        marca: form.marca,
+        modelo: form.modelo,
+        color: form.color,
+        tipo: form.tipo,
+        clase: form.clase,
+        clienteId: form.clienteId ? parseInt(form.clienteId) : null,
+        observaciones: form.observaciones,
+        bloqueado: !!form.bloqueado,
+        tipoCobro: form.tipoCobro || "NINGUNO",
+        planId: form.planId ? parseInt(form.planId) : null,
+        tarifaId: form.tarifaId ? parseInt(form.tarifaId) : null,
+      };
       if (modoEdicion) {
         await api.put(`/vehiculos/${vehiculoId}`, payload);
       } else {
@@ -115,7 +159,20 @@ export default function Vehiculos() {
   const editarVehiculo = (v) => {
     setModoEdicion(true);
     setVehiculoId(v.id);
-    setForm({ placa: v.placa || "", marca: v.marca || "", modelo: v.modelo || "", color: v.color || "", tipo: v.tipo || "carro", clase: v.clase || "particular", clienteId: v.clienteId?.toString() || "", observaciones: v.observaciones || "", bloqueado: !!v.bloqueado });
+    setForm({
+      placa: v.placa || "",
+      marca: v.marca || "",
+      modelo: v.modelo || "",
+      color: v.color || "",
+      tipo: v.tipo || "carro",
+      clase: v.clase || "particular",
+      clienteId: v.clienteId?.toString() || "",
+      observaciones: v.observaciones || "",
+      bloqueado: !!v.bloqueado,
+      tipoCobro: v.tipoCobro || "NINGUNO",
+      planId: v.planId?.toString() || "",
+      tarifaId: v.tarifaId?.toString() || "",
+    });
     setMostrarModal(true);
   };
 
@@ -270,6 +327,36 @@ export default function Vehiculos() {
             <label className={labelClass}>Propietario</label>
             <ClientSearch value={form.clienteId} onChange={(id) => setForm({ ...form, clienteId: id?.toString() || "" })} placeholder="Buscar cliente propietario..." />
           </div>
+          <div>
+            <label className={labelClass}>Tipo de cobro</label>
+            <select name="tipoCobro" value={form.tipoCobro} onChange={handleChange} className={inputClass}>
+              <option value="NINGUNO">Ninguno (cobro por salida)</option>
+              <option value="PLAN">Plan mensual</option>
+              <option value="TARIFA">Tarifa por tiempo</option>
+            </select>
+          </div>
+          {form.tipoCobro === "PLAN" && (
+            <div>
+              <label className={labelClass}>Plan</label>
+              <select name="planId" value={form.planId} onChange={handleChange} className={inputClass}>
+                <option value="">Seleccionar plan</option>
+                {planes.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nombre} - ${p.valor} ({p.duracionDias} días)</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {form.tipoCobro === "TARIFA" && (
+            <div>
+              <label className={labelClass}>Tarifa</label>
+              <select name="tarifaId" value={form.tarifaId} onChange={handleChange} className={inputClass}>
+                <option value="">Seleccionar tarifa</option>
+                {tarifas.map((t) => (
+                  <option key={t.id} value={t.id}>{t.nombre} - ${t.valor} ({t.modalidad})</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className={labelClass}>Observaciones</label>
             <textarea name="observaciones" placeholder="Notas..." value={form.observaciones} onChange={handleChange} className={inputClass + " resize-none"} rows={2} />
