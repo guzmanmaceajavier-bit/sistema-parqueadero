@@ -19,7 +19,7 @@ function diffMeses(fechaEntrada, fechaSalida) {
   return Math.max(1, meses);
 }
 
-export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSalida, ticketExtraviado }: { ingreso: any; tipoVehiculo?: string; modalidad?: string; fechaSalida?: Date; ticketExtraviado?: boolean }) {
+export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSalida, ticketExtraviado, tarifaId }: { ingreso: any; tipoVehiculo?: string; modalidad?: string; fechaSalida?: Date; ticketExtraviado?: boolean; tarifaId?: number }) {
   const salida = fechaSalida || new Date();
   const totalMinutos = diffMinutos(ingreso.fechaEntrada, salida);
 
@@ -33,16 +33,25 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   const modalidadNormalizada = (modalidad || "hora").toLowerCase();
 
-  let tarifa = await prisma.tarifa.findFirst({
-    where: {
-      OR: [
-        { tipoVehiculo: { contains: tipoVehiculo } },
-        { tipoVehiculo: "todos" },
-      ],
-      modalidad: modalidadNormalizada,
-      activa: true,
-    },
-  });
+  let tarifa = null;
+
+  if (tarifaId) {
+    tarifa = await prisma.tarifa.findUnique({ where: { id: tarifaId } });
+    if (!tarifa || !tarifa.activa) {
+      return { error: `La tarifa asignada al vehículo no está activa`, total: 0, detalle: [] };
+    }
+  } else {
+    tarifa = await prisma.tarifa.findFirst({
+      where: {
+        OR: [
+          { tipoVehiculo: { contains: tipoVehiculo } },
+          { tipoVehiculo: "todos" },
+        ],
+        modalidad: modalidadNormalizada,
+        activa: true,
+      },
+    });
+  }
 
   if (!tarifa) {
     return { error: `No hay tarifa activa para ${tipoVehiculo} con modalidad ${modalidadNormalizada}`, total: 0, detalle: [] };

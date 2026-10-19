@@ -269,7 +269,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: Number(id) },
-    include: { cliente: true, vehiculo: true, puesto: true },
+    include: { cliente: true, vehiculo: { include: { tarifa: true, plan: true } }, puesto: true },
   });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
@@ -302,6 +302,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       tipoVehiculo: ingreso.vehiculo.tipo,
       fechaSalida,
       ticketExtraviado,
+      tarifaId: ingreso.vehiculo.tarifaId,
     });
     if (cobro.error) throw new AppError(cobro.error, 400);
     cobroTotal = cobro.total;
