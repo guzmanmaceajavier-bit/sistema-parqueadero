@@ -9,17 +9,19 @@ import { registrarMovimiento } from "../../helpers/movimientos.js";
 export const abrirCaja = asyncHandler(async (req, res) => {
   const { apertura, password, observacion } = req.body;
 
-  const abierta = await prisma.caja.findFirst({ where: { estado: "ABIERTA" } });
-  if (abierta) throw new AppError("Ya hay una caja abierta", 400);
+  const caja = await prisma.$transaction(async (tx) => {
+    const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+    if (abierta) throw new AppError("Ya hay una caja abierta", 400);
 
-  const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
-  if (!usuario) throw new AppError("Usuario no encontrado", 404);
+    const usuario = await tx.usuario.findUnique({ where: { id: req.usuario.id } });
+    if (!usuario) throw new AppError("Usuario no encontrado", 404);
 
-  const valida = await bcrypt.compare(password, usuario.password);
-  if (!valida) throw new AppError("Contraseña incorrecta", 401);
+    const valida = await bcrypt.compare(password, usuario.password);
+    if (!valida) throw new AppError("Contraseña incorrecta", 401);
 
-  const caja = await prisma.caja.create({
-    data: { apertura: Number(apertura), observacion, usuarioId: req.usuario.id },
+    return tx.caja.create({
+      data: { apertura: Number(apertura), observacion, usuarioId: req.usuario.id },
+    });
   });
 
   await registrarMovimiento("CAJA", "ABRIR", `Caja abierta por ${req.usuario?.usuario} con apertura de $${Number(apertura)}`, req.usuario?.usuario);
@@ -196,14 +198,8 @@ export const eliminarCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const existente = await prisma.caja.findUnique({ where: { id: Number(id) } });
   if (!existente) throw new AppError("Caja no encontrada", 404);
-  if (existente.estado === "ABIERTA") throw new AppError("No se puede eliminar una caja abierta. Ciérrela primero.", 400);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.cajaMovimiento.deleteMany({ where: { cajaId: Number(id) } });
-    await tx.caja.delete({ where: { id: Number(id) } });
-  });
-  await registrarMovimiento("CAJA", "ELIMINAR", `Caja #${id} eliminada con sus movimientos`, req.usuario?.usuario);
-  res.json({ ok: true, message: "Caja eliminada" });
+  throw new AppError("No se pueden eliminar cajas cerradas. El historial de caja debe preservarse para auditoría.", 400);
 });
 
 export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {

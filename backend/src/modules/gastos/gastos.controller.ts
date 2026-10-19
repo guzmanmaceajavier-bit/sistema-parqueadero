@@ -75,6 +75,12 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const existe = await prisma.gasto.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Gasto no encontrado", 404);
+
+  const movimiento = await prisma.cajaMovimiento.findFirst({ where: { gastoId: Number(id) }, include: { caja: true } });
+  if (movimiento && movimiento.caja?.estado === "CERRADA") {
+    throw new AppError("No se puede modificar un gasto que pertenece a una caja cerrada", 400);
+  }
+
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
   const data = {};
   if (concepto) data.concepto = concepto;
@@ -91,11 +97,8 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   const movimientoData = {};
   if (concepto) movimientoData.concepto = `Gasto: ${gasto.concepto}`;
   if (valor !== undefined) movimientoData.monto = Number(valor);
-  if (Object.keys(movimientoData).length) {
-    await prisma.cajaMovimiento.updateMany({
-      where: { gastoId: Number(id), tipo: "EGRESO" },
-      data: movimientoData,
-    });
+  if (movimiento && Object.keys(movimientoData).length) {
+    await prisma.cajaMovimiento.update({ where: { id: movimiento.id }, data: movimientoData });
   }
 
   await registrarMovimiento("GASTOS", "ACTUALIZAR", `Gasto #${id}: ${gasto.concepto} - $${gasto.valor}`, req.usuario?.usuario || "admin");
@@ -107,8 +110,17 @@ export const eliminarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const gasto = await prisma.gasto.findUnique({ where: { id: Number(id) } });
   if (!gasto) throw new AppError("Gasto no encontrado", 404);
+
+  const movimiento = await prisma.cajaMovimiento.findFirst({
+    where: { gastoId: Number(id), tipo: "EGRESO" },
+    include: { caja: true },
+  });
+  if (movimiento && movimiento.caja?.estado === "CERRADA") {
+    throw new AppError("No se puede eliminar un gasto que participó en una caja cerrada. Use una anulación auditada.", 400);
+  }
+
   await prisma.$transaction(async (tx) => {
-    await tx.cajaMovimiento.deleteMany({ where: { gastoId: Number(id), tipo: "EGRESO" } });
+    if (movimiento) await tx.cajaMovimiento.delete({ where: { id: movimiento.id } });
     await tx.gasto.delete({ where: { id: Number(id) } });
   });
   await registrarMovimiento("GASTOS", "ELIMINAR", `Gasto #${id}: ${gasto.concepto} - $${gasto.valor}`, req.usuario?.usuario || "admin");

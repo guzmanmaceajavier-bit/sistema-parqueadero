@@ -14,7 +14,12 @@ async function liberarReservas() {
     const nuevoEstado = r.estado === "CONFIRMADA" ? "NO_SHOW" : "CANCELADA";
     await prisma.reserva.update({ where: { id: r.id }, data: { estado: nuevoEstado } });
     if (r.puestoId) {
-      await prisma.puesto.update({ where: { id: r.puestoId }, data: { estado: "LIBRE" } });
+      const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: r.puestoId, estado: "ACTIVO" } });
+      const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: r.puestoId, estado: "ACTIVA" } });
+      const otraReserva = await prisma.reserva.count({ where: { puestoId: r.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: r.id } } });
+      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+        await prisma.puesto.update({ where: { id: r.puestoId }, data: { estado: "LIBRE" } });
+      }
     }
     await registrarMovimiento("RESERVAS", "VENCER", `Reserva #${r.id} vencida — ${r.cliente?.nombres}`, "sistema");
     emitirEvento("reserva:vencida", { mensaje: `Reserva #${r.id} vencida — ${r.cliente?.nombres}`, reserva: r });
@@ -62,10 +67,13 @@ export async function vencerMensualidades() {
   for (const m of vencidas) {
     await prisma.$transaction(async (tx) => {
       await tx.mensualidad.update({ where: { id: m.id }, data: { estado: "VENCIDA" } });
-      // Libera el puesto fijo solo si no hay un ingreso activo en él.
       if (m.puestoId) {
-        const ocupado = await tx.ingreso.findFirst({ where: { puestoId: m.puestoId, estado: "ACTIVO" } });
-        if (!ocupado) await tx.puesto.update({ where: { id: m.puestoId }, data: { estado: "LIBRE" } });
+        const ingresoActivo = await tx.ingreso.count({ where: { puestoId: m.puestoId, estado: "ACTIVO" } });
+        const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: m.puestoId, estado: "ACTIVA", id: { not: m.id } } });
+        const otraReserva = await tx.reserva.count({ where: { puestoId: m.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
+        if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+          await tx.puesto.update({ where: { id: m.puestoId }, data: { estado: "LIBRE" } });
+        }
       }
     });
     await registrarMovimiento("MENSUALIDADES", "VENCER", `Mensualidad #${m.id} vencida — ${m.cliente?.nombres || ""}`, "sistema");

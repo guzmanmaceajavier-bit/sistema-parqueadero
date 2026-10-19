@@ -23,14 +23,14 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       orderBy: { fecha: "asc" },
     }),
     prisma.ingreso.findMany({
-      where: { fechaEntrada: { gte: inicio, lte: fin }, ...psf },
+      where: { fechaSalida: { gte: inicio, lte: fin }, estado: "FINALIZADO", ...psf },
       select: { id: true, fechaEntrada: true, fechaSalida: true, tiempoMinutos: true, valorPagado: true, vehiculo: { select: { placa: true, tipo: true } } },
-      orderBy: { fechaEntrada: "asc" },
+      orderBy: { fechaSalida: "asc" },
     }),
     prisma.puesto.groupBy({ by: ["estado"], _count: true }),
     prisma.ingreso.findMany({
-      where: { fechaEntrada: { gte: inicio, lte: fin }, ...psf },
-      select: { fechaEntrada: true },
+      where: { fechaSalida: { gte: inicio, lte: fin }, estado: "FINALIZADO", ...psf },
+      select: { fechaSalida: true },
     }),
   ]);
 
