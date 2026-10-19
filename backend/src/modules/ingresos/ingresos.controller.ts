@@ -36,14 +36,24 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
 
   let reservaVinculada = null;
+  let planDetectado = null;
   if (!puestoId) {
     reservaVinculada = await service.buscarReservaActiva(clienteId);
     if (reservaVinculada) {
       puestoId = reservaVinculada.puestoId;
+    } else {
+      const mensualidadVigente = await prisma.mensualidad.findFirst({
+        where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaFin: { gte: new Date() }, puestoId: { not: null } },
+        include: { plan: true, puesto: true },
+      });
+      if (mensualidadVigente?.puestoId) {
+        puestoId = mensualidadVigente.puestoId;
+        planDetectado = mensualidadVigente;
+      }
     }
   }
 
-  if (!puestoId) throw new AppError("Debes seleccionar un puesto o tener una reserva activa", 400);
+  if (!puestoId) throw new AppError("Debes seleccionar un puesto o tener una reserva activa o plan vigente", 400);
 
   const puesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
@@ -70,10 +80,11 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     });
   });
 
-  await registrarMovimiento("INGRESOS", "ENTRADA", `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}${reservaVinculada ? " (reserva)" : ""}`, req.usuario?.usuario || "admin");
-  emitirEvento("ingreso:entrada", { mensaje: `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}`, cliente: ingreso.cliente, vehiculo: ingreso.vehiculo, puesto: ingreso.puesto, fecha: ingreso.fechaEntrada });
+  const tipoIngreso = planDetectado ? "plan_mensual" : (reservaVinculada ? "reserva" : "normal");
+  await registrarMovimiento("INGRESOS", "ENTRADA", `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}${planDetectado ? ` — plan ${planDetectado.plan?.nombre}` : reservaVinculada ? " (reserva)" : ""}`, req.usuario?.usuario || "admin");
+  emitirEvento("ingreso:entrada", { mensaje: `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}`, cliente: ingreso.cliente, vehiculo: ingreso.vehiculo, puesto: ingreso.puesto, fecha: ingreso.fechaEntrada, tipoIngreso, plan: planDetectado?.plan });
 
-  res.status(201).json({ ok: true, ingreso, reservaAsignada: !!reservaVinculada });
+  res.status(201).json({ ok: true, ingreso, reservaAsignada: !!reservaVinculada, planAsignado: planDetectado ? { id: planDetectado.id, nombre: planDetectado.plan?.nombre, fechaFin: planDetectado.fechaFin } : null, tipoIngreso });
 });
 
 export const obtenerIngresos = asyncHandler(async (req, res) => {
