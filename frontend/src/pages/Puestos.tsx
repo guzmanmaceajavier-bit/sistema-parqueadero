@@ -524,11 +524,18 @@ export default function Puestos() {
             const res = await api.get("/mensualidades", { params: { clienteId: Number(asignarForm.clienteId), estado: "ACTIVA", limit: 50 } });
             const planes = res.data.mensualidades || [];
             const ejecutar = () => guardarEntrada(asignarForm.clienteId, asignarForm.vehiculoId, asignarPuesto.id);
-            if (planes.length > 0) {
-              const listaPlanes = planes.map(p => `• ${p.plan?.nombre || "Plan"} (${p.vehiculo?.placa || "sin vehículo"}) — vence ${new Date(p.fechaFin).toLocaleDateString("es-CO")}`).join("\n");
+            const v = vehiculos.find(ve => ve.id === parseInt(asignarForm.vehiculoId));
+            const planVehiculo = planes.find(p => p.vehiculoId === Number(asignarForm.vehiculoId));
+            if (planVehiculo) {
               mostrarConfirm(
-                "Cliente con plan activo",
-                `Este cliente tiene ${planes.length} plan(es) activo(s):\n${listaPlanes}\n\n¿Deseas registrar una entrada por separado? Esto podría generar un cobro adicional.`,
+                "Vehículo con plan activo",
+                `El vehículo ${v?.placa || ""} está amparado por ${planVehiculo.plan?.nombre || "su plan"} (vence ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}).\n\nLa entrada no genera cobro y el puesto queda ligado al plan. ¿Registrar la entrada?`,
+                ejecutar
+              );
+            } else if (planes.length > 0) {
+              mostrarConfirm(
+                "Vehículo sin plan",
+                `El cliente tiene plan(es) activo(s), pero este vehículo no está amparado por ninguno.\n\nLa entrada se cobrará normal al registrar la salida. ¿Continuar?`,
                 ejecutar
               );
             } else {

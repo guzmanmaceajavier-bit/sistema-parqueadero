@@ -143,25 +143,21 @@ export const eliminarCliente = asyncHandler(async (req, res) => {
   const cliente = await prisma.cliente.findUnique({ where: { id: Number(id) } });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
 
+  const ingresosActivos = await prisma.ingreso.count({ where: { clienteId: Number(id), estado: "ACTIVO" } });
+  const mensualidadesActivas = await prisma.mensualidad.count({ where: { clienteId: Number(id), estado: "ACTIVA" } });
+  const reservasActivas = await prisma.reserva.count({ where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
+
+  if (ingresosActivos > 0 || mensualidadesActivas > 0 || reservasActivas > 0) {
+    throw new AppError("No se puede desactivar: el cliente tiene ingresos, mensualidades o reservas activas", 400);
+  }
+
   await prisma.$transaction(async (tx) => {
-    const ingresos = await tx.ingreso.findMany({ where: { clienteId: Number(id), estado: "ACTIVO" }, select: { puestoId: true } });
-    const mensualidades = await tx.mensualidad.findMany({ where: { clienteId: Number(id), estado: "ACTIVA" }, select: { puestoId: true } });
-    const reservas = await tx.reserva.findMany({ where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } }, select: { puestoId: true } });
-    const puestoIds = new Set([...ingresos, ...mensualidades, ...reservas].map(r => r.puestoId).filter(Boolean));
-    for (const pid of puestoIds) {
-      await tx.puesto.update({ where: { id: pid }, data: { estado: "LIBRE" } });
-    }
-    await tx.factura.deleteMany({ where: { ingreso: { clienteId: Number(id) } } });
-    await tx.ingreso.deleteMany({ where: { clienteId: Number(id) } });
-    await tx.mensualidad.deleteMany({ where: { clienteId: Number(id) } });
-    await tx.reserva.deleteMany({ where: { clienteId: Number(id) } });
-    await tx.ausencia.deleteMany({ where: { clienteId: Number(id) } });
-    await tx.vehiculo.deleteMany({ where: { clienteId: Number(id) } });
-    await tx.cliente.delete({ where: { id: Number(id) } });
+    await tx.cliente.update({ where: { id: Number(id) }, data: { estado: "SUSPENDIDO", bloqueado: true } });
+    await tx.vehiculo.updateMany({ where: { clienteId: Number(id) }, data: { estado: false } });
   });
 
-  await registrarMovimiento("CLIENTES", "ELIMINAR", `Cliente ${cliente.nombres} ${cliente.apellidos} eliminado`, req.usuario?.usuario || "admin");
-  res.json({ ok: true, message: "Cliente eliminado" });
+  await registrarMovimiento("CLIENTES", "SUSPENDER", `Cliente ${cliente.nombres} ${cliente.apellidos} suspendido`, req.usuario?.usuario || "admin");
+  res.json({ ok: true, message: "Cliente suspendido (historial preservado)" });
 });
 
 export const perfilCliente = asyncHandler(async (req, res) => {

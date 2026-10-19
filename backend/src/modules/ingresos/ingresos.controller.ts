@@ -14,18 +14,21 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   clienteId = Number(clienteId);
   vehiculoId = Number(vehiculoId);
 
-  // mira si está bloqueado
-  const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vehiculoId }, include: { cliente: true } });
+  const cliente = await prisma.cliente.findUnique({ where: { id: clienteId } });
+  if (!cliente) throw new AppError("Cliente no encontrado", 404);
+  if (cliente.bloqueado) throw new AppError("El cliente está bloqueado y no puede ingresar", 400);
+
+  const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vehiculoId } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (vehiculo.clienteId !== clienteId) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado y no puede ingresar", 400);
-  if (vehiculo.cliente?.bloqueado) throw new AppError("El cliente está bloqueado y no puede ingresar", 400);
+  if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
 
   let reservaVinculada = null;
   if (!puestoId) {
     reservaVinculada = await service.buscarReservaActiva(clienteId);
     if (reservaVinculada) {
       puestoId = reservaVinculada.puestoId;
-      await service.activarReserva(reservaVinculada.id);
     }
   }
 
@@ -33,20 +36,22 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
 
   const puesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
-  if (puesto.estado === "OCUPADO") throw new AppError("El puesto ya está ocupado", 400);
-  if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
+  if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
+  if (puesto.estado !== "LIBRE") throw new AppError("El puesto no está disponible (estado: " + puesto.estado + ")", 400);
 
   const placa = req.body.placa || vehiculo.placa;
   const existenteActivo = await prisma.ingreso.findFirst({
-    where: { vehiculo: { placa }, estado: "ACTIVO" },
-    include: { vehiculo: true },
+    where: { vehiculoId: vehiculoId, estado: "ACTIVO" },
   });
   if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
 
   const ingreso = await prisma.$transaction(async (tx) => {
     await tx.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "OCUPADO" } });
-    const data = { clienteId, vehiculoId, puestoId: Number(puestoId) };
-    if (reservaVinculada) data.reservaId = reservaVinculada.id;
+    const data: any = { clienteId, vehiculoId, puestoId: Number(puestoId) };
+    if (reservaVinculada) {
+      data.reservaId = reservaVinculada.id;
+      await tx.reserva.update({ where: { id: reservaVinculada.id }, data: { estado: "ACTIVA" } });
+    }
     return tx.ingreso.create({
       data,
       include: { cliente: true, vehiculo: true, puesto: true },
@@ -110,76 +115,18 @@ export const obtenerIngreso = asyncHandler(async (req, res) => {
   res.json({ ok: true, ingreso });
 });
 
-export const registrarSalida = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const ingreso = await prisma.ingreso.findUnique({
-    where: { id: Number(id) },
-    include: { cliente: true, vehiculo: true, puesto: true },
-  });
-  if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
-  if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
-
-  const fechaSalida = new Date();
-  const tiempoMinutos = Math.ceil((fechaSalida - ingreso.fechaEntrada) / (1000 * 60));
-
-  const tarifa = await prisma.tarifa.findFirst({
-    where: {
-      OR: [
-        { tipoVehiculo: { contains: ingreso.vehiculo.tipo } },
-        { tipoVehiculo: "todos" },
-      ],
-      modalidad: "hora",
-      activa: true,
-    },
-  });
-
-  let valorPagado = 0;
-  let horas = 0;
-  if (tarifa) {
-    const cortesia = tarifa.minutosCortesia || 0;
-    let minutosFacturables = Math.max(0, tiempoMinutos - cortesia);
-    horas = Math.ceil(minutosFacturables / 60);
-    valorPagado = horas * tarifa.valor;
-  }
-
-  const metodoPago = req.body.metodoPago || "efectivo";
-
-  const numeroFactura = await generarNumeroFactura("FACT");
-
-  const [salida, factura] = await prisma.$transaction(async (tx) => {
-    const s = await tx.ingreso.update({
-      where: { id: Number(id) },
-      data: { fechaSalida, estado: "FINALIZADO", tiempoMinutos, valorPagado },
-      include: { cliente: true, vehiculo: true, puesto: true },
-    });
-    await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: "LIBRE" } });
-    if (ingreso.reservaId) {
-      await tx.reserva.update({ where: { id: ingreso.reservaId }, data: { estado: "FINALIZADA" } });
-    }
-    const f = await tx.factura.create({
-      data: { numero: numeroFactura, ingresoId: ingreso.id, origen: "INGRESO", valor: valorPagado, metodoPago },
-    });
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
-    if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
-    await tx.cajaMovimiento.create({
-      data: { cajaId: cajaAbierta.id, tipo: "INGRESO", concepto: `Factura ${numeroFactura} — Salida ${ingreso.vehiculo.placa}`, monto: valorPagado, metodoPago, facturaId: f.id },
-    });
-    return [s, f];
-  });
-
-  const cajaResp = await getCajaAbierta();
-
-  await registrarMovimiento("FACTURACION", "CREAR", `Factura ${numeroFactura} generada por $${valorPagado}`, req.usuario?.usuario || "admin");
-  emitirEvento("ingreso:salida", { mensaje: `Vehículo ${ingreso.vehiculo.placa} salió — Factura ${numeroFactura} por $${valorPagado}`, factura, ingreso: salida, valor: valorPagado });
-
-  res.json({ ok: true, message: "Salida registrada", tiempoMinutos, horas, valorPagado, factura, salida, caja: cajaResp });
-});
-
 export const liberarPuesto = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const ingreso = await prisma.ingreso.findUnique({ where: { id: Number(id) } });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
+
+  // Liberar no cobra: solo vale para vehículos amparados por un plan.
+  // Sin plan, la salida se debe registrar con cobro desde Ingresos.
+  const planActivo = await prisma.mensualidad.findFirst({
+    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
+  });
+  if (!planActivo) throw new AppError("El vehículo no tiene plan activo. Registre la salida con cobro desde Ingresos.", 400);
 
   const fechaSalida = new Date();
   const tiempoMinutos = Math.ceil((fechaSalida - ingreso.fechaEntrada) / (1000 * 60));
@@ -205,16 +152,27 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { vehiculoId, puestoId } = req.body;
 
-  const ingreso = await prisma.ingreso.findUnique({ where: { id: Number(id) } });
+  const ingreso = await prisma.ingreso.findUnique({ where: { id: Number(id) }, include: { cliente: true, vehiculo: true } });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado !== "ACTIVO") throw new AppError("Solo se puede editar un ingreso activo", 400);
 
-  const data = {};
-  if (vehiculoId) data.vehiculoId = Number(vehiculoId);
+  const data: any = {};
+  if (vehiculoId !== undefined) {
+    const vid = Number(vehiculoId);
+    const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
+    if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+    if (vehiculo.clienteId !== ingreso.clienteId) throw new AppError("El vehículo no pertenece al cliente de este ingreso", 400);
+    if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
+    if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
+    data.vehiculoId = vid;
+  }
+  const vid = data.vehiculoId ?? ingreso.vehiculoId;
+
   if (puestoId && Number(puestoId) !== ingreso.puestoId) {
     const nuevoPuesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
     if (!nuevoPuesto) throw new AppError("Puesto no encontrado", 404);
-    if (nuevoPuesto.estado === "OCUPADO") throw new AppError("El nuevo puesto ya está ocupado", 400);
+    if (!nuevoPuesto.activo) throw new AppError("El puesto está inactivo", 400);
+    if (nuevoPuesto.estado !== "LIBRE") throw new AppError("El nuevo puesto no está disponible (estado: " + nuevoPuesto.estado + ")", 400);
     data.puestoId = Number(puestoId);
   }
 
@@ -353,9 +311,16 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       data: updateData,
       include: { cliente: true, vehiculo: true, puesto: true },
     });
+    const planActivo = await tx.mensualidad.findFirst({
+      where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
+    });
+    const reservaActiva = await tx.reserva.findFirst({
+      where: { puestoId: ingreso.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
+    });
+    const estadoPuesto = (planActivo || reservaActiva) ? "OCUPADO" : "LIBRE";
     await tx.puesto.update({
       where: { id: ingreso.puestoId },
-      data: { estado: "LIBRE" },
+      data: { estado: estadoPuesto },
     });
     if (ingreso.reservaId) {
       await tx.reserva.update({ where: { id: ingreso.reservaId }, data: { estado: "FINALIZADA" } });

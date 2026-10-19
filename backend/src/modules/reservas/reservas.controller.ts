@@ -19,27 +19,41 @@ async function liberarPuesto(puestoId, usuario, motivo = "liberado") {
 export const crearReserva = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, fechaInicio, fechaFin, observaciones } = req.body;
 
+  const cid = Number(clienteId);
+  const vid = vehiculoId ? Number(vehiculoId) : null;
+  const pid = puestoId ? Number(puestoId) : null;
+
   const inicio = new Date(fechaInicio);
   const MARGEN_MS = 5 * 60 * 1000;
   if (inicio.getTime() < Date.now() - MARGEN_MS) throw new AppError("La fecha de inicio debe ser futura", 400);
 
-  const [cliente, vehiculo, puesto] = await Promise.all([
-    prisma.cliente.findUnique({ where: { id: Number(clienteId) } }),
-    vehiculoId ? prisma.vehiculo.findUnique({ where: { id: Number(vehiculoId) } }) : Promise.resolve(null),
-    puestoId ? prisma.puesto.findUnique({ where: { id: Number(puestoId) } }) : Promise.resolve(null),
-  ]);
+  const cliente = await prisma.cliente.findUnique({ where: { id: cid } });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
-  if (vehiculoId && !vehiculo) throw new AppError("Vehículo no encontrado", 404);
-  if (puestoId && !puesto) throw new AppError("Puesto no encontrado", 404);
-  if (puesto && puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
-  if (puesto && puesto.estado === "OCUPADO") throw new AppError("El puesto está ocupado", 400);
+  if (cliente.bloqueado) throw new AppError("El cliente está bloqueado", 400);
 
-  if (vehiculoId) {
+  let vehiculo = null;
+  if (vid) {
+    vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
+    if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+    if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
+    if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
+    if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
+  }
+
+  let puesto = null;
+  if (pid) {
+    puesto = await prisma.puesto.findUnique({ where: { id: pid } });
+    if (!puesto) throw new AppError("Puesto no encontrado", 404);
+    if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
+    if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
+    if (puesto.estado === "OCUPADO") throw new AppError("El puesto está ocupado", 400);
+  }
+
+  if (vid) {
     const duplicado = await prisma.reserva.findFirst({
       where: {
-        vehiculoId: Number(vehiculoId),
+        vehiculoId: vid,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-        id: { not: req.body._id ? Number(req.body._id) : undefined },
       },
     });
     if (duplicado) throw new AppError("El vehículo ya tiene una reserva activa (pendiente, confirmada o activa)", 400);
@@ -48,23 +62,22 @@ export const crearReserva = asyncHandler(async (req, res) => {
   const fin = fechaFin ? new Date(fechaFin) : null;
   if (fin && fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
 
-  if (puestoId) {
+  if (pid) {
     const conflicto = await prisma.reserva.findFirst({
       where: {
-        puestoId: Number(puestoId),
+        puestoId: pid,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
         fechaInicio: { lt: fin || new Date(inicio.getTime() + 86400000) },
-        fechaFin: fin ? { gte: inicio } : { gte: inicio },
+        ...(fin ? { fechaFin: { gte: inicio } } : { fechaFin: { gte: inicio } }),
       },
     });
     if (conflicto) throw new AppError("El puesto ya tiene una reserva en ese rango de fechas", 409);
   }
 
   const reserva = await prisma.reserva.create({
-    data: { clienteId: Number(clienteId), vehiculoId: vehiculoId ? Number(vehiculoId) : null, puestoId: puestoId ? Number(puestoId) : null, fechaInicio: inicio, fechaFin: fin, observaciones },
+    data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones },
     include: { cliente: true, vehiculo: true, puesto: true },
   });
-  if (puestoId) await ocuparPuesto(puestoId, req.usuario?.usuario);
   const codPuesto = puesto?.codigo || "sin asignar";
   await registrarMovimiento("RESERVAS", "CREAR", `Reserva #${reserva.id} — ${cliente.nombres} → puesto ${codPuesto}`, req.usuario?.usuario);
   emitirEvento("reserva:creada", { mensaje: `Nueva reserva de ${cliente.nombres} para puesto ${codPuesto}`, reserva });
@@ -119,31 +132,43 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     throw new AppError(`No se puede modificar una reserva ${existente.estado.toLowerCase()}`, 400);
   }
 
-  if (vehiculoId) {
+  const cid = existente.clienteId;
+  const vid = vehiculoId !== undefined ? (vehiculoId ? Number(vehiculoId) : null) : existente.vehiculoId;
+
+  if (vehiculoId !== undefined && vid) {
     const duplicado = await prisma.reserva.findFirst({
       where: {
-        vehiculoId: Number(vehiculoId),
+        vehiculoId: vid,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
         id: { not: Number(id) },
       },
     });
     if (duplicado) throw new AppError("El vehículo ya tiene una reserva activa (pendiente, confirmada o activa)", 400);
+    const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
+    if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+    if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente de esta reserva", 400);
+    if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   }
 
-  const data = {};
+  const data: any = {};
   if (estado && ESTADOS.includes(estado)) data.estado = estado;
-  if (vehiculoId !== undefined) data.vehiculoId = vehiculoId ? Number(vehiculoId) : null;
+  if (vehiculoId !== undefined) data.vehiculoId = vid;
   if (puestoId !== undefined) {
     const nuevoPuesto = puestoId ? Number(puestoId) : null;
     if (existente.puestoId && existente.puestoId !== nuevoPuesto) {
-      await liberarPuesto(existente.puestoId, req.usuario?.usuario, "puesto reasignado");
+      const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } });
+      const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA", id: { not: existente.id } } });
+      const otraReserva = await prisma.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
+      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+        await prisma.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
+      }
     }
     if (nuevoPuesto) {
       const p = await prisma.puesto.findUnique({ where: { id: nuevoPuesto } });
       if (!p) throw new AppError("Puesto no encontrado", 404);
+      if (!p.activo) throw new AppError("El puesto está inactivo", 400);
       if (p.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
-      if (p.estado === "OCUPADO") throw new AppError("El puesto está ocupado", 400);
-      await ocuparPuesto(nuevoPuesto, req.usuario?.usuario);
+      if (p.estado !== "LIBRE") throw new AppError("El nuevo puesto no está disponible (estado: " + p.estado + ")", 400);
     }
     data.puestoId = nuevoPuesto;
   }
@@ -177,6 +202,12 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
     if (estado === "ACTIVA") {
       if (!existente.puestoId) throw new AppError("Debe asignar un puesto antes de activar la reserva", 400);
       if (!existente.vehiculoId) throw new AppError("Debe asignar un vehículo antes de activar la reserva", 400);
+      const puesto = await tx.puesto.findUnique({ where: { id: existente.puestoId } });
+      if (!puesto) throw new AppError("Puesto no encontrado", 404);
+      if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
+      if (puesto.estado !== "LIBRE") throw new AppError("El puesto no está disponible (estado: " + puesto.estado + ")", 400);
+      const ingresoYaActivo = await tx.ingreso.findFirst({ where: { vehiculoId: existente.vehiculoId, estado: "ACTIVO" } });
+      if (ingresoYaActivo) throw new AppError("El vehículo ya tiene un ingreso activo", 400);
       await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "OCUPADO" } });
       await tx.ingreso.create({
         data: {
@@ -199,11 +230,21 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
           data: { estado: "FINALIZADO", fechaSalida, tiempoMinutos },
         });
       }
-      await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
+      const ingresoActivo = await tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } });
+      const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA" } });
+      const otraReserva = await tx.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
+      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+        await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
+      }
     }
 
     if (["CANCELADA", "NO_SHOW"].includes(estado) && existente.puestoId) {
-      await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
+      const ingresoActivo = await tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } });
+      const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA" } });
+      const otraReserva = await tx.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
+      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+        await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
+      }
     }
 
     if (estado === "CONFIRMADA" && existente.puestoId) {
@@ -236,7 +277,14 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
     where: { id: Number(id) }, data: { estado: "CANCELADA" },
     include: { cliente: true, vehiculo: true, puesto: true },
   });
-  await liberarPuesto(reserva.puestoId, req.usuario?.usuario, "cancelada");
+  if (reserva.puestoId) {
+    const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVO" } });
+    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVA" } });
+    const otraReserva = await prisma.reserva.count({ where: { puestoId: reserva.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
+    if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+      await liberarPuesto(reserva.puestoId, req.usuario?.usuario, "cancelada");
+    }
+  }
   await registrarMovimiento("RESERVAS", "CANCELAR", `Reserva #${id} cancelada — ${reserva.cliente?.nombres}`, req.usuario?.usuario);
   emitirEvento("reserva:cancelada", { mensaje: `Reserva #${id} cancelada`, reserva });
   res.json({ ok: true, reserva });
@@ -260,18 +308,30 @@ export const eliminarReserva = asyncHandler(async (req, res) => {
 
 export const liberarReservasVencidas = asyncHandler(async (req, res) => {
   const ahora = new Date();
+  const TOLERANCIA_LLEGADA_MS = 60 * 60 * 1000;
   const vencidas = await prisma.reserva.findMany({
     where: {
       estado: { in: ["PENDIENTE", "CONFIRMADA"] },
       fechaInicio: { lt: ahora },
+      ...(ahora.getTime() - new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime() > TOLERANCIA_LLEGADA_MS ? {} : {}),
     },
     include: { cliente: true, puesto: true },
   });
 
   let liberadas = 0;
   for (const r of vencidas) {
+    const fechaFin = r.fechaFin ? new Date(r.fechaFin) : null;
+    if (fechaFin && fechaFin > ahora) continue;
+
     await prisma.reserva.update({ where: { id: r.id }, data: { estado: r.estado === "CONFIRMADA" ? "NO_SHOW" : "CANCELADA" } });
-    if (r.puestoId) await liberarPuesto(r.puestoId, "sistema", `reserva #${r.id} vencida`);
+    if (r.puestoId) {
+      const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: r.puestoId, estado: "ACTIVO" } });
+      const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: r.puestoId, estado: "ACTIVA" } });
+      const otraReserva = await prisma.reserva.count({ where: { puestoId: r.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: r.id } } });
+      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
+        await liberarPuesto(r.puestoId, "sistema", `reserva #${r.id} vencida`);
+      }
+    }
     await registrarMovimiento("RESERVAS", "VENCER", `Reserva #${r.id} vencida — ${r.cliente?.nombres}`, "sistema");
     liberadas++;
   }

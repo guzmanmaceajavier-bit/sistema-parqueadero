@@ -210,17 +210,16 @@ export const togglePuesto = asyncHandler(async (req, res) => {
   const puesto = await prisma.puesto.findUnique({ where: { id: Number(id) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
 
-  if (puesto.estado === "LIBRE") {
-    const actualizado = await prisma.puesto.update({ where: { id: Number(id) }, data: { estado: "OCUPADO" } });
-    return res.json({ ok: true, puesto: actualizado });
-  }
-
   if (puesto.estado === "OCUPADO") {
     const ingresosActivos = await prisma.ingreso.count({ where: { puestoId: Number(id), estado: "ACTIVO" } });
-    if (ingresosActivos > 0) throw new AppError("No se puede liberar: el puesto tiene ingresos activos", 400);
+    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA" } });
+    const otraReserva = await prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
+    if (ingresosActivos > 0 || otraMensualidad > 0 || otraReserva > 0) {
+      throw new AppError("No se puede liberar: el puesto tiene ingresos, mensualidades o reservas activas", 400);
+    }
     const actualizado = await prisma.puesto.update({ where: { id: Number(id) }, data: { estado: "LIBRE" } });
     return res.json({ ok: true, puesto: actualizado });
   }
 
-  throw new AppError("Solo se puede alternar entre LIBRE y OCUPADO", 400);
+  throw new AppError("No se puede marcar un puesto como OCUPADO desde este endpoint. Use ingreso o mensualidad para ocupar un puesto.", 400);
 });

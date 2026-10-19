@@ -7,7 +7,6 @@ import {
   registrarIngreso,
   obtenerIngresos,
   obtenerIngreso,
-  registrarSalida,
   liberarPuesto,
   actualizarIngreso,
   eliminarIngreso,
@@ -80,26 +79,6 @@ router.get("/", verificarToken, obtenerIngresos);
  */
 router.get("/:id", verificarToken, validateIdParam, obtenerIngreso);
 
-/**
- * @swagger
- * /ingresos/salida/{id}:
- *   put:
- *     summary: Registrar salida de vehiculo
- *     tags: [Ingresos]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
- *     responses:
- *       200:
- *         description: Salida registrada
- *       400:
- *         description: Error al procesar salida
- */
-router.put("/salida/:id", verificarToken, validateIdParam, registrarSalida);
 router.put("/liberar/:id", verificarToken, validateIdParam, liberarPuesto);
 
 /**

@@ -52,10 +52,35 @@ async function enviarRecordatorios() {
   }
 }
 
+export async function vencerMensualidades() {
+  const ahora = new Date();
+  const vencidas = await prisma.mensualidad.findMany({
+    where: { estado: "ACTIVA", fechaFin: { lt: ahora } },
+    select: { id: true, puestoId: true, cliente: { select: { nombres: true } } },
+  });
+
+  for (const m of vencidas) {
+    await prisma.$transaction(async (tx) => {
+      await tx.mensualidad.update({ where: { id: m.id }, data: { estado: "VENCIDA" } });
+      // Libera el puesto fijo solo si no hay un ingreso activo en él.
+      if (m.puestoId) {
+        const ocupado = await tx.ingreso.findFirst({ where: { puestoId: m.puestoId, estado: "ACTIVO" } });
+        if (!ocupado) await tx.puesto.update({ where: { id: m.puestoId }, data: { estado: "LIBRE" } });
+      }
+    });
+    await registrarMovimiento("MENSUALIDADES", "VENCER", `Mensualidad #${m.id} vencida — ${m.cliente?.nombres || ""}`, "sistema");
+  }
+
+  if (vencidas.length > 0) {
+    console.log(`[Scheduler] ${vencidas.length} mensualidad(es) vencida(s)`);
+  }
+}
+
 export function iniciarScheduler() {
   cron.schedule("*/10 * * * *", () => {
     liberarReservas().catch((e) => console.error("[Scheduler] Error liberando reservas:", e.message));
     enviarRecordatorios().catch((e) => console.error("[Scheduler] Error enviando recordatorios:", e.message));
+    vencerMensualidades().catch((e) => console.error("[Scheduler] Error venciendo mensualidades:", e.message));
   });
   console.log("[Scheduler] Iniciado — cada 10 minutos");
 }

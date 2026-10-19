@@ -15,7 +15,7 @@ function diffSemanas(fechaEntrada, fechaSalida) {
 function diffMeses(fechaEntrada, fechaSalida) {
   let meses = (fechaSalida.getFullYear() - fechaEntrada.getFullYear()) * 12;
   meses += fechaSalida.getMonth() - fechaEntrada.getMonth();
-  if (fechaSalida.getDate() >= fechaEntrada.getDate()) meses++;
+  if (fechaSalida.getDate() > fechaEntrada.getDate()) meses++;
   return Math.max(1, meses);
 }
 
@@ -45,16 +45,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   });
 
   if (!tarifa) {
-    tarifa = await prisma.tarifa.findFirst({
-      where: {
-        OR: [
-          { tipoVehiculo: { contains: tipoVehiculo } },
-          { tipoVehiculo: "todos" },
-        ],
-        activa: true,
-      },
-      orderBy: { id: "asc" },
-    });
+    return { error: `No hay tarifa activa para ${tipoVehiculo} con modalidad ${modalidadNormalizada}`, total: 0, detalle: [] };
   }
 
   if (!tarifa) {
@@ -88,8 +79,8 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     };
   }
 
-  function minCargo(valor, unidad) {
-    return minutosFacturables <= 0 && totalMinutos > 0 ? Math.max(valor, tarifa.valor) : valor;
+  function minCargo(valor) {
+    return minutosFacturables <= 0 ? 0 : valor;
   }
 
   let detalle = [];
@@ -101,7 +92,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   switch (tarifa.modalidad) {
     case "minuto": {
       const base = Math.ceil(minutosFacturables * tarifa.valor);
-      const valor = minCargo(base, 1);
+      const valor = minCargo(base);
       detalle.push({ concepto: `${totalMinutos} min - ${cortesia + minutosGratis + minutosGracia} min gratis = ${minutosFacturables} min facturables → $${valor}`, valor });
       total = valor;
       desglose = { minutosFacturables, valor, unidad: "min" };
@@ -109,7 +100,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
     case "hora": {
       if (usarProgresiva) {
-        const horas = Math.max(1, Math.ceil(minutosFacturables / 60));
+        const horas = Math.ceil(minutosFacturables / 60);
         let valor = 0;
         if (horas >= 1) {
           valor += tarifa.precioPrimeraHora;
@@ -124,7 +115,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
         total = valor;
         desglose = { minutosFacturables, horas, valor, unidad: "hora_progresiva" };
       } else {
-        const horas = Math.max(1, Math.ceil(minutosFacturables / 60));
+        const horas = Math.ceil(minutosFacturables / 60);
         const valor = horas * tarifa.valor;
         detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) × $${tarifa.valor}`, valor });
         total = valor;
