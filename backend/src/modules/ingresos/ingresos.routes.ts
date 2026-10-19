@@ -1,5 +1,6 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
+import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearIngresoSchema, actualizarIngresoSchema } from "../../schemas/ingreso.schema.js";
@@ -42,7 +43,7 @@ const router = express.Router();
  *       400:
  *         description: Error de validacion
  */
-router.post("/", verificarToken, validate(crearIngresoSchema), registrarIngreso);
+router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(crearIngresoSchema), registrarIngreso);
 
 /**
  * @swagger
@@ -79,7 +80,7 @@ router.get("/", verificarToken, obtenerIngresos);
  */
 router.get("/:id", verificarToken, validateIdParam, obtenerIngreso);
 
-router.put("/liberar/:id", verificarToken, validateIdParam, liberarPuesto);
+router.put("/liberar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, liberarPuesto);
 
 /**
  * @swagger
@@ -101,7 +102,7 @@ router.put("/liberar/:id", verificarToken, validateIdParam, liberarPuesto);
  *       200:
  *         description: Simulacion de cobro
  */
-router.post("/simular-cobro", verificarToken, simularCobro);
+router.post("/simular-cobro", verificarToken, verificarRol("admin", "supervisor"), simularCobro);
 
 /**
  * @swagger
@@ -120,8 +121,8 @@ router.post("/simular-cobro", verificarToken, simularCobro);
  *       200:
  *         description: Salida y cobro registrados
  */
-router.post("/salida-con-cobro/:id", verificarToken, validateIdParam, registrarSalidaConCobro);
-router.put("/:id", verificarToken, validateIdParam, validate(actualizarIngresoSchema), actualizarIngreso);
+router.post("/salida-con-cobro/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, registrarSalidaConCobro);
+router.put("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, validate(actualizarIngresoSchema), actualizarIngreso);
 
 /**
  * @swagger
@@ -140,7 +141,7 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarIngresoSc
  *       200:
  *         description: Ingreso eliminado
  */
-router.delete("/:id", verificarToken, validateIdParam, eliminarIngreso);
+router.delete("/:id", verificarToken, verificarRol("admin"), validateIdParam, eliminarIngreso);
 
 /**
  * @swagger

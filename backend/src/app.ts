@@ -60,17 +60,23 @@ const limiter = rateLimit({
   message: { ok: false, message: "Demasiadas peticiones, intente de nuevo en 1 minuto" },
 });
 
+const CORS_ORIGINS_RAW = process.env.CORS_ORIGINS || "";
+const CORS_ORIGINS = CORS_ORIGINS_RAW.split(",").map(o => o.trim()).filter(Boolean);
+
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin) {
+  const allowed = CORS_ORIGINS.length === 0 || CORS_ORIGINS.includes(origin || "");
+  if (allowed && origin) {
     res.header("Access-Control-Allow-Origin", origin);
   }
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (allowed) {
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  }
   if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
+    return res.sendStatus(allowed ? 204 : 403);
   }
   next();
 });
