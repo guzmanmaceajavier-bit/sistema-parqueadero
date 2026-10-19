@@ -9,6 +9,17 @@ import { getCajaAbierta, getCajaOError } from "../../helpers/caja.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import * as service from "./ingresos.service.js";
 
+async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number) {
+  const puesto = await tx.puesto.findUnique({ where: { id: puestoId } });
+  if (!puesto || !puesto.activo || puesto.estado !== "LIBRE") return false;
+  const [ingresos, mensualidades, reservas] = await Promise.all([
+    tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
+    tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA" } }),
+    tx.reserva.count({ where: { puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }),
+  ]);
+  return ingresos === 0 && mensualidades === 0 && reservas === 0;
+}
+
 export const registrarIngreso = asyncHandler(async (req, res) => {
   let { clienteId, vehiculoId, puestoId } = req.body;
   clienteId = Number(clienteId);
@@ -37,7 +48,6 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   const puesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
   if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
-  if (puesto.estado !== "LIBRE") throw new AppError("El puesto no está disponible (estado: " + puesto.estado + ")", 400);
 
   const placa = req.body.placa || vehiculo.placa;
   const existenteActivo = await prisma.ingreso.findFirst({
@@ -46,6 +56,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
 
   const ingreso = await prisma.$transaction(async (tx) => {
+    const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId));
+    if (!disponible) throw new AppError("El puesto no está disponible para asignar", 400);
     await tx.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "OCUPADO" } });
     const data: any = { clienteId, vehiculoId, puestoId: Number(puestoId) };
     if (reservaVinculada) {
@@ -121,8 +133,6 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
-  // Liberar no cobra: solo vale para vehículos amparados por un plan.
-  // Sin plan, la salida se debe registrar con cobro desde Ingresos.
   const planActivo = await prisma.mensualidad.findFirst({
     where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
   });
@@ -131,21 +141,17 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   const fechaSalida = new Date();
   const tiempoMinutos = Math.ceil((fechaSalida - ingreso.fechaEntrada) / (1000 * 60));
 
-  let tienePlan = false;
   await prisma.$transaction(async (tx) => {
     await tx.ingreso.update({
       where: { id: Number(id) },
       data: { fechaSalida, estado: "FINALIZADO", tiempoMinutos, valorPagado: 0 },
     });
-    const planActivo = await tx.mensualidad.findFirst({
-      where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
-    });
-    tienePlan = !!planActivo;
-    await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: tienePlan ? "OCUPADO" : "LIBRE" } });
+    const otroIngresoActivo = await tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } });
+    await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: otroIngresoActivo > 0 ? "OCUPADO" : "LIBRE" } });
   });
-  await registrarMovimiento("INGRESOS", "LIBERAR", `Ingreso #${id} finalizado — puesto ${tienePlan ? "sigue OCUPADO (plan activo)" : "LIBRE"}`, req.usuario?.usuario || "admin");
+  await registrarMovimiento("INGRESOS", "LIBERAR", `Ingreso #${id} finalizado — plan activo, puesto físicamente libre (asignación de plan preservada)`, req.usuario?.usuario || "admin");
 
-  res.json({ ok: true, message: tienePlan ? "Ingreso finalizado — plan activo, puesto no se libera" : "Puesto liberado" });
+  res.json({ ok: true, message: "Ingreso finalizado — plan activo, puesto físicamente libre. La asignación del plan se conserva." });
 });
 
 export const actualizarIngreso = asyncHandler(async (req, res) => {
@@ -248,7 +254,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
 
 export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { metodoPago, modalidad, ticketExtraviado } = req.body;
+  const { metodoPago, ticketExtraviado } = req.body;
 
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: Number(id) },
@@ -258,97 +264,101 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const fechaSalida = new Date();
+  const mp = metodoPago || "efectivo";
 
-  const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
+  const ahora = new Date();
+
+  const mensualidadVigente = await prisma.mensualidad.findFirst({
+    where: {
+      vehiculoId: ingreso.vehiculoId,
+      estado: "ACTIVA",
+      fechaFin: { gte: ahora },
+    },
+    include: { plan: true, puesto: true },
   });
 
-  if (planActivo) {
-    const totalMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
-    const salida = await prisma.$transaction(async (tx) => {
-      const s = await tx.ingreso.update({
-        where: { id: Number(id) },
-        data: { fechaSalida, estado: "FINALIZADO", tiempoMinutos: totalMinutos, valorPagado: 0 },
-        include: { cliente: true, vehiculo: true, puesto: true },
-      });
-      await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: "OCUPADO" } });
-      return s;
+  let cobroTotal = 0;
+  let cobroTotalMinutos = 0;
+  let cubiertoPorPlan = false;
+
+  if (mensualidadVigente) {
+    cubiertoPorPlan = true;
+    cobroTotalMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
+  } else {
+    await getCajaOError();
+    const cobro = await calcularCobro({
+      ingreso,
+      tipoVehiculo: ingreso.vehiculo.tipo,
+      fechaSalida,
+      ticketExtraviado,
     });
-    await registrarMovimiento("INGRESOS", "SALIDA", `Salida ${ingreso.vehiculo.placa} — plan activo, sin cobro`, req.usuario?.usuario || "admin");
-    return res.json({ ok: true, message: "Salida registrada — el cliente tiene plan activo, no se generó cobro", salida, cobro: { total: 0, totalMinutos } });
+    if (cobro.error) throw new AppError(cobro.error, 400);
+    cobroTotal = cobro.total;
+    cobroTotalMinutos = cobro.totalMinutos;
   }
 
-  const cobro = await calcularCobro({
-    ingreso,
-    tipoVehiculo: ingreso.vehiculo.tipo,
-    modalidad,
-    fechaSalida,
-    ticketExtraviado,
-  });
-
-  if (cobro.error) throw new AppError(cobro.error, 400);
-
-  const mp = metodoPago || "efectivo";
-  let valorFinal = cobro.total;
+  let valorFinal = cobroTotal;
   let saldoUsado = 0;
-  if (ingreso.cliente?.saldo > 0 && valorFinal > 0) {
+  if (!cubiertoPorPlan && ingreso.cliente?.saldo > 0 && valorFinal > 0) {
     saldoUsado = Math.min(ingreso.cliente.saldo, valorFinal);
     valorFinal -= saldoUsado;
   }
 
-  const numeroFactura = await generarNumeroFactura("FACT");
+  const numeroFactura = cubiertoPorPlan ? null : await generarNumeroFactura("FACT");
 
+  let facturaCreada: any = null;
   const [salida, factura] = await prisma.$transaction(async (tx) => {
-    const updateData: any = {
-      fechaSalida,
-      estado: "FINALIZADO",
-      tiempoMinutos: cobro.totalMinutos,
-      valorPagado: cobro.total,
-    };
-    if (ticketExtraviado) updateData.ticketExtraviado = true;
     const s = await tx.ingreso.update({
       where: { id: Number(id) },
-      data: updateData,
+      data: {
+        fechaSalida,
+        estado: "FINALIZADO",
+        tiempoMinutos: cobroTotalMinutos,
+        valorPagado: cubiertoPorPlan ? 0 : cobroTotal,
+        ...(ticketExtraviado ? { ticketExtraviado: true } : {}),
+      },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
-    const planActivo = await tx.mensualidad.findFirst({
-      where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
-    });
-    const reservaActiva = await tx.reserva.findFirst({
-      where: { puestoId: ingreso.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
-    });
-    const estadoPuesto = (planActivo || reservaActiva) ? "OCUPADO" : "LIBRE";
-    await tx.puesto.update({
-      where: { id: ingreso.puestoId },
-      data: { estado: estadoPuesto },
-    });
+
+    const otroIngresoActivo = await tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } });
+    const nuevoEstadoPuesto = otroIngresoActivo > 0 ? "OCUPADO" : "LIBRE";
+    await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: nuevoEstadoPuesto } });
+
     if (ingreso.reservaId) {
       await tx.reserva.update({ where: { id: ingreso.reservaId }, data: { estado: "FINALIZADA" } });
     }
-    if (saldoUsado > 0 && ingreso.clienteId) {
-      await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
+
+    if (!cubiertoPorPlan) {
+      if (saldoUsado > 0 && ingreso.clienteId) {
+        await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
+      }
+      const f = await tx.factura.create({
+        data: { numero: String(numeroFactura), ingresoId: ingreso.id, origen: "INGRESO", valor: valorFinal, metodoPago: mp },
+      });
+      facturaCreada = f;
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+      if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
+      const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";
+      await tx.cajaMovimiento.create({
+        data: { cajaId: cajaAbierta.id, tipo: "INGRESO", concepto: `Factura ${numeroFactura} — Salida ${ingreso.vehiculo.placa}${conceptoExtra}`, monto: valorFinal, metodoPago: mp, facturaId: f.id },
+      });
     }
-    const f = await tx.factura.create({
-      data: { numero: numeroFactura, ingresoId: ingreso.id, origen: "INGRESO", valor: valorFinal, metodoPago: mp },
-    });
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
-    if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
-    const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";
-    await tx.cajaMovimiento.create({
-      data: { cajaId: cajaAbierta.id, tipo: "INGRESO", concepto: `Factura ${numeroFactura} — Salida ${ingreso.vehiculo.placa}${conceptoExtra}`, monto: valorFinal, metodoPago: mp, facturaId: f.id },
-    });
-    return [s, f];
+
+    return [s, cubiertoPorPlan ? null : facturaCreada];
   });
 
-  const cajaResp = await getCajaAbierta();
-  await registrarMovimiento("FACTURACION", "CREAR", `Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}${saldoUsado > 0 ? ` (saldo usado: $${saldoUsado})` : ""}`, req.usuario?.usuario || "admin");
-
-  emitirEvento("ingreso:salida", {
-    mensaje: `Vehículo ${ingreso.vehiculo.placa} salió — Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}`,
-    factura, ingreso: salida, valor: valorFinal,
-  });
-
-  res.json({ ok: true, message: "Salida registrada", cobro: { ...cobro, total: valorFinal, saldoUsado }, factura, salida, caja: cajaResp });
+  if (!cubiertoPorPlan) {
+    await registrarMovimiento("FACTURACION", "CREAR", `Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}${saldoUsado > 0 ? ` (saldo usado: $${saldoUsado})` : ""}`, req.usuario?.usuario || "admin");
+    const cajaResp = await getCajaAbierta();
+    emitirEvento("ingreso:salida", {
+      mensaje: `Vehículo ${ingreso.vehiculo.placa} salió — Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}`,
+      factura: facturaCreada, ingreso: salida, valor: valorFinal,
+    });
+    res.json({ ok: true, message: "Salida registrada", cobro: { total: valorFinal, totalMinutos: cobroTotalMinutos, saldoUsado }, factura: facturaCreada, salida, caja: cajaResp });
+  } else {
+    await registrarMovimiento("INGRESOS", "SALIDA", `Salida ${ingreso.vehiculo.placa} — mensualidad vigente, sin cobro adicional`, req.usuario?.usuario || "admin");
+    res.json({ ok: true, message: "Salida registrada — salida cubierta por mensualidad vigente, no se generó cobro adicional", salida, cobro: { total: 0, totalMinutos: cobroTotalMinutos, cubiertoPorPlan: true, plan: mensualidadVigente?.plan?.nombre || "Plan mensual" } });
+  }
 });
 
 export const ticketEntrada = asyncHandler(async (req, res) => {
