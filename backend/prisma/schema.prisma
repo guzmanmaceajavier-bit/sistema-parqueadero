@@ -127,6 +127,10 @@ model Vehiculo {
   estado        Boolean       @default(true)
   clienteId     Int
   sucursalId    Int?
+  creadoPorPlan Boolean       @default(false)
+  tipoCobro     String?       // PLAN, TARIFA, NINGUNO
+  planId        Int?
+  tarifaId      Int?
   createdAt     DateTime      @default(now())
   bloqueado     Boolean       @default(false)
   ausencias     Ausencia[]
@@ -135,6 +139,8 @@ model Vehiculo {
   reservas      Reserva[]
   cliente       Cliente       @relation(fields: [clienteId], references: [id])
   sucursal      Sucursal?     @relation(fields: [sucursalId], references: [id])
+  plan          Plan?         @relation(fields: [planId], references: [id])
+  tarifa        Tarifa?       @relation(fields: [tarifaId], references: [id])
 }
 
 model Puesto {

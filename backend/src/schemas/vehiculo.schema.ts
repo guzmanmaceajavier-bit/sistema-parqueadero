@@ -9,6 +9,9 @@ export const crearVehiculoSchema = z.object({
   clase: z.enum(["particular", "publico", "carga", "electrico", "deportivo", "especial", "otro"]).optional().default("particular"),
   observaciones: z.string().trim().max(500).optional().nullable(),
   clienteId: z.coerce.number({ required_error: "Cliente es requerido" }).nullable().optional(),
+  tipoCobro: z.enum(["PLAN", "TARIFA", "NINGUNO"]).optional().default("NINGUNO"),
+  planId: z.coerce.number().optional().nullable(),
+  tarifaId: z.coerce.number().optional().nullable(),
 });
 
 export const actualizarVehiculoSchema = crearVehiculoSchema.partial().extend({
