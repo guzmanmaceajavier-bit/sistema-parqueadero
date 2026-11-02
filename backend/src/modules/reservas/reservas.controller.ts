@@ -416,6 +416,7 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
     if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(actual.estado)) {
       throw new AppError(`La reserva ya está ${actual.estado.toLowerCase()}`, 409);
     }
+    if (actual.estado === "ACTIVA") throw new AppError("La reserva ya generó un ingreso; registre la salida antes de cancelarla", 409);
     const cancelada = await tx.reserva.updateMany({
       where: { id: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
       data: { estado: "CANCELADA" },
@@ -459,31 +460,37 @@ export const eliminarReserva = asyncHandler(async (req, res) => {
 
 export const liberarReservasVencidas = asyncHandler(async (req, res) => {
   const ahora = new Date();
-  const TOLERANCIA_LLEGADA_MS = 60 * 60 * 1000;
   const vencidas = await prisma.reserva.findMany({
-    where: {
-      estado: { in: ["PENDIENTE", "CONFIRMADA"] },
-      fechaInicio: { lt: ahora },
-      ...(ahora.getTime() - new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime() > TOLERANCIA_LLEGADA_MS ? {} : {}),
-    },
-    include: { cliente: true, puesto: true },
+    where: { estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lt: ahora } },
+    include: { cliente: true },
   });
 
   let liberadas = 0;
-  for (const r of vencidas) {
-    const fechaFin = r.fechaFin ? new Date(r.fechaFin) : null;
-    if (fechaFin && fechaFin > ahora) continue;
+  for (const reserva of vencidas) {
+    const limiteLlegada = reserva.fechaFin ?? new Date(reserva.fechaInicio.getTime() + 60 * 60 * 1000);
+    if (limiteLlegada > ahora) continue;
 
-    await prisma.reserva.update({ where: { id: r.id }, data: { estado: r.estado === "CONFIRMADA" ? "NO_SHOW" : "CANCELADA" } });
-    if (r.puestoId) {
-      const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: r.puestoId, estado: "ACTIVO" } });
-      const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: r.puestoId, estado: "ACTIVA" } });
-      const otraReserva = await prisma.reserva.count({ where: { puestoId: r.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: r.id } } });
-      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
-        await liberarPuesto(r.puestoId, "sistema", `reserva #${r.id} vencida`);
+    const cambio = await prisma.$transaction(async (tx) => {
+      if (reserva.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${reserva.vehiculoId}::integer)) AS advisory_lock`;
+      if (reserva.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${reserva.puestoId}::integer)) AS advisory_lock`;
+      const actualizada = await tx.reserva.updateMany({
+        where: { id: reserva.id, estado: { in: ["PENDIENTE", "CONFIRMADA"] } },
+        data: { estado: reserva.estado === "CONFIRMADA" ? "NO_SHOW" : "CANCELADA" },
+      });
+      if (actualizada.count !== 1) return false;
+      if (reserva.puestoId) {
+        const [ingresoActivo, mensualidadVigente, reservaVigente] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+          tx.reserva.count({ where: { puestoId: reserva.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: reserva.id }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        ]);
+        const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
+        await tx.puesto.update({ where: { id: reserva.puestoId }, data: { estado: estadoPuesto } });
       }
-    }
-    await registrarMovimiento("RESERVAS", "VENCER", `Reserva #${r.id} vencida — ${r.cliente?.nombres}`, "sistema");
+      return true;
+    });
+    if (!cambio) continue;
+    await registrarMovimiento("RESERVAS", "VENCER", `Reserva #${reserva.id} vencida — ${reserva.cliente?.nombres}`, "sistema");
     liberadas++;
   }
 
