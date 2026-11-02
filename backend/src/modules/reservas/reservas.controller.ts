@@ -118,10 +118,12 @@ export const crearReserva = asyncHandler(async (req, res) => {
       }
     }
 
-    return tx.reserva.create({
+    const creada = await tx.reserva.create({
       data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
+    if (pid) await tx.puesto.update({ where: { id: pid }, data: { estado: "RESERVADO" } });
+    return creada;
   });
   const codPuesto = puesto?.codigo || "sin asignar";
   await registrarMovimiento("RESERVAS", "CREAR", `Reserva #${reserva.id} — ${cliente.nombres} → puesto ${codPuesto}`, req.usuario?.usuario);
@@ -315,8 +317,9 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       if (actual.fechaInicio > ahora || (actual.fechaFin && actual.fechaFin < ahora)) {
         throw new AppError("La reserva solo puede activarse dentro de su horario vigente", 409);
       }
-      const [puesto, ingresoVehiculo, ingresoPuesto, mensualidad, otraReserva] = await Promise.all([
+      const [puesto, vehiculo, ingresoVehiculo, ingresoPuesto, mensualidad, otraReserva] = await Promise.all([
         tx.puesto.findUnique({ where: { id: actual.puestoId } }),
+        tx.vehiculo.findUnique({ where: { id: actual.vehiculoId } }),
         tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVO" }, select: { id: true } }),
         tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO" }, select: { id: true } }),
         tx.mensualidad.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } }, select: { id: true } }),
@@ -324,6 +327,9 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
           fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] }, select: { id: true } }),
       ]);
       if (!puesto?.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible", 409);
+      if (!vehiculo || vehiculo.clienteId !== actual.clienteId || vehiculo.bloqueado || !vehiculo.estado) {
+        throw new AppError("El vehículo está inactivo, bloqueado o no pertenece al cliente de la reserva", 409);
+      }
       if (ingresoVehiculo || ingresoPuesto || mensualidad || otraReserva) {
         throw new AppError("El vehículo o el puesto tiene otra ocupación o asignación vigente", 409);
       }
