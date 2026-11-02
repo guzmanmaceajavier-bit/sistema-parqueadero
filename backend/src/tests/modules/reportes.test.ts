@@ -29,7 +29,7 @@ describe("obtenerReporte", () => {
       { id: 2, numero: "PAG-1", valor: 250, metodoPago: "efectivo", createdAt: new Date("2026-10-03T10:00:00.000Z"), ingreso: null, mensualidad: null },
     ]);
     const resultado = await new Promise((resolve, reject) => {
-      const req = { query: { fechaInicio: "2026-10-01", fechaFin: "2026-10-31", sucursalId: "7" } };
+      const req = { usuario: { id: 1, rol: "admin" }, query: { fechaInicio: "2026-10-01", fechaFin: "2026-10-31", sucursalId: "7" } };
       const res = { json: vi.fn(resolve) };
       obtenerReporte(req as any, res as any, reject as any);
     });
@@ -88,7 +88,7 @@ describe("obtenerReporte", () => {
       ]);
 
     const resultado = await new Promise((resolve, reject) => {
-      const req = { query: { fechaInicio: "2026-10-01", fechaFin: "2026-10-01" } };
+      const req = { usuario: { id: 1, rol: "admin" }, query: { fechaInicio: "2026-10-01", fechaFin: "2026-10-01" } };
       const res = { json: vi.fn(resolve) };
       obtenerReporte(req as any, res as any, reject as any);
     }) as any;
@@ -107,7 +107,7 @@ describe("obtenerReporte", () => {
 
   it("rechaza sucursales inválidas antes de consultar la base de datos", async () => {
     const error = await new Promise((resolve) => {
-      const req = { query: { sucursalId: "no-es-un-id" } };
+      const req = { usuario: { id: 1, rol: "admin" }, query: { sucursalId: "no-es-un-id" } };
       const res = { json: vi.fn() };
       obtenerReporte(req as any, res as any, resolve as any);
     });
