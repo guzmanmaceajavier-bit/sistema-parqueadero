@@ -88,19 +88,28 @@ export const crearUsuario = asyncHandler(async (req, res) => {
 });
 
 export const crearAdmin = asyncHandler(async (req, res) => {
-  const adminExiste = await prisma.usuario.findFirst({ where: { rol: "admin" } });
-  if (adminExiste) throw new AppError("Ya existe un administrador. Use la autenticación normal.", 403);
-
   const { nombre, usuario, correo, password } = req.body;
-  const existe = await prisma.usuario.findFirst({
-    where: { OR: [{ usuario }, { correo }] },
-  });
-  if (existe) throw new AppError("El usuario o correo ya existe", 400);
-
   const hash = await bcrypt.hash(password, 12);
-  const nuevo = await prisma.usuario.create({
-    data: { nombre, usuario, correo, password: hash, rol: "admin" },
+
+  // Evita que dos solicitudes simultáneas creen administradores iniciales.
+  const nuevo = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020)`;
+    const adminExiste = await tx.usuario.findFirst({ where: { rol: "admin" } });
+    if (adminExiste) {
+      throw new AppError("Ya existe un administrador. Use la autenticación normal.", 403);
+    }
+
+    const existe = await tx.usuario.findFirst({
+      where: { OR: [{ usuario }, { correo }] },
+    });
+    if (existe) throw new AppError("El usuario o correo ya existe", 400);
+
+    return tx.usuario.create({
+      data: { nombre, usuario, correo, password: hash, rol: "admin" },
+    });
   });
+
+  await registrarMovimiento("Usuarios", "ADMINISTRADOR INICIAL CREADO", "Se creó el administrador inicial", nuevo.usuario);
   res.status(201).json({ ok: true, message: "Administrador creado", usuario: { id: nuevo.id, nombre: nuevo.nombre, usuario: nuevo.usuario, rol: nuevo.rol } });
 });
 
@@ -145,16 +154,28 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
   const existe = await prisma.usuario.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Usuario no encontrado", 404);
 
-  const data = {};
-  if (nombre) data.nombre = nombre;
-  if (correo) data.correo = correo;
-  if (rol) data.rol = rol;
+  const targetId = Number(id);
+  const cambiaPrivilegios = (rol !== undefined && rol !== existe.rol) || password !== undefined;
+  if (targetId === req.usuario.id && rol !== undefined && rol !== "admin") {
+    throw new AppError("No puedes quitarte el rol de administrador desde tu propia sesión", 400);
+  }
+  if (existe.rol === "admin" && rol !== undefined && rol !== "admin") {
+    const adminsActivos = await prisma.usuario.count({ where: { rol: "admin", estado: true } });
+    if (adminsActivos <= 1) throw new AppError("No puedes degradar al último administrador activo", 409);
+  }
+
+  const data: Record<string, unknown> = {};
+  if (nombre !== undefined) data.nombre = nombre;
+  if (correo !== undefined) data.correo = correo;
+  if (rol !== undefined) data.rol = rol;
   if (password) data.password = await bcrypt.hash(password, 12);
+  if (cambiaPrivilegios) data.tokenVersion = { increment: 1 };
 
   const usuario = await prisma.usuario.update({
-    where: { id: Number(id) }, data,
+    where: { id: targetId }, data,
     select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true },
   });
+  await registrarMovimiento("Usuarios", "USUARIO ACTUALIZADO", `Se actualizaron datos o privilegios del usuario ${usuario.usuario}`, req.usuario.usuario);
   res.json({ ok: true, usuario });
 });
 
@@ -165,10 +186,20 @@ export const cambiarEstadoUsuario = asyncHandler(async (req, res) => {
   const existe = await prisma.usuario.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Usuario no encontrado", 404);
 
+  const targetId = Number(id);
+  if (targetId === req.usuario.id && estado === false) {
+    throw new AppError("No puedes desactivar tu propia cuenta", 400);
+  }
+  if (existe.rol === "admin" && estado === false && existe.estado) {
+    const adminsActivos = await prisma.usuario.count({ where: { rol: "admin", estado: true } });
+    if (adminsActivos <= 1) throw new AppError("No puedes desactivar al último administrador activo", 409);
+  }
+
   const usuario = await prisma.usuario.update({
-    where: { id: Number(id) }, data: { estado },
+    where: { id: targetId }, data: { estado, tokenVersion: { increment: 1 } },
     select: { id: true, nombre: true, usuario: true, rol: true, estado: true },
   });
+  await registrarMovimiento("Usuarios", estado ? "USUARIO ACTIVADO" : "USUARIO DESACTIVADO", `Usuario ${usuario.usuario}`, req.usuario.usuario);
   res.json({ ok: true, usuario });
 });
 
