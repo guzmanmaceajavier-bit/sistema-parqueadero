@@ -22,6 +22,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
   if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
+  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -333,7 +334,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
     for (const lockId of vehiculosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${lockId}::integer)) AS advisory_lock`;
     for (const lockId of puestosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${lockId}::integer)) AS advisory_lock`;
 
-    const actual = await tx.mensualidad.findUnique({ where: { id } });
+    const actual = await tx.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
     if (
       !actual ||
       actual.vehiculoId !== existente.vehiculoId ||
@@ -380,6 +381,8 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
         tx.ingreso.findFirst({ where: { puestoId: nuevoPuestoId, estado: "ACTIVO", ...(ingresoVehiculo ? { id: { not: ingresoVehiculo.id } } : {}) }, select: { id: true } }),
       ]);
       if (!puesto?.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible", 409);
+      if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
+      if (vehiculo.sucursalId !== puesto.sucursalId) throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
       if (otraMensualidadPuesto || reservaPuesto || ingresoPuesto) throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
       if (puesto.estado === "OCUPADO" && !(ingresoVehiculo && ingresoVehiculo.puestoId === nuevoPuestoId)) {
         throw new AppError("El puesto está ocupado", 409);
