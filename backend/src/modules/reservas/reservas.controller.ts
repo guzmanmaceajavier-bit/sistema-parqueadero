@@ -385,8 +385,8 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
       const ahora = new Date();
       const [ingresoActivo, mensualidadVigente, reservaVigente] = await Promise.all([
         tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
-        tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
-        tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+        tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
       ]);
       const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
       await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
