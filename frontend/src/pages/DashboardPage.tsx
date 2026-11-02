@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useConfig } from "../context/ConfigContext";
-import { formatCurrency, formatDate, formatTime } from "../utils/formatters";
+import { formatCurrency } from "../utils/formatters";
 import api from "../services/api";
 import WhatsAppModal from "../components/WhatsAppModal";
 import Card from "../components/ui/Card";
@@ -136,10 +136,17 @@ export default function DashboardPage() {
 
   const d = data || {};
   const now = hoy();
-  const h = now.getHours();
+  const h = Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: zonaHoraria, hour: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).find((parte) => parte.type === "hour")?.value || 0);
   const saludo = h < 12 ? "Buenos días" : h < 18 ? "Buenas tardes" : "Buenas noches";
-  const fechaStr = formatDate(now.toISOString());
-  const hora12 = formatTime(now.toISOString());
+  const fechaStr = new Intl.DateTimeFormat("es-CO", {
+    timeZone: zonaHoraria, dateStyle: "full",
+  }).format(now);
+  const hora12 = new Intl.DateTimeFormat("es-CO", {
+    timeZone: zonaHoraria, hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(now);
+  const mesActual = Number(fechaLocalInput(now, zonaHoraria).slice(5, 7)) - 1;
 
   const ingresosDia = (d.ingresosDia as number) || 0;
   const gastosDia = (d.gastosDia as number) || 0;
@@ -533,7 +540,7 @@ export default function DashboardPage() {
           </div>
           <div className="text-right">
             <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{$(ingresosMes)}</p>
-            <p className="text-[11px] text-slate-400">{ingresosMensuales.length > 0 ? `${(ingresosMensuales[now.getMonth()] as Record<string, unknown>)?.mes || ""} · ${$((ingresosMensuales[now.getMonth()] as Record<string, unknown>)?.total as number || 0)}` : ""}</p>
+            <p className="text-[11px] text-slate-400">{ingresosMensuales.length > 0 ? `${(ingresosMensuales[mesActual] as Record<string, unknown>)?.mes || ""} · ${$((ingresosMensuales[mesActual] as Record<string, unknown>)?.total as number || 0)}` : ""}</p>
           </div>
         </div>
         {(ingresosMensuales as Array<Record<string, unknown>>).some((m) => (m.total as number) > 0) ? (
@@ -541,7 +548,7 @@ export default function DashboardPage() {
             {(ingresosMensuales as Array<Record<string, unknown>>).map((m) => {
               const maxAnual = Math.max(...(ingresosMensuales as Array<Record<string, unknown>>).map((x) => (x.total as number) || 0), 1);
               const pct = ((m.total as number) || 0) / maxAnual * 100;
-              const esActual = m.mes === (ingresosMensuales[now.getMonth()] as Record<string, unknown>)?.mes;
+              const esActual = m.mes === (ingresosMensuales[mesActual] as Record<string, unknown>)?.mes;
               return (
                 <div key={m.mes as string} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group">
                   <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">{(m.total as number) > 0 ? $((m.total as number)) : ""}</span>
