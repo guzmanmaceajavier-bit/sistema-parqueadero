@@ -137,6 +137,29 @@ describe("Cálculo de tarifas por tiempo facturable", () => {
     expect(cobro.desglose).toMatchObject({ meses: 1 });
   });
 
+  it("respeta el aniversario mensual exacto y redondea el minuto excedente", async () => {
+    const exacto = await calcular("mensual", "2026-01-31T10:00:00.000Z", "2026-02-28T10:00:00.000Z", {
+      valor: 200000,
+      minutosCortesia: 0,
+    });
+    const excedido = await calcular("mensual", "2026-01-31T10:00:00.000Z", "2026-02-28T10:01:00.000Z", {
+      valor: 200000,
+      minutosCortesia: 0,
+    });
+    expect(exacto.desglose).toMatchObject({ meses: 1 });
+    expect(exacto.total).toBe(200000);
+    expect(excedido.desglose).toMatchObject({ meses: 2 });
+    expect(excedido.total).toBe(400000);
+  });
+
+  it("maneja el aniversario mensual en año bisiesto", async () => {
+    const cobro = await calcular("mensual", "2024-02-29T08:00:00.000Z", "2024-03-29T08:00:00.000Z", {
+      valor: 200000,
+      minutosCortesia: 0,
+    });
+    expect(cobro.desglose).toMatchObject({ meses: 1 });
+  });
+
   it("aplica el máximo diario por cada día facturable, también en tarifa horaria normal", async () => {
     const cobro = await calcular("hora", "2026-01-01T08:00:00.000Z", "2026-01-03T08:00:00.000Z", {
       valor: 10000,
