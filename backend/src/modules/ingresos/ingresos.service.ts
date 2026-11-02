@@ -8,9 +8,18 @@ export const actualizarIngreso = (id, data, include) => prisma.ingreso.update({ 
 export const eliminarIngresoPorId = (id) => prisma.ingreso.delete({ where: { id } });
 export const ocuparPuesto = (id) => prisma.puesto.update({ where: { id }, data: { estado: "OCUPADO" } });
 export const liberarPuesto = (id) => prisma.puesto.update({ where: { id }, data: { estado: "LIBRE" } });
-export const buscarReservaActiva = (clienteId) => prisma.reserva.findFirst({
-  where: { clienteId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lte: new Date() } },
-  include: { puesto: true },
-  orderBy: { fechaInicio: "asc" },
-});
+export const buscarReservaActiva = (clienteId, vehiculoId) => {
+  const ahora = new Date();
+  return prisma.reserva.findFirst({
+    where: {
+      clienteId,
+      vehiculoId,
+      estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+      fechaInicio: { lte: ahora },
+      OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+    },
+    include: { puesto: true },
+    orderBy: { fechaInicio: "asc" },
+  });
+};
 export const activarReserva = (id) => prisma.reserva.update({ where: { id }, data: { estado: "ACTIVA" } });
