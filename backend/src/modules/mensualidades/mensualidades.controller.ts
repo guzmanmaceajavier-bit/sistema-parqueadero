@@ -5,6 +5,16 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 
+function sumarMesesConTope(fecha: Date, meses: number): Date {
+  const resultado = new Date(fecha);
+  const diaOriginal = resultado.getDate();
+  resultado.setDate(1);
+  resultado.setMonth(resultado.getMonth() + meses);
+  const ultimoDia = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
+  resultado.setDate(Math.min(diaOriginal, ultimoDia));
+  return resultado;
+}
+
 export const crearMensualidad = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, planId, fechaInicio, fechaFin, valor, observacion } = req.body;
   const cid = Number(clienteId);
@@ -194,14 +204,22 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
   const ahora = new Date();
   // El nuevo periodo comienza después del anterior; se conserva la mensualidad histórica y sus facturas.
   const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin.getTime() + 1) : ahora;
-  const fechaFin = new Date(fechaInicio);
-  fechaFin.setMonth(fechaFin.getMonth() + 1);
+  const fechaFin = sumarMesesConTope(fechaInicio, 1);
 
   const renovada = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
     const actual = await tx.mensualidad.findUnique({ where: { id } });
-    if (!actual || actual.estado === "CANCELADA") throw new AppError("La mensualidad cambió y ya no puede renovarse", 409);
+    if (
+      !actual ||
+      actual.estado === "CANCELADA" ||
+      actual.vehiculoId !== existente.vehiculoId ||
+      actual.puestoId !== existente.puestoId ||
+      actual.fechaFin.getTime() !== existente.fechaFin.getTime() ||
+      actual.estado !== existente.estado
+    ) {
+      throw new AppError("La mensualidad cambió mientras se renovaba. Actualiza e inténtalo nuevamente.", 409);
+    }
 
     const [otraMensualidad, reserva, ingreso] = await Promise.all([
       tx.mensualidad.findFirst({
@@ -318,7 +336,12 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
     for (const lockId of puestosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${lockId}::integer)) AS advisory_lock`;
 
     const actual = await tx.mensualidad.findUnique({ where: { id } });
-    if (!actual || actual.vehiculoId !== existente.vehiculoId || actual.puestoId !== existente.puestoId) {
+    if (
+      !actual ||
+      actual.vehiculoId !== existente.vehiculoId ||
+      actual.puestoId !== existente.puestoId ||
+      actual.updatedAt.getTime() !== existente.updatedAt.getTime()
+    ) {
       throw new AppError("La mensualidad cambió mientras se editaba. Actualiza e inténtalo nuevamente.", 409);
     }
     const finLimite = fin;
@@ -419,7 +442,14 @@ export const cancelarMensualidad = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
     const actual = await tx.mensualidad.findUnique({ where: { id: Number(id) } });
-    if (!actual || actual.estado !== "ACTIVA") throw new AppError("La mensualidad ya no está activa", 409);
+    if (
+      !actual ||
+      actual.estado !== "ACTIVA" ||
+      actual.vehiculoId !== existente.vehiculoId ||
+      actual.puestoId !== existente.puestoId
+    ) {
+      throw new AppError("La mensualidad cambió mientras se cancelaba. Actualiza e inténtalo nuevamente.", 409);
+    }
     const c = await tx.mensualidad.update({
       where: { id: Number(id) },
       data: { estado: "CANCELADA" },
@@ -463,6 +493,9 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
     const actual = await tx.mensualidad.findUnique({ where: { id: Number(id) }, include: { facturas: { select: { id: true } } } });
     if (!actual) throw new AppError("Mensualidad no encontrada", 404);
+    if (actual.vehiculoId !== existente.vehiculoId || actual.puestoId !== existente.puestoId) {
+      throw new AppError("La mensualidad cambió mientras se eliminaba. Actualiza e inténtalo nuevamente.", 409);
+    }
     if (actual.estado === "ACTIVA") throw new AppError("No se puede eliminar una mensualidad activa. Cáncela primero.", 409);
     if (actual.facturas.length > 0) throw new AppError("Esta mensualidad tiene facturas emitidas y no se puede eliminar", 409);
     await tx.mensualidad.delete({ where: { id: Number(id) } });
