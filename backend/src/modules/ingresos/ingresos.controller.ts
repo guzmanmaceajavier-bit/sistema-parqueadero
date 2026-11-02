@@ -333,9 +333,11 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
 
   const actualizado = await prisma.$transaction(async (tx) => {
     // Bloquear vehículo y ambos puestos evita colisiones al editar un ingreso activo.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vid})`;
-    // Adquirir los bloqueos de puesto siempre en orden ascendente evita deadlocks
-    // cuando dos usuarios intercambian simultáneamente las asignaciones.
+    // Bloquea vehículo anterior/nuevo y puestos anterior/nuevo en orden estable.
+    // Así se evitan entradas duplicadas y deadlocks al intercambiar asignaciones.
+    for (const lockVehiculoId of [...new Set([ingreso.vehiculoId, vid])].sort((a, b) => a - b)) {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${lockVehiculoId})`;
+    }
     for (const lockPuestoId of [...new Set([ingreso.puestoId, nuevoPuestoId])].sort((a, b) => a - b)) {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${lockPuestoId})`;
     }
@@ -347,6 +349,33 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
     if (duplicado) throw new AppError("El vehículo ya tiene otro ingreso activo", 409);
 
     if (nuevoPuestoId !== ingreso.puestoId) {
+      const ahora = new Date();
+      const [reservaVehiculo, mensualidadAsignada] = await Promise.all([
+        tx.reserva.findFirst({
+          where: {
+            vehiculoId: vid,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lte: ahora },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+          select: { id: true, puestoId: true },
+        }),
+        tx.mensualidad.findFirst({
+          where: {
+            vehiculoId: vid,
+            estado: "ACTIVA",
+            fechaInicio: { lte: ahora },
+            fechaFin: { gte: ahora },
+            puestoId: { not: null },
+          },
+          select: { id: true, puestoId: true },
+        }),
+      ]);
+      if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva vigente. No se puede cambiar su puesto desde un ingreso activo.", 409);
+      if (mensualidadAsignada?.puestoId && mensualidadAsignada.puestoId !== nuevoPuestoId) {
+        throw new AppError("El vehículo tiene otro puesto asignado por su mensualidad", 409);
+      }
+
       const disponible = await puestoEstaDisponibleParaAsignar(tx, nuevoPuestoId, { vehiculoId: vid });
       if (!disponible) throw new AppError("El nuevo puesto ya no está disponible", 409);
       const reservado = await tx.puesto.updateMany({
