@@ -33,7 +33,7 @@ const router = express.Router();
  *       400:
  *         description: Error de validacion
  */
-router.post("/", verificarToken, validate(crearGastoSchema), crearGasto);
+router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(crearGastoSchema), crearGasto);
 
 /**
  * @swagger
@@ -69,8 +69,8 @@ router.get("/", verificarToken, obtenerGastos);
  *         description: Gasto no encontrado
  */
 router.get("/:id", verificarToken, validateIdParam, obtenerGasto);
-router.post("/generar-recurrentes", verificarToken, generarRecurrentes);
-router.put("/:id", verificarToken, validateIdParam, validate(actualizarGastoSchema), actualizarGasto);
+router.post("/generar-recurrentes", verificarToken, verificarRol("admin", "supervisor"), generarRecurrentes);
+router.put("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, validate(actualizarGastoSchema), actualizarGasto);
 
 /**
  * @swagger
@@ -91,6 +91,6 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarGastoSche
  *       404:
  *         description: Gasto no encontrado
  */
-router.delete("/:id", verificarToken, validateIdParam, eliminarGasto);
+router.delete("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, eliminarGasto);
 
 export default router;
