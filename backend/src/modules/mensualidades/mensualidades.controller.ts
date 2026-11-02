@@ -3,7 +3,6 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
-import { getCajaOError } from "../../helpers/caja.js";
 
 export const crearMensualidad = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, planId, fechaInicio, fechaFin, valor, observacion } = req.body;
@@ -264,77 +263,96 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
   res.json({ ok: true, message: "Mensualidad eliminada correctamente" });
 });
 
-async function getSaldoPendiente(mensualidadId, fechaInicio) {
-  const pagos = await prisma.factura.aggregate({
-    _sum: { valor: true },
-    where: { mensualidadId, createdAt: { gte: new Date(fechaInicio) } },
-  });
-  return pagos._sum.valor || 0;
-}
-
 export const cobrarMensualidad = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { metodoPago, monto } = req.body;
-  const existente = await prisma.mensualidad.findUnique({
-    where: { id: Number(id) },
-    include: { cliente: true, vehiculo: true },
-  });
-  if (!existente) throw new AppError("Mensualidad no encontrada", 404);
-  if (existente.estado !== "ACTIVA") throw new AppError("La mensualidad no está activa", 400);
-
-  await getCajaOError();
   const mp = metodoPago || "efectivo";
 
-  const yaPagado = await getSaldoPendiente(existente.id, existente.fechaInicio);
-  const saldoPendiente = Math.max(0, existente.valor - yaPagado);
-  const montoPagado = monto !== undefined ? Number(monto) : saldoPendiente;
+  const resultado = await prisma.$transaction(async (tx) => {
+    // Bloquea la mensualidad para que dos abonos simultáneos no excedan su saldo.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124018, ${Number(id)})`;
+    await tx.$queryRaw`SELECT id FROM "Mensualidad" WHERE id = ${Number(id)} FOR UPDATE`;
 
-  if (montoPagado <= 0) throw new AppError("El monto debe ser mayor a 0", 400);
-  if (montoPagado > saldoPendiente) throw new AppError(`El monto excede el saldo pendiente ($${saldoPendiente.toLocaleString()})`, 400);
+    // El mismo bloqueo global de caja se usa al abrir, cerrar y registrar otros movimientos.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
 
-  const numeroFactura = await generarNumeroFactura("FACT-MEN");
-
-  const [factura] = await prisma.$transaction(async (tx) => {
-    const f = await tx.factura.create({
-      data: { numero: numeroFactura, mensualidadId: Number(id), origen: "MENSUALIDAD", valor: montoPagado, metodoPago: mp },
+    const mensualidad = await tx.mensualidad.findUnique({
+      where: { id: Number(id) },
+      include: { plan: true },
     });
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
-    if (cajaAbierta) {
-      await tx.cajaMovimiento.create({
-        data: { cajaId: cajaAbierta.id, tipo: "INGRESO", concepto: `Factura ${numeroFactura} — Mensualidad #${id}`, monto: montoPagado, metodoPago: mp, facturaId: f.id },
-      });
+    if (!mensualidad) throw new AppError("Mensualidad no encontrada", 404);
+    if (mensualidad.estado !== "ACTIVA") throw new AppError("La mensualidad no está activa", 400);
+
+    const pagos = await tx.factura.aggregate({
+      _sum: { valor: true },
+      where: { mensualidadId: mensualidad.id, createdAt: { gte: mensualidad.fechaInicio } },
+    });
+    const saldoPendiente = Math.max(0, mensualidad.valor - (pagos._sum.valor || 0));
+    const montoPagado = monto !== undefined ? Number(monto) : saldoPendiente;
+
+    if (!Number.isFinite(montoPagado) || montoPagado <= 0) throw new AppError("El monto debe ser un número mayor a 0", 400);
+    if (montoPagado > saldoPendiente) {
+      throw new AppError(`El monto excede el saldo pendiente ($${saldoPendiente.toLocaleString()})`, 400);
     }
-    const nuevoSaldo = saldoPendiente - montoPagado;
-    if (nuevoSaldo <= 0) {
+
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+    if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el pago. Abre una caja e inténtalo de nuevo.", 409);
+
+    const numeroFactura = await generarNumeroFactura("FACT-MEN");
+    const factura = await tx.factura.create({
+      data: {
+        numero: numeroFactura,
+        mensualidadId: mensualidad.id,
+        origen: "MENSUALIDAD",
+        valor: montoPagado,
+        metodoPago: mp,
+      },
+    });
+    await tx.cajaMovimiento.create({
+      data: {
+        cajaId: cajaAbierta.id,
+        tipo: "INGRESO",
+        concepto: `Factura ${numeroFactura} — Mensualidad #${id}`,
+        monto: montoPagado,
+        metodoPago: mp,
+        facturaId: factura.id,
+      },
+    });
+
+    const nuevoSaldo = Math.max(0, saldoPendiente - montoPagado);
+    const renovada = nuevoSaldo <= 0;
+    if (renovada) {
       const fechaInicio = new Date();
       const fechaFin = new Date(fechaInicio);
-      let duracionDias = 30;
-      if (existente.planId) {
-        const plan = await prisma.plan.findUnique({ where: { id: existente.planId } });
-        if (plan) duracionDias = plan.duracionDias;
-      }
-      fechaFin.setDate(fechaFin.getDate() + duracionDias);
+      fechaFin.setDate(fechaFin.getDate() + (mensualidad.plan?.duracionDias || 30));
       await tx.mensualidad.update({
-        where: { id: Number(id) },
+        where: { id: mensualidad.id },
         data: { fechaInicio, fechaFin, estado: "ACTIVA" },
       });
     }
-    return [f];
+
+    return {
+      factura,
+      saldoPendiente: nuevoSaldo,
+      renovada,
+      cajaId: cajaAbierta.id,
+      numeroFactura,
+      montoPagado,
+    };
   });
 
-  await registrarMovimiento("FACTURACION", "CREAR", `Factura ${numeroFactura} por mensualidad #${id} — $${montoPagado}`, req.usuario?.usuario || "admin");
-
-  const nuevoSaldoPendiente = saldoPendiente - montoPagado;
-  const renovada = nuevoSaldoPendiente <= 0;
-  const cajaActualizada = await prisma.caja.findFirst({ where: { estado: "ABIERTA" } });
+  await registrarMovimiento("FACTURACION", "CREAR", `Factura ${resultado.numeroFactura} por mensualidad #${id} — $${resultado.montoPagado}`, req.usuario?.usuario || "admin");
+  const cajaActualizada = await prisma.caja.findUnique({ where: { id: resultado.cajaId } });
 
   res.json({
-    ok: true, factura, caja: cajaActualizada,
-    saldoPendiente: Math.max(0, nuevoSaldoPendiente),
-    renovada,
-    mensaje: renovada
-      ? `Pago completo — Factura ${numeroFactura}. Mensualidad renovada por 1 mes.`
-      : `Abono registrado — Factura ${numeroFactura}. Saldo pendiente: $${Math.max(0, nuevoSaldoPendiente).toLocaleString()}`,
+    ok: true,
+    factura: resultado.factura,
+    caja: cajaActualizada,
+    saldoPendiente: resultado.saldoPendiente,
+    renovada: resultado.renovada,
+    mensaje: resultado.renovada
+      ? `Pago completo — Factura ${resultado.numeroFactura}. Mensualidad renovada por ${resultado.renovada ? "el periodo contratado" : "el periodo vigente"}.`
+      : `Abono registrado — Factura ${resultado.numeroFactura}. Saldo pendiente: $${resultado.saldoPendiente.toLocaleString()}`,
   });
 });
 
