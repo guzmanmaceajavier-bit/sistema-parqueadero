@@ -192,7 +192,8 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
   if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
 
   const ahora = new Date();
-  const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin) : ahora;
+  // El nuevo periodo comienza después del anterior; se conserva la mensualidad histórica y sus facturas.
+  const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin.getTime() + 1) : ahora;
   const fechaFin = new Date(fechaInicio);
   fechaFin.setMonth(fechaFin.getMonth() + 1);
 
@@ -215,9 +216,10 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
       tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
     ]);
     if (otraMensualidad || reserva) throw new AppError("El vehículo ya tiene otra asignación que se cruza con la renovación", 409);
-    if (ingreso && actual.puestoId && ingreso.puestoId !== actual.puestoId) {
-      throw new AppError("El vehículo está ocupando otro puesto", 409);
+    if (ingreso && (!actual.puestoId || ingreso.puestoId !== actual.puestoId || fechaInicio > ahora)) {
+      throw new AppError("El vehículo tiene un ingreso activo incompatible con el periodo de renovación", 409);
     }
+
     if (actual.puestoId) {
       const puestoActual = await tx.puesto.findUnique({ where: { id: actual.puestoId } });
       if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible para renovar", 409);
@@ -234,19 +236,38 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
         tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO", ...(ingreso ? { id: { not: ingreso.id } } : {}) }, select: { id: true } }),
       ]);
       if (otraMensualidadPuesto || reservaPuesto || ingresoEnPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
-      const puestoActualizado = await tx.puesto.updateMany({
-        where: { id: actual.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO", "OCUPADO"] } },
-        data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
-      });
-      if (puestoActualizado.count !== 1) throw new AppError("El puesto cambió y no se pudo renovar la mensualidad", 409);
     }
-    return tx.mensualidad.update({
-      where: { id },
-      data: { fechaInicio, fechaFin, estado: "ACTIVA" },
+
+    const nueva = await tx.mensualidad.create({
+      data: {
+        clienteId: actual.clienteId,
+        vehiculoId: actual.vehiculoId,
+        planId: actual.planId,
+        puestoId: actual.puestoId,
+        fechaInicio,
+        fechaFin,
+        valor: actual.valor,
+        observacion: actual.observacion,
+        estado: "ACTIVA",
+        sucursalId: actual.sucursalId,
+      },
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
     });
+
+    if (fechaInicio <= ahora && actual.puestoId) {
+      if (!ingreso) {
+        await tx.ingreso.create({ data: { clienteId: actual.clienteId, vehiculoId: actual.vehiculoId, puestoId: actual.puestoId } });
+      }
+      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: "OCUPADO" } });
+    } else if (actual.puestoId && actual.fechaFin <= ahora && !ingreso) {
+      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: "RESERVADO" } });
+    }
+    if (actual.fechaFin < ahora && actual.estado === "ACTIVA") {
+      await tx.mensualidad.update({ where: { id }, data: { estado: "VENCIDA" } });
+    }
+    return nueva;
   });
-  await registrarMovimiento("MENSUALIDADES", "RENOVAR", `Mensualidad #${id} renovada`, req.usuario?.usuario);
+  await registrarMovimiento("MENSUALIDADES", "RENOVAR", `Mensualidad #${id} renovada como #${renovada.id}`, req.usuario?.usuario);
   res.json({ ok: true, renovada });
 });
 
