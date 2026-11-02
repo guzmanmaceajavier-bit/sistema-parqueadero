@@ -42,6 +42,45 @@ function partesFechaEnZona(fecha: Date, timeZone: string): FechaCalendario {
   return { year, month, day };
 }
 
+export function inicioDiaActualEnZona(fecha: Date, timeZone: string): Date {
+  return inicioDiaEnZona(partesFechaEnZona(fecha, timeZone), timeZone);
+}
+
+export function desplazarDiasEnZona(fecha: Date, dias: number, timeZone: string): Date {
+  const partes = partesFechaEnZona(fecha, timeZone);
+  const desplazada = new Date(Date.UTC(partes.year, partes.month - 1, partes.day + dias));
+  return inicioDiaEnZona({
+    year: desplazada.getUTCFullYear(),
+    month: desplazada.getUTCMonth() + 1,
+    day: desplazada.getUTCDate(),
+  }, timeZone);
+}
+
+export function inicioMesEnZona(fecha: Date, timeZone: string): Date {
+  const partes = partesFechaEnZona(fecha, timeZone);
+  return inicioDiaEnZona({ year: partes.year, month: partes.month, day: 1 }, timeZone);
+}
+
+export function inicioSemanaEnZona(fecha: Date, timeZone: string): Date {
+  const partes = partesFechaEnZona(fecha, timeZone);
+  const diaSemana = new Date(Date.UTC(partes.year, partes.month - 1, partes.day)).getUTCDay();
+  return desplazarDiasEnZona(fecha, -diaSemana, timeZone);
+}
+
+export function inicioAnioEnZona(fecha: Date, timeZone: string): Date {
+  const partes = partesFechaEnZona(fecha, timeZone);
+  return inicioDiaEnZona({ year: partes.year, month: 1, day: 1 }, timeZone);
+}
+
+export function obtenerHoraEnZona(fecha: Date, timeZone: string): number {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(fecha);
+  return Number(partes.find((parte) => parte.type === "hour")?.value || 0);
+}
+
 export function obtenerFechaClaveEnZona(fecha: Date, timeZone: string): string {
   const partes = partesFechaEnZona(fecha, timeZone);
   return `${partes.year}-${String(partes.month).padStart(2, "0")}-${String(partes.day).padStart(2, "0")}`;
