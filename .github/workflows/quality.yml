@@ -42,3 +42,41 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build
         run: npm run build
+
+  postgres-integration:
+    name: Ingress concurrency integration tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: parkadmin_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d parkadmin_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/parkadmin_test?schema=public
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=prisma/schema.prisma
+      - name: Apply database migrations
+        run: npx prisma migrate deploy --schema=prisma/schema.prisma
+      - name: Run PostgreSQL integration tests
+        run: npm run test:integration
