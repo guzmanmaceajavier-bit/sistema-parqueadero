@@ -177,20 +177,66 @@ export const obtenerVencidas = asyncHandler(async (req, res) => {
 });
 
 export const renovarMensualidad = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const mensualidad = await prisma.mensualidad.findUnique({ where: { id: Number(id) } });
-  if (!mensualidad) throw new AppError("Mensualidad no encontrada", 404);
+  const id = Number(req.params.id);
+  const existente = await prisma.mensualidad.findUnique({ where: { id } });
+  if (!existente) throw new AppError("Mensualidad no encontrada", 404);
+  if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
 
-  const fechaInicio = new Date();
-  const fechaFin = new Date();
+  const ahora = new Date();
+  const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin) : ahora;
+  const fechaFin = new Date(fechaInicio);
   fechaFin.setMonth(fechaFin.getMonth() + 1);
 
-  const renovada = await prisma.mensualidad.update({
-    where: { id: Number(id) },
-    data: { fechaInicio, fechaFin, estado: "ACTIVA" },
+  const renovada = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
+    const actual = await tx.mensualidad.findUnique({ where: { id } });
+    if (!actual || actual.estado === "CANCELADA") throw new AppError("La mensualidad cambió y ya no puede renovarse", 409);
+
+    const [otraMensualidad, reserva, ingreso] = await Promise.all([
+      tx.mensualidad.findFirst({
+        where: { id: { not: id }, vehiculoId: actual.vehiculoId, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
+        select: { id: true },
+      }),
+      tx.reserva.findFirst({
+        where: { vehiculoId: actual.vehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
+        select: { id: true },
+      }),
+      tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
+    ]);
+    if (otraMensualidad || reserva) throw new AppError("El vehículo ya tiene otra asignación que se cruza con la renovación", 409);
+    if (ingreso && actual.puestoId && ingreso.puestoId !== actual.puestoId) {
+      throw new AppError("El vehículo está ocupando otro puesto", 409);
+    }
+    if (actual.puestoId) {
+      const [otraMensualidadPuesto, reservaPuesto] = await Promise.all([
+        tx.mensualidad.findFirst({
+          where: { id: { not: id }, puestoId: actual.puestoId, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
+          select: { id: true },
+        }),
+        tx.reserva.findFirst({
+          where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
+          select: { id: true },
+        }),
+      ]);
+      if (otraMensualidadPuesto || reservaPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
+      await tx.puesto.updateMany({
+        where: { id: actual.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO", "OCUPADO"] } },
+        data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
+      });
+    }
+    return tx.mensualidad.update({
+      where: { id },
+      data: { fechaInicio, fechaFin, estado: "ACTIVA" },
+      include: { cliente: true, vehiculo: true, plan: true, puesto: true },
+    });
   });
+  await registrarMovimiento("MENSUALIDADES", "RENOVAR", `Mensualidad #${id} renovada`, req.usuario?.usuario);
   res.json({ ok: true, renovada });
 });
+
 
 export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const { id } = req.params;
