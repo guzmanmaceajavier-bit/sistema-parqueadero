@@ -41,7 +41,7 @@ export const obtenerFactura = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
     prisma.factura.findFirst({
-      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true, puesto: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),
