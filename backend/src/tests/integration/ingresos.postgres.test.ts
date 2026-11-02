@@ -7,6 +7,9 @@ let vehiculoId = 0;
 let vehiculosIds: number[] = [];
 let puestoId = 0;
 let puestosIds: number[] = [];
+let usuariosIds: number[] = [];
+let cajasIds: number[] = [];
+let gastosIds: number[] = [];
 
 beforeEach(async () => {
   const suffix = `it-${process.pid}-${Date.now()}-${++fixtureCounter}`;
@@ -148,5 +151,113 @@ describe("Concurrencia de ingresos y salidas (PostgreSQL real)", () => {
 
     expect(resultados.reduce((total, count) => total + count, 0)).toBe(1);
     expect(await prisma.ingreso.count({ where: { id: ingreso.id, estado: "FINALIZADO" } })).toBe(1);
+  });
+});
+
+
+describe("Concurrencia de caja y gastos recurrentes (PostgreSQL real)", () => {
+  async function crearUsuarioDePrueba() {
+    const suffix = `cash-${process.pid}-${Date.now()}-${fixtureCounter}`;
+    const usuario = await prisma.usuario.create({
+      data: {
+        nombre: "Usuario de prueba",
+        usuario: `usr-${suffix}`,
+        correo: `usr-${suffix}@test.local`,
+        password: "hash-de-prueba",
+        rol: "admin",
+      },
+    });
+    usuariosIds.push(usuario.id);
+    return usuario;
+  }
+
+  it("serializa aperturas concurrentes y deja una sola caja ABIERTA", async () => {
+    const usuario = await crearUsuarioDePrueba();
+
+    const intentarApertura = () => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+      const existente = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+      if (existente) return false;
+      const caja = await tx.caja.create({
+        data: { apertura: 50000, estado: "ABIERTA", usuarioId: usuario.id },
+      });
+      cajasIds.push(caja.id);
+      return true;
+    });
+
+    const resultados = await Promise.all([intentarApertura(), intentarApertura()]);
+
+    expect(resultados.filter(Boolean)).toHaveLength(1);
+    expect(await prisma.caja.count({ where: { estado: "ABIERTA" } })).toBe(1);
+  });
+
+  it("genera una sola ocurrencia de gasto recurrente y la vincula a su movimiento", async () => {
+    const usuario = await crearUsuarioDePrueba();
+    const caja = await prisma.caja.create({
+      data: { apertura: 0, estado: "ABIERTA", usuarioId: usuario.id },
+    });
+    cajasIds.push(caja.id);
+
+    const fechaProgramada = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const plantilla = await prisma.gasto.create({
+      data: {
+        concepto: "Gasto recurrente de prueba",
+        categoria: "pruebas",
+        valor: 12000,
+        recurrente: true,
+        periodicidad: "mensual",
+        proximaGeneracion: fechaProgramada,
+      },
+    });
+    gastosIds.push(plantilla.id);
+
+    const intentarGeneracion = () => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+      if (!cajaAbierta) return false;
+
+      const actual = await tx.gasto.findUnique({ where: { id: plantilla.id } });
+      if (!actual?.recurrente || !actual.proximaGeneracion || actual.proximaGeneracion > new Date()) return false;
+
+      const reclamado = await tx.gasto.updateMany({
+        where: { id: actual.id, recurrente: true, proximaGeneracion: actual.proximaGeneracion },
+        data: { proximaGeneracion: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+      });
+      if (reclamado.count !== 1) return false;
+
+      const ocurrencia = await tx.gasto.create({
+        data: {
+          concepto: actual.concepto,
+          categoria: actual.categoria,
+          valor: actual.valor,
+          fecha: new Date(),
+          recurrente: false,
+        },
+      });
+      gastosIds.push(ocurrencia.id);
+      await tx.cajaMovimiento.create({
+        data: {
+          cajaId: cajaAbierta.id,
+          tipo: "EGRESO",
+          concepto: `Gasto recurrente: ${actual.concepto}`,
+          monto: actual.valor,
+          gastoId: ocurrencia.id,
+        },
+      });
+      return true;
+    });
+
+    const resultados = await Promise.all([intentarGeneracion(), intentarGeneracion()]);
+
+    expect(resultados.filter(Boolean)).toHaveLength(1);
+    const ocurrencias = await prisma.gasto.findMany({
+      where: { id: { in: gastosIds }, recurrente: false },
+    });
+    expect(ocurrencias).toHaveLength(1);
+    const movimiento = await prisma.cajaMovimiento.findFirst({
+      where: { cajaId: caja.id, gastoId: ocurrencias[0].id },
+    });
+    expect(movimiento?.tipo).toBe("EGRESO");
+    expect(movimiento?.monto).toBe(12000);
   });
 });
