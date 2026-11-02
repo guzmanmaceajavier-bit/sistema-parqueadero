@@ -1,6 +1,6 @@
 type PaginationOptions = {
-  page?: number | string;
-  limit?: number | string;
+  page?: unknown;
+  limit?: unknown;
   where?: any;
   orderBy?: any;
   include?: any;
@@ -34,8 +34,12 @@ export async function paginate(
     resolvedLimit = config?.paginacionPorDefecto || defaultLimit;
   }
 
-  const pageNum = Math.max(1, Number(page));
-  const limitNum = Math.min(100, Math.max(1, Number(resolvedLimit)));
+  const pageParsed = Number(page);
+  const limitParsed = Number(resolvedLimit);
+  const pageNum = Number.isFinite(pageParsed) ? Math.max(1, pageParsed) : 1;
+  const limitNum = Number.isFinite(limitParsed)
+    ? Math.min(100, Math.max(1, limitParsed))
+    : defaultLimit;
   const skip = (pageNum - 1) * limitNum;
   const delegate = prisma[model];
 
