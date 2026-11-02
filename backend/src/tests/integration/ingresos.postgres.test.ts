@@ -54,7 +54,7 @@ afterAll(async () => {
 });
 
 describe("Concurrencia de ingresos y salidas (PostgreSQL real)", () => {
-  it("permite una sola entrada simultánea para el mismo vehículo y puesto", async () => {
+  it("permite una sola entrada simultánea al mismo puesto desde vehículos diferentes", async () => {
     const segundoVehiculo = await prisma.vehiculo.create({
       data: {
         placa: `PL-SEG-${process.pid}-${fixtureCounter}`,
