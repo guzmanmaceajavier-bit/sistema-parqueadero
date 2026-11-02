@@ -13,9 +13,26 @@ function diffSemanas(fechaEntrada, fechaSalida) {
 }
 
 function diffMeses(fechaEntrada, fechaSalida) {
+  // Cada periodo vence en el aniversario mensual; si el mes no tiene ese día,
+  // se utiliza su último día (por ejemplo, 31 de enero -> 28/29 de febrero).
   let meses = (fechaSalida.getFullYear() - fechaEntrada.getFullYear()) * 12;
   meses += fechaSalida.getMonth() - fechaEntrada.getMonth();
-  if (fechaSalida.getDate() > fechaEntrada.getDate()) meses++;
+
+  const diaObjetivo = Math.min(
+    fechaEntrada.getDate(),
+    new Date(fechaEntrada.getFullYear(), fechaEntrada.getMonth() + meses + 1, 0).getDate()
+  );
+  const aniversario = new Date(
+    fechaEntrada.getFullYear(),
+    fechaEntrada.getMonth() + meses,
+    diaObjetivo,
+    fechaEntrada.getHours(),
+    fechaEntrada.getMinutes(),
+    fechaEntrada.getSeconds(),
+    fechaEntrada.getMilliseconds()
+  );
+
+  if (fechaSalida > aniversario) meses++;
   return Math.max(1, meses);
 }
 
