@@ -1,36 +1,45 @@
 import prisma from "../../config/prisma.js";
-import { asyncHandler } from "../../middlewares/error.middleware.js";
+import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
+import { obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
 
 export const obtenerReporte = asyncHandler(async (req, res) => {
-  const { fechaInicio, fechaFin, tipo } = req.query;
-  const sucursalId = req.query.sucursalId ? Number(req.query.sucursalId) : undefined;
+  const { fechaInicio, fechaFin } = req.query;
+  const sucursalId = req.query.sucursalId === undefined ? undefined : Number(req.query.sucursalId);
+  if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId <= 0)) {
+    throw new AppError("La sucursal seleccionada no es válida", 400);
+  }
 
-  const inicio = fechaInicio ? new Date(fechaInicio) : new Date();
-  const fin = fechaFin ? new Date(fechaFin + "T23:59:59") : new Date();
-  if (!fechaInicio) inicio.setHours(0, 0, 0, 0);
+  let inicio: Date;
+  let finExclusivo: Date;
+  try {
+    ({ inicio, finExclusivo } = obtenerPeriodoReporte(fechaInicio, fechaFin));
+  } catch (error) {
+    throw new AppError(error instanceof Error ? error.message : "El período del reporte no es válido", 400);
+  }
 
+  const rango = { gte: inicio, lt: finExclusivo };
   const sf = sucursalId ? { sucursalId } : {};
   const psf = sucursalId ? { puesto: { sucursalId } } : {};
 
   const [facturas, gastos, ingresosPeriodo, puestos, ocupacionPorHora] = await Promise.all([
     prisma.factura.findMany({
-      where: { createdAt: { gte: inicio, lte: fin }, ...sf },
+      where: { createdAt: rango, metodoPago: { not: null }, ...sf },
       include: { ingreso: { select: { fechaEntrada: true, fechaSalida: true, tiempoMinutos: true, cliente: { select: { nombres: true, apellidos: true } }, vehiculo: { select: { placa: true, tipo: true } } } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.gasto.findMany({
-      where: { fecha: { gte: inicio, lte: fin }, ...sf },
+      where: { fecha: rango, ...sf },
       orderBy: { fecha: "asc" },
     }),
     prisma.ingreso.findMany({
-      where: { fechaSalida: { gte: inicio, lte: fin }, estado: "FINALIZADO", ...psf },
+      where: { fechaSalida: rango, estado: "FINALIZADO", ...psf },
       select: { id: true, fechaEntrada: true, fechaSalida: true, tiempoMinutos: true, valorPagado: true, vehiculo: { select: { placa: true, tipo: true } } },
       orderBy: { fechaSalida: "asc" },
     }),
-    prisma.puesto.groupBy({ by: ["estado"], _count: true }),
+    prisma.puesto.groupBy({ by: ["estado"], _count: true, where: sf }),
     prisma.ingreso.findMany({
-      where: { fechaSalida: { gte: inicio, lte: fin }, estado: "FINALIZADO", ...psf },
-      select: { fechaSalida: true },
+      where: { fechaEntrada: rango, ...psf },
+      select: { fechaEntrada: true },
     }),
   ]);
 
@@ -43,7 +52,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   const ingresosPorDia = [];
   const iter = new Date(inicio);
-  while (iter <= fin) {
+  while (iter < finExclusivo) {
     const key = iter.toISOString().slice(0, 10);
     const label = iter.toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
     const ing = facturas.filter(f => f.createdAt.toISOString().slice(0, 10) === key).reduce((s, f) => s + f.valor, 0);
@@ -61,7 +70,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
     by: ["metodoPago"],
     _count: true,
     _sum: { valor: true },
-    where: { createdAt: { gte: inicio, lte: fin }, ...sf },
+    where: { createdAt: rango, ...sf },
   });
 
   res.json({
