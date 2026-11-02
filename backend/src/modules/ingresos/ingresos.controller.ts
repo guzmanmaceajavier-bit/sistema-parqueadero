@@ -599,7 +599,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     if (!ingresoActual || ingresoActual.estado !== "ACTIVO") {
       throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
     }
-    if (ingresoActual.vehiculoId !== ingreso.vehiculoId || ingresoActual.puestoId !== ingreso.puestoId) {
+    if (ingresoActual.vehiculoId !== ingreso.vehiculoId || ingresoActual.puestoId !== ingreso.puestoId || ingresoActual.reservaId !== ingreso.reservaId) {
       throw new AppError("La asignación del ingreso cambió mientras se procesaba. Vuelve a simular la salida.", 409);
     }
 
