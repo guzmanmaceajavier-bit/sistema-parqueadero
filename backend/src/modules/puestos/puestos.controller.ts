@@ -169,7 +169,7 @@ export const actualizarPuesto = asyncHandler(async (req, res) => {
   if (activo === false && puesto.activo !== false) {
     const [ingresos, mensualidades, reservas] = await Promise.all([
       prisma.ingreso.count({ where: { puestoId: Number(id), estado: "ACTIVO" } }),
-      prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } } }),
+      prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaFin: { gte: new Date() } } }),
       prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }] } }),
     ]);
     if (ingresos + mensualidades + reservas > 0) {
@@ -214,7 +214,7 @@ export const togglePuesto = asyncHandler(async (req, res) => {
 
   if (puesto.estado === "OCUPADO") {
     const ingresosActivos = await prisma.ingreso.count({ where: { puestoId: Number(id), estado: "ACTIVO" } });
-    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } } });
+    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaFin: { gte: new Date() } } });
     const otraReserva = await prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }] } });
     if (ingresosActivos > 0 || otraMensualidad > 0 || otraReserva > 0) {
       throw new AppError("No se puede liberar: el puesto tiene ingresos, mensualidades o reservas activas", 400);
