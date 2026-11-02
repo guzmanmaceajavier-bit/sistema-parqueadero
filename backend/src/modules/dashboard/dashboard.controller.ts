@@ -127,8 +127,8 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
     prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: sieteDiasAtras, lt: manana }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.gasto.findMany({ where: { fecha: { gte: sieteDiasAtras, lt: manana }, ...sucursalFilter }, select: { valor: true, fecha: true }, orderBy: { fecha: "asc" } }),
-    prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: { metodoPago: { not: null }, ...sucursalFilter } }),
-    prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: principioAnio || new Date(hoy.getFullYear(), 0, 1) }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+    prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: inicioSemana, lt: manana }, ...sucursalFilter } }),
+    prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: principioAnio, lt: manana }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const resumenPuestos = resumirEstadosPuestos(puestos);
@@ -160,22 +160,22 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
   const ingresos7Dias = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(hoy.getTime() - i * 86400000);
-    const key = d.toISOString().slice(0, 10);
-    const label = d.toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
+    const d = desplazarDiasEnZona(hoy, -i, zonaHoraria);
+    const key = obtenerFechaClaveEnZona(d, zonaHoraria);
+    const label = new Date(`${key}T00:00:00.000Z`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", timeZone: "UTC" });
     const total = facturas7d
-      .filter(f => f.createdAt.toISOString().slice(0, 10) === key)
+      .filter(f => obtenerFechaClaveEnZona(f.createdAt, zonaHoraria) === key)
       .reduce((s, f) => s + f.valor, 0);
     ingresos7Dias.push({ label, total, dia: key });
   }
 
   const gastos7Dias = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(hoy.getTime() - i * 86400000);
-    const key = d.toISOString().slice(0, 10);
-    const label = d.toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
+    const d = desplazarDiasEnZona(hoy, -i, zonaHoraria);
+    const key = obtenerFechaClaveEnZona(d, zonaHoraria);
+    const label = new Date(`${key}T00:00:00.000Z`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", timeZone: "UTC" });
     const total = gastos7d
-      .filter(g => g.fecha.toISOString().slice(0, 10) === key)
+      .filter(g => obtenerFechaClaveEnZona(g.fecha, zonaHoraria) === key)
       .reduce((s, g) => s + g.valor, 0);
     gastos7Dias.push({ label, total, dia: key });
   }
@@ -188,7 +188,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
   const ingresosMensuales = meses.map((_, i) => {
     const total = facturasPorMes
-      .filter(f => f.createdAt.getMonth() === i)
+      .filter(f => Number(obtenerFechaClaveEnZona(f.createdAt, zonaHoraria).slice(5, 7)) === i + 1)
       .reduce((s, f) => s + f.valor, 0);
     return { mes: meses[i], total };
   });
@@ -200,7 +200,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   });
   const ingresosPorHora = Array.from({ length: 24 }, (_, h) => ({
     hora: `${h.toString().padStart(2, "0")}:00`,
-    count: ingresosHoyRegistros.filter(i => new Date(i.fechaEntrada).getHours() === h).length,
+    count: ingresosHoyRegistros.filter(i => obtenerHoraEnZona(new Date(i.fechaEntrada), zonaHoraria) === h).length,
   }));
 
   res.json({
