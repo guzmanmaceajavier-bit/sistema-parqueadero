@@ -24,6 +24,8 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   const fin = new Date(fechaFin);
   if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) throw new AppError("Fecha inválida", 400);
   if (fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
+  if (fin <= new Date()) throw new AppError("La fecha fin debe estar en el futuro", 400);
+  if (!Number.isFinite(monto) || monto <= 0) throw new AppError("El valor de la mensualidad debe ser mayor que cero", 400);
 
   let plan = null;
   let monto = Number(valor);
@@ -75,7 +77,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     ]);
     if (mensualidadVehiculo) throw new AppError("El vehículo ya tiene una mensualidad que se cruza con este periodo", 409);
     if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva que se cruza con este periodo", 409);
-    if (ingresoActual && (!puesto || ingresoActual.puestoId !== puesto.id)) {
+    if (ingresoActual && (!puesto || ingresoActual.puestoId !== puesto.id || inicio > ahora || fin < ahora)) {
       throw new AppError("El vehículo ya tiene un ingreso activo en otro puesto", 409);
     }
     if (puesto) {
@@ -105,10 +107,18 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
     });
     if (puesto) {
-      await tx.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "OCUPADO" } });
-      const ingresoExistente = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
-      if (!ingresoExistente) {
-        await tx.ingreso.create({ data: { clienteId: cid, vehiculoId: vid, puestoId: Number(puestoId) } });
+      const puestoActual = await tx.puesto.findUnique({ where: { id: puesto.id } });
+      if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto dejó de estar disponible", 409);
+      const mensualidadVigente = inicio <= ahora && fin >= ahora;
+      await tx.puesto.update({
+        where: { id: puesto.id },
+        data: { estado: mensualidadVigente ? "OCUPADO" : "RESERVADO" },
+      });
+      if (mensualidadVigente) {
+        const ingresoExistente = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
+        if (!ingresoExistente) {
+          await tx.ingreso.create({ data: { clienteId: cid, vehiculoId: vid, puestoId: puesto.id } });
+        }
       }
     }
     return m;
