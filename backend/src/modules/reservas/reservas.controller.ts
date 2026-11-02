@@ -55,6 +55,11 @@ export const crearReserva = asyncHandler(async (req, res) => {
     if (puesto.estado === "OCUPADO") throw new AppError("El puesto está ocupado", 400);
   }
 
+  if (pid && vehiculo && vehiculo.sucursalId !== puesto?.sucursalId) {
+    throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
+  }
+  const sucursalRegistro = sucursalId ?? vehiculo?.sucursalId ?? puesto?.sucursalId ?? null;
+
   if (vid) {
     const duplicado = await prisma.reserva.findFirst({
       where: {
@@ -69,11 +74,6 @@ export const crearReserva = asyncHandler(async (req, res) => {
   const fin = fechaFin ? new Date(fechaFin) : null;
   if (fechaFin && (!fin || !Number.isFinite(fin.getTime()))) throw new AppError("La fecha fin no es válida", 400);
   if (fin && fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
-
-  if (pid && vehiculo && vehiculo.sucursalId !== puesto?.sucursalId) {
-    throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
-  }
-  const sucursalRegistro = sucursalId ?? vehiculo?.sucursalId ?? puesto?.sucursalId ?? null;
 
   if (pid) {
     const conflicto = await prisma.reserva.findFirst({
