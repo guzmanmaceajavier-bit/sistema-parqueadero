@@ -119,7 +119,6 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   ]);
 
   const resumenPuestos = resumirEstadosPuestos(puestos);
-  const puestosMap = Object.fromEntries(puestos.map(p => [p.estado, p._count]));
   const totalPuestos = resumenPuestos.total;
   const puestosLibres = resumenPuestos.libres;
   const puestosOcupados = resumenPuestos.ocupados;
