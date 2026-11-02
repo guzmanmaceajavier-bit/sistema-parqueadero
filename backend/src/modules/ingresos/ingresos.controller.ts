@@ -571,6 +571,22 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
 
+    // La cobertura del plan puede cambiar entre la simulación y la confirmación.
+    // Si cambió, no se cobra ni se libera el vehículo con una regla desactualizada.
+    const mensualidadEnConfirmacion = await tx.mensualidad.findFirst({
+      where: {
+        vehiculoId: ingreso.vehiculoId,
+        estado: "ACTIVA",
+        fechaInicio: { lte: fechaSalida },
+        fechaFin: { gte: fechaSalida },
+        OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
+      },
+      select: { id: true },
+    });
+    if (Boolean(mensualidadEnConfirmacion) !== cubiertoPorPlan) {
+      throw new AppError("La cobertura de la mensualidad cambió durante la operación. Vuelve a simular el cobro.", 409);
+    }
+
     const salidaActualizada = await tx.ingreso.updateMany({
       where: { id: Number(id), estado: "ACTIVO" },
       data: {
