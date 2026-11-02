@@ -12,10 +12,18 @@ import * as service from "./ingresos.service.js";
 async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number) {
   const puesto = await tx.puesto.findUnique({ where: { id: puestoId } });
   if (!puesto || !puesto.activo || puesto.estado !== "LIBRE") return false;
+  const ahora = new Date();
   const [ingresos, mensualidades, reservas] = await Promise.all([
     tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
-    tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA" } }),
-    tx.reserva.count({ where: { puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }),
+    tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+    tx.reserva.count({
+      where: {
+        puestoId,
+        estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+        fechaInicio: { lte: ahora },
+        OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+      },
+    }),
   ]);
   return ingresos === 0 && mensualidades === 0 && reservas === 0;
 }
@@ -66,6 +74,9 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
 
   const ingreso = await prisma.$transaction(async (tx) => {
+    // Bloqueos transaccionales por vehículo y puesto: serializan intentos simultáneos.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124021, ${vehiculoId})`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124020, ${Number(puestoId)})`;
     const vehiculoYaDentro = await tx.ingreso.findFirst({
       where: { vehiculoId, estado: "ACTIVO" },
       select: { id: true },
@@ -162,7 +173,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
+    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } },
   });
   if (!planActivo) throw new AppError("El vehículo no tiene plan activo. Registre la salida con cobro desde Ingresos.", 400);
 
@@ -273,6 +284,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
     ingreso,
     tipoVehiculo: ingreso.vehiculo.tipo,
     ticketExtraviado,
+    tarifaId: ingreso.vehiculo.tarifaId,
   });
 
   if (cobro.error) throw new AppError(cobro.error, 400);
