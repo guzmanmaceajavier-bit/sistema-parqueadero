@@ -306,7 +306,6 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
         where: {
           puestoId: ingreso.puestoId,
           estado: "ACTIVA",
-          fechaInicio: { lte: fechaSalida },
           fechaFin: { gte: fechaSalida },
         },
       }),
@@ -426,7 +425,7 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
       const [otrosIngresos, mensualidades, reservas] = await Promise.all([
         tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
         tx.mensualidad.count({
-          where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } },
+          where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaFin: { gte: new Date() } },
         }),
         tx.reserva.count({
           where: {
@@ -475,7 +474,7 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
       const ahora = new Date();
       const [otrosIngresos, mensualidades, reservas] = await Promise.all([
         tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO" } }),
-        tx.mensualidad.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+        tx.mensualidad.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
         tx.reserva.count({
           where: {
             puestoId: ingreso.puestoId,
@@ -688,7 +687,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     const [otroIngresoActivo, mensualidadEnPuesto, reservaFutura] = await Promise.all([
       tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
       tx.mensualidad.count({
-        where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: fechaSalida }, fechaFin: { gte: fechaSalida } },
+        where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaFin: { gte: fechaSalida } },
       }),
       tx.reserva.count({
         where: {
