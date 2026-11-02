@@ -20,7 +20,7 @@ export const crearPlan = asyncHandler(async (req, res) => {
 
 export const obtenerPlanes = asyncHandler(async (req, res) => {
   const { page, limit, q } = req.query;
-  const where = {};
+  const where: any = {};
   if (q) {
     where.OR = [
       { nombre: { contains: q, mode: "insensitive" } },
@@ -49,7 +49,7 @@ export const actualizarPlan = asyncHandler(async (req, res) => {
   const existe = await prisma.plan.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Plan no encontrado", 404);
 
-  const data = {};
+  const data: any = {};
   if (nombre !== undefined) data.nombre = nombre;
   if (descripcion !== undefined) data.descripcion = descripcion;
   if (duracionDias !== undefined) { const d = Number(duracionDias); if (!d || d <= 0) throw new AppError("Duración debe ser mayor a 0", 400); data.duracionDias = d; }
