@@ -22,6 +22,9 @@ export const crearGasto = asyncHandler(async (req, res) => {
   await getCajaOError();
 
   const [gasto] = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+    if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el gasto", 409);
     const data = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor) };
     if (recurrente) {
       data.recurrente = true;
@@ -29,12 +32,9 @@ export const crearGasto = asyncHandler(async (req, res) => {
       data.proximaGeneracion = calcularProximaGeneracion(periodicidad || "mensual");
     }
     const g = await tx.gasto.create({ data });
-    const cajaAbierta = await prisma.caja.findFirst({ where: { estado: "ABIERTA" } });
-    if (cajaAbierta) {
-      await tx.cajaMovimiento.create({
-        data: { cajaId: cajaAbierta.id, tipo: "EGRESO", concepto: `Gasto: ${g.concepto}`, monto: Number(valor), gastoId: g.id },
-      });
-    }
+    await tx.cajaMovimiento.create({
+      data: { cajaId: cajaAbierta.id, tipo: "EGRESO", concepto: `Gasto: ${g.concepto}`, monto: Number(valor), gastoId: g.id },
+    });
     return [g];
   });
 
@@ -150,6 +150,8 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
   let generados = 0;
   for (const g of pendientes) {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
       await tx.gasto.create({
         data: {
           concepto: g.concepto,
@@ -159,7 +161,6 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
           fecha: ahora,
         },
       });
-      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
       if (cajaAbierta) {
         await tx.cajaMovimiento.create({
           data: { cajaId: cajaAbierta.id, tipo: "EGRESO", concepto: `Gasto recurrente: ${g.concepto}`, monto: g.valor, gastoId: g.id },
