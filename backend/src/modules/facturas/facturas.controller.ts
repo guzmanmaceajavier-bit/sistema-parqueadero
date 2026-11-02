@@ -67,7 +67,7 @@ export const descargarFacturaPDF = asyncHandler(async (req, res) => {
   const vehiculo: any = ref?.vehiculo || {};
   const entrada = ref?.fechaEntrada ? new Date(ref.fechaEntrada) : null;
   const salida = ref?.fechaSalida ? new Date(ref.fechaSalida) : null;
-  const minutos = ref?.tiempoMinutos || (salida && entrada ? Math.ceil((salida - entrada) / 60000) : 0);
+  const minutos = ref?.tiempoMinutos || (salida && entrada ? Math.ceil((salida.getTime() - entrada.getTime()) / 60000) : 0);
   const horas = Math.floor(minutos / 60);
   const dias = Math.floor(horas / 24);
   const tiempoStr = minutos > 0
