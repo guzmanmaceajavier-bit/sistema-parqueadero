@@ -264,17 +264,17 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
     });
     if (!ingresoActual) throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
 
-    const planActual = await tx.mensualidad.findFirst({
-      where: {
-        vehiculoId: ingresoActual.vehiculoId,
-        estado: "ACTIVA",
-        fechaInicio: { lte: fechaSalida },
-        fechaFin: { gte: fechaSalida },
-        OR: [{ puestoId: null }, { puestoId: ingresoActual.puestoId }],
-      },
-      select: { id: true },
-    });
-    if (!planActual) throw new AppError("La mensualidad dejó de estar vigente. Registre la salida con cobro desde Ingresos.", 409);
+    const planesActuales = await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT "id"
+      FROM "Mensualidad"
+      WHERE "vehiculoId" = ${ingresoActual.vehiculoId}
+        AND "estado" = 'ACTIVA'
+        AND "fechaInicio" <= ${fechaSalida}
+        AND "fechaFin" >= ${fechaSalida}
+        AND ("puestoId" IS NULL OR "puestoId" = ${ingresoActual.puestoId})
+      FOR UPDATE
+    `;
+    if (planesActuales.length === 0) throw new AppError("La mensualidad dejó de estar vigente. Registre la salida con cobro desde Ingresos.", 409);
 
     const finalizado = await tx.ingreso.updateMany({
       where: { id: Number(id), estado: "ACTIVO" },
