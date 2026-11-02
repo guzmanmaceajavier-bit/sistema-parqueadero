@@ -199,12 +199,14 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
   if (nuevoVehiculoId) {
     const vehiculo = await prisma.vehiculo.findUnique({ where: { id: nuevoVehiculoId } });
     if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+    if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
     if (vehiculo.clienteId !== existente.clienteId) throw new AppError("El vehículo no pertenece al cliente de esta reserva", 400);
     if (vehiculo.bloqueado || !vehiculo.estado) throw new AppError("El vehículo está bloqueado o inactivo", 400);
   }
   if (nuevoPuestoId) {
     const puesto = await prisma.puesto.findUnique({ where: { id: nuevoPuestoId } });
     if (!puesto) throw new AppError("Puesto no encontrado", 404);
+    if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
     if (!puesto.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está inactivo o en mantenimiento", 400);
   }
 
