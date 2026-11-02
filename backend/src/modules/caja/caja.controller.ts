@@ -11,7 +11,7 @@ export const abrirCaja = asyncHandler(async (req, res) => {
 
   const caja = await prisma.$transaction(async (tx) => {
     // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
     if (abierta) throw new AppError("Ya hay una caja abierta", 400);
 
@@ -38,7 +38,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
 
   const resultado = await prisma.$transaction(async (tx) => {
     // Comparte el bloqueo global con la apertura para evitar cierres/aperturas solapados.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const caja = await tx.caja.findUnique({ where: { id: Number(id) } });
     if (!caja) throw new AppError("Caja no encontrada", 404);
     if (caja.estado !== "ABIERTA") throw new AppError("La caja ya está cerrada", 409);
@@ -140,7 +140,7 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
   const { apertura, observacion } = req.body;
 
   const caja = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const existente = await tx.caja.findUnique({ where: { id: Number(id) } });
     if (!existente) throw new AppError("Caja no encontrada", 404);
 
@@ -245,7 +245,7 @@ export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const anulado = await prisma.$transaction(async (tx) => {
     // El mismo bloqueo protege el cierre: un movimiento no cambia durante el arqueo.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const movimiento = await tx.cajaMovimiento.findUnique({ where: { id: Number(id) } });
     if (!movimiento) throw new AppError("Movimiento no encontrado", 404);
     const caja = await tx.caja.findUnique({ where: { id: movimiento.cajaId } });
@@ -274,7 +274,7 @@ export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { concepto, monto, metodoPago } = req.body;
   const actualizado = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const movimiento = await tx.cajaMovimiento.findUnique({ where: { id: Number(id) } });
     if (!movimiento) throw new AppError("Movimiento no encontrado", 404);
     if (movimiento.anulado) throw new AppError("No se puede editar un movimiento anulado", 409);
