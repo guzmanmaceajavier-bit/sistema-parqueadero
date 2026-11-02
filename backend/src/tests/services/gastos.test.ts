@@ -18,6 +18,13 @@ describe("calcularProximaGeneracion", () => {
     expect(resultado.getDate()).toBe(28);
   });
 
+  it("mantiene el calendario de fin de mes después de febrero", () => {
+    const febrero = new Date(2026, 1, 28, 12);
+    const resultado = calcularProximaGeneracion("mensual", febrero);
+    expect(resultado.getMonth()).toBe(2);
+    expect(resultado.getDate()).toBe(31);
+  });
+
   it("ajusta un aniversario de año bisiesto al 28 de febrero", () => {
     const inicio = new Date(2024, 1, 29, 12);
     const resultado = calcularProximaGeneracion("anual", inicio);
