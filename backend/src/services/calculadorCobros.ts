@@ -1,15 +1,15 @@
 import prisma from "../config/prisma.js";
 
 function diffMinutos(fechaEntrada: Date, fechaSalida: Date): number {
-  return Math.ceil((fechaSalida - fechaEntrada) / (1000 * 60));
+  return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60));
 }
 
 function diffDias(fechaEntrada: Date, fechaSalida: Date): number {
-  return Math.ceil((fechaSalida - fechaEntrada) / (1000 * 60 * 60 * 24));
+  return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function diffSemanas(fechaEntrada: Date, fechaSalida: Date): number {
-  return Math.ceil((fechaSalida - fechaEntrada) / (1000 * 60 * 60 * 24 * 7));
+  return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60 * 60 * 24 * 7));
 }
 
 function diffMeses(fechaEntrada: Date, fechaSalida: Date): number {
