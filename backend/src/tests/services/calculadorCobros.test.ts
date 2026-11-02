@@ -145,4 +145,23 @@ describe("calcularCobro", () => {
     expect(result.total).toBe(0);
   });
 
+
+  it("rechaza una tarifa progresiva incompleta antes de calcular el importe", async () => {
+    prismaMock.tarifa.findUnique.mockResolvedValue({
+      ...tarifaBase,
+      precioPrimeraHora: 7000,
+      precioHoraAdicional: null,
+    });
+
+    const result = await calcularCobro({
+      ingreso: { id: 8, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      fechaSalida: new Date("2026-01-01T09:00:00"),
+    });
+
+    expect(result.error).toContain("progresiva está incompleta");
+    expect(result.total).toBe(0);
+  });
+
 });
