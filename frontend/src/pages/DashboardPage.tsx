@@ -57,6 +57,15 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { config } = useConfig();
+  const zonaHoraria = (() => {
+    const candidata = config?.zonaHoraria || "America/Bogota";
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: candidata }).format(new Date());
+      return candidata;
+    } catch {
+      return "America/Bogota";
+    }
+  })();
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,7 +184,7 @@ export default function DashboardPage() {
 
   const maxHora = Math.max(...(ingresosPorHora as Array<{ count: number }>).map((h) => h.count), 1);
 
-  const dias = days7(now, config?.zonaHoraria || "America/Bogota");
+  const dias = days7(now, zonaHoraria);
   const bars = dias.map((day) => {
     const found = (ingresos7Dias as Array<Record<string, unknown>>).find((i) => i.fecha === day.date || i.dia === day.date);
     const gasto = (gastos7Dias as Array<Record<string, unknown>>).find((g) => g.fecha === day.date || g.dia === day.date);
