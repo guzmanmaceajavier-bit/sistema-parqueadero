@@ -1,6 +1,6 @@
 import prisma from "../../config/prisma.js";
 
-export async function calcularTotalesHelper(cajaId, db = prisma) {
+export async function calcularTotalesHelper(cajaId: number, db: { cajaMovimiento: typeof prisma.cajaMovimiento } = prisma) {
   const movs = await db.cajaMovimiento.findMany({
     where: { cajaId },
     select: { monto: true, tipo: true, metodoPago: true },
@@ -8,7 +8,7 @@ export async function calcularTotalesHelper(cajaId, db = prisma) {
 
   let totalIngresos = 0;
   let totalEgresos = 0;
-  const porMetodo = { efectivo: 0, tarjeta: 0, transferencia: 0, otros: 0 };
+  const porMetodo: Record<string, number> = { efectivo: 0, tarjeta: 0, transferencia: 0, otros: 0 };
 
   for (const m of movs) {
     if (m.tipo === "INGRESO") {
