@@ -59,6 +59,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
     const duplicado = await prisma.reserva.findFirst({
       where: {
         vehiculoId: vid,
+        sucursalId: sucursalRegistro,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
       },
     });
@@ -69,10 +70,16 @@ export const crearReserva = asyncHandler(async (req, res) => {
   if (fechaFin && (!fin || !Number.isFinite(fin.getTime()))) throw new AppError("La fecha fin no es válida", 400);
   if (fin && fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
 
+  if (pid && vehiculo && vehiculo.sucursalId !== puesto?.sucursalId) {
+    throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
+  }
+  const sucursalRegistro = sucursalId ?? vehiculo?.sucursalId ?? puesto?.sucursalId ?? null;
+
   if (pid) {
     const conflicto = await prisma.reserva.findFirst({
       where: {
         puestoId: pid,
+        sucursalId: sucursalRegistro,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
         fechaInicio: { lt: fin || new Date("9999-12-31T23:59:59.999Z") },
         OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
@@ -90,15 +97,15 @@ export const crearReserva = asyncHandler(async (req, res) => {
     if (vid) {
       const [reservaVehiculo, mensualidadVehiculo, ingresoVehiculo] = await Promise.all([
         tx.reserva.findFirst({
-          where: { vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          where: { vehiculoId: vid, sucursalId: sucursalRegistro, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
           select: { id: true },
         }),
         tx.mensualidad.findFirst({
-          where: { vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+          where: { vehiculoId: vid, sucursalId: sucursalRegistro, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
           select: { id: true },
         }),
-        tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true } }),
+        tx.ingreso.findFirst({ where: { vehiculoId: vid, vehiculo: { sucursalId: sucursalRegistro }, estado: "ACTIVO" }, select: { id: true } }),
       ]);
       if (reservaVehiculo) throw new AppError("El vehículo ya tiene una reserva en ese periodo", 409);
       if (mensualidadVehiculo) throw new AppError("El vehículo tiene una mensualidad que se cruza con ese periodo", 409);
@@ -107,15 +114,15 @@ export const crearReserva = asyncHandler(async (req, res) => {
     if (pid) {
       const [conflictoPuesto, mensualidadPuesto, ingresoPuesto] = await Promise.all([
         tx.reserva.findFirst({
-          where: { puestoId: pid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          where: { puestoId: pid, sucursalId: sucursalRegistro, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
           select: { id: true },
         }),
         tx.mensualidad.findFirst({
-          where: { puestoId: pid, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+          where: { puestoId: pid, sucursalId: sucursalRegistro, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
           select: { id: true },
         }),
-        tx.ingreso.findFirst({ where: { puestoId: pid, estado: "ACTIVO" }, select: { id: true } }),
+        tx.ingreso.findFirst({ where: { puestoId: pid, vehiculo: { sucursalId: sucursalRegistro }, estado: "ACTIVO" }, select: { id: true } }),
       ]);
       if (conflictoPuesto || mensualidadPuesto || ingresoPuesto) {
         throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
@@ -123,7 +130,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
     }
 
     const creada = await tx.reserva.create({
-      data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones, sucursalId: sucursalId ?? null },
+      data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones, sucursalId: sucursalRegistro },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
     if (pid) await tx.puesto.update({ where: { id: pid }, data: { estado: "RESERVADO" } });
