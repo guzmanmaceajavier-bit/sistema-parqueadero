@@ -67,7 +67,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
       where: {
         puestoId: pid,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-        fechaInicio: { lt: fin || new Date(inicio.getTime() + 86400000) },
+        fechaInicio: { lt: fin || new Date("9999-12-31T23:59:59.999Z") },
         OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
       },
     });
