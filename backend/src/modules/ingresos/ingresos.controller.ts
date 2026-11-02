@@ -137,11 +137,17 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       }),
     ]);
 
+    if (reservaVinculada && !reservaActual) {
+      throw new AppError("La reserva seleccionada cambió o dejó de estar vigente. Actualiza la información antes de registrar la entrada.", 409);
+    }
     if (reservaActual?.puestoId && Number(puestoId) !== reservaActual.puestoId) {
       throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Actualiza la disponibilidad.", 409);
     }
     if (mensualidadActual?.puestoId && Number(puestoId) !== mensualidadActual.puestoId) {
       throw new AppError("El vehículo tiene un puesto asignado por su mensualidad. Actualiza la disponibilidad.", 409);
+    }
+    if (reservaActual && mensualidadActual) {
+      throw new AppError("El vehículo tiene una reserva y una mensualidad con puesto asignado simultáneamente. Revisa sus asignaciones antes de ingresarlo.", 409);
     }
     reservaVinculada = reservaActual;
     planDetectado = mensualidadActual;
