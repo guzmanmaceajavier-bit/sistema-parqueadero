@@ -154,8 +154,8 @@ export const actualizarPuesto = asyncHandler(async (req, res) => {
   if (estado && ["LIBRE", "MANTENIMIENTO"].includes(estado) && !["LIBRE", "MANTENIMIENTO"].includes(puesto.estado)) {
     const [ingresos, mensualidades, reservas] = await Promise.all([
       prisma.ingreso.count({ where: { puestoId: Number(id), estado: "ACTIVO" } }),
-      prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA" } }),
-      prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }),
+      prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } } }),
+      prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }] } }),
     ]);
     const ocupantes = [];
     if (ingresos > 0) ocupantes.push(`${ingresos} ingreso(s) activo(s)`);
@@ -194,14 +194,16 @@ export const eliminarPuesto = asyncHandler(async (req, res) => {
   const existe = await prisma.puesto.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Puesto no encontrado", 404);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.factura.deleteMany({ where: { ingreso: { puestoId: Number(id) } } });
-    await tx.ingreso.deleteMany({ where: { puestoId: Number(id) } });
-    await tx.mensualidad.deleteMany({ where: { puestoId: Number(id) } });
-    await tx.reserva.deleteMany({ where: { puestoId: Number(id) } });
-    await tx.puesto.delete({ where: { id: Number(id) } });
-  });
+  const [ingresos, mensualidades, reservas] = await Promise.all([
+    prisma.ingreso.count({ where: { puestoId: Number(id) } }),
+    prisma.mensualidad.count({ where: { puestoId: Number(id) } }),
+    prisma.reserva.count({ where: { puestoId: Number(id) } }),
+  ]);
+  if (ingresos + mensualidades + reservas > 0) {
+    throw new AppError("No se puede eliminar un puesto con historial de ingresos, mensualidades o reservas. Desactívalo para conservar la trazabilidad.", 409);
+  }
 
+  await prisma.puesto.delete({ where: { id: Number(id) } });
   res.json({ ok: true, message: "Puesto eliminado" });
 });
 
@@ -212,8 +214,8 @@ export const togglePuesto = asyncHandler(async (req, res) => {
 
   if (puesto.estado === "OCUPADO") {
     const ingresosActivos = await prisma.ingreso.count({ where: { puestoId: Number(id), estado: "ACTIVO" } });
-    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA" } });
-    const otraReserva = await prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
+    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } } });
+    const otraReserva = await prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }] } });
     if (ingresosActivos > 0 || otraMensualidad > 0 || otraReserva > 0) {
       throw new AppError("No se puede liberar: el puesto tiene ingresos, mensualidades o reservas activas", 400);
     }
