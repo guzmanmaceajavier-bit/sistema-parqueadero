@@ -143,7 +143,7 @@ export default function Caja() {
     try {
       await api.delete(`/caja/movimiento/${movId}`);
       setMovimientoAnular(null);
-      mostrarToast("Movimiento anulado");
+      mostrarToast("Movimiento anulado y conservado en auditoría");
       if (mostrarDetalle) aplicarFiltros();
       cargarMovsHoy(pageHoy);
     } catch (err) { mostrarToast(err.response?.data?.message || "Error al anular", "error"); }
@@ -421,7 +421,7 @@ export default function Caja() {
                             ? (ing ? `Salida ${ing.vehiculo?.placa}` : men ? `Mensualidad ${men.vehiculo?.placa}` : m.concepto)
                             : m.concepto;
                           return (
-                            <tr key={m.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50">
+                            <tr key={m.id} className={m.anulado ? "opacity-70 bg-slate-50/70 dark:bg-slate-800/50" : "hover:bg-slate-50/80 dark:hover:bg-slate-700/50"}>
                               <td className="px-3 py-2.5">
                                 <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${esIngreso ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                                   <span className={`w-1.5 h-1.5 rounded-full ${esIngreso ? "bg-emerald-500" : "bg-red-500"}`} />
@@ -430,7 +430,9 @@ export default function Caja() {
                               </td>
                               <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 font-mono">{fac?.numero || "--"}</td>
                               <td className="px-3 py-2.5">
-                                <p className="text-sm font-medium text-slate-700 dark:text-white">{concepto}</p>
+                                <p className={`text-sm font-medium ${m.anulado ? "line-through text-slate-400" : "text-slate-700 dark:text-white"}`}>{concepto}</p>
+                                {m.anulado && <span className="inline-flex mt-1 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[9px] font-bold tracking-wide text-slate-600 dark:text-slate-300">ANULADO</span>}
+                                {m.anulado && m.motivoAnulacion && <p className="text-[10px] text-slate-400 mt-0.5">Motivo: {m.motivoAnulacion}</p>}
                                 {detalle && <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{detalle}</p>}
                               </td>
                               <td className="px-3 py-2.5">
@@ -446,10 +448,10 @@ export default function Caja() {
                               <td className="px-3 py-2.5 text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  <button onClick={() => abrirEditMov(m)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400" title="Editar">
+                                  <button disabled={m.anulado} onClick={() => abrirEditMov(m)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Movimiento anulado" : "Editar"}>
                                     <PenSquare className="w-3.5 h-3.5" />
                                   </button>
-                                  <button onClick={() => setMovimientoAnular(m)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400" title="Anular">
+                                  <button disabled={m.anulado} onClick={() => setMovimientoAnular(m)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Ya está anulado" : "Anular"}>
                                     <X className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
@@ -740,7 +742,9 @@ export default function Caja() {
                                   </td>
                                   <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-300 font-mono">{fac?.numero || "--"}</td>
                                   <td className="px-3 py-2.5">
-                                    <p className="text-sm font-medium text-slate-700 dark:text-white">{concepto}</p>
+                                    <p className={`text-sm font-medium ${m.anulado ? "line-through text-slate-400" : "text-slate-700 dark:text-white"}`}>{concepto}</p>
+                                    {m.anulado && <span className="inline-flex mt-1 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[9px] font-bold tracking-wide text-slate-600 dark:text-slate-300">ANULADO</span>}
+                                    {m.anulado && m.motivoAnulacion && <p className="text-[10px] text-slate-400 mt-0.5">Motivo: {m.motivoAnulacion}</p>}
                                     {detalle && <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{detalle}</p>}
                                   </td>
                                   <td className="px-3 py-2.5">
@@ -810,7 +814,7 @@ export default function Caja() {
       )}
 
       <ConfirmDialog abierto={!!eliminarId} titulo="Eliminar registro de caja" mensaje="Vas a eliminar este registro y sus movimientos asociados. Esta operación afecta el historial financiero y no se puede deshacer. Antes de continuar, verifica que no corresponda a un turno que deba conservarse para auditoría." confirmLabel="Eliminar registro" onConfirm={eliminarCaja} onCancel={() => setEliminarId(null)} />
-      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se anulará el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. El importe dejará de formar parte del resumen de esta caja.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
+      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se marcará como anulado el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. Se excluirá de los totales, pero el registro permanecerá visible para auditoría.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ScrollLock cuando={mostrarCerrar || mostrarEditar || !!mostrarDetalle || !!editMovimiento} />
     </div>
