@@ -35,7 +35,7 @@ const router = express.Router();
  *       400:
  *         description: Error de validacion
  */
-router.post("/", verificarToken, validate(crearAusenciaSchema), crearAusencia);
+router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(crearAusenciaSchema), crearAusencia);
 
 /**
  * @swagger
