@@ -29,7 +29,6 @@ async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asigna
       where: {
         puestoId,
         estado: { in: ["PENDIENTE", "CONFIRMADA"] },
-        fechaInicio: { lte: ahora },
         OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
         ...(asignacion.reservaId ? { id: { not: asignacion.reservaId } } : {}),
       },
@@ -214,7 +213,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
     });
     if (finalizado.count !== 1) throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
 
-    const [otroIngresoActivo, mensualidadVigenteEnPuesto] = await Promise.all([
+    const [otroIngresoActivo, mensualidadVigenteEnPuesto, reservaFutura] = await Promise.all([
       tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
       tx.mensualidad.count({
         where: {
@@ -224,10 +223,13 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
           fechaFin: { gte: fechaSalida },
         },
       }),
+      tx.reserva.count({
+        where: { puestoId: ingreso.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }] },
+      }),
     ]);
     const estadoPuesto = otroIngresoActivo > 0
       ? "OCUPADO"
-      : mensualidadVigenteEnPuesto > 0 ? "RESERVADO" : "LIBRE";
+      : mensualidadVigenteEnPuesto + reservaFutura > 0 ? "RESERVADO" : "LIBRE";
     await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: estadoPuesto } });
   });
   await registrarMovimiento("INGRESOS", "LIBERAR", `Ingreso #${id} finalizado — plan activo, puesto físicamente libre (asignación de plan preservada)`, req.usuario?.usuario || "admin");
@@ -294,7 +296,6 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
           where: {
             puestoId: ingreso.puestoId,
             estado: { in: ["PENDIENTE", "CONFIRMADA"] },
-            fechaInicio: { lte: new Date() },
             OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }],
           },
         }),
@@ -456,13 +457,16 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       include: { cliente: true, vehiculo: true, puesto: true },
     });
 
-    const [otroIngresoActivo, mensualidadEnPuesto] = await Promise.all([
+    const [otroIngresoActivo, mensualidadEnPuesto, reservaFutura] = await Promise.all([
       tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
       tx.mensualidad.count({
         where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: fechaSalida }, fechaFin: { gte: fechaSalida } },
       }),
+      tx.reserva.count({
+        where: { puestoId: ingreso.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }] },
+      }),
     ]);
-    const nuevoEstadoPuesto = otroIngresoActivo > 0 ? "OCUPADO" : mensualidadEnPuesto > 0 ? "RESERVADO" : "LIBRE";
+    const nuevoEstadoPuesto = otroIngresoActivo > 0 ? "OCUPADO" : mensualidadEnPuesto + reservaFutura > 0 ? "RESERVADO" : "LIBRE";
     await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: nuevoEstadoPuesto } });
 
     if (ingreso.reservaId) {
