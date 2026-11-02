@@ -36,7 +36,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       select: { id: true, fechaEntrada: true, fechaSalida: true, tiempoMinutos: true, valorPagado: true, vehiculo: { select: { placa: true, tipo: true } } },
       orderBy: { fechaSalida: "asc" },
     }),
-    prisma.puesto.groupBy({ by: ["estado"], _count: true, where: sf }),
+    prisma.puesto.groupBy({ by: ["estado"], _count: true, where: { activo: true, ...sf } }),
     prisma.ingreso.findMany({
       where: { fechaEntrada: rango, ...psf },
       select: { fechaEntrada: true },
@@ -45,6 +45,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   const totalPuestos = puestos.reduce((s, p) => s + p._count, 0);
   const puestosOcupados = puestos.find(p => p.estado === "OCUPADO")?._count || 0;
+  const puestosLibres = puestos.find(p => p.estado === "LIBRE")?._count || 0;
 
   const totalIngresos = facturas.reduce((s, f) => s + f.valor, 0);
   const totalGastos = gastos.reduce((s, g) => s + g.valor, 0);
@@ -82,7 +83,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       facturas: facturas.length,
       ingresosCount: ingresosPeriodo.length,
       gastosCount: gastos.length,
-      puestos: { total: totalPuestos, ocupados: puestosOcupados, libres: totalPuestos - puestosOcupados },
+      puestos: { total: totalPuestos, ocupados: puestosOcupados, libres: puestosLibres },
     },
     ingresosPorDia,
     ocupacionPorHora: horas,
