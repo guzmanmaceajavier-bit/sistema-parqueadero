@@ -21,7 +21,11 @@ describe("obtenerReporte", () => {
     prismaMock.puesto.groupBy.mockResolvedValue([]);
   });
 
-  it("aplica fechas, sucursal y pago confirmado a todos los totales del reporte", async () => {
+  it("aplica fechas y sucursal, y separa facturas pendientes de ingresos cobrados", async () => {
+    prismaMock.factura.findMany.mockResolvedValue([
+      { id: 1, numero: "PEND-1", valor: 100, metodoPago: null, createdAt: new Date("2026-10-02T10:00:00.000Z"), ingreso: null, mensualidad: null },
+      { id: 2, numero: "PAG-1", valor: 250, metodoPago: "efectivo", createdAt: new Date("2026-10-03T10:00:00.000Z"), ingreso: null, mensualidad: null },
+    ]);
     const resultado = await new Promise((resolve, reject) => {
       const req = { query: { fechaInicio: "2026-10-01", fechaFin: "2026-10-31", sucursalId: "7" } };
       const res = { json: vi.fn(resolve) };
@@ -30,7 +34,15 @@ describe("obtenerReporte", () => {
 
     expect(resultado).toMatchObject({
       ok: true,
-      resumen: { ingresos: 0, gastos: 0, utilidad: 0, puestos: { total: 0, libres: 0 } },
+      resumen: { ingresos: 250, gastos: 0, utilidad: 250, facturas: 2, puestos: { total: 0, libres: 0 } },
+      facturas: [
+        { id: 1, estadoPago: "PENDIENTE", metodoPago: null },
+        { id: 2, estadoPago: "PAGADA", metodoPago: "efectivo" },
+      ],
+      ingresosPorDia: expect.arrayContaining([
+        expect.objectContaining({ fecha: "2026-10-02", ingresos: 0 }),
+        expect.objectContaining({ fecha: "2026-10-03", ingresos: 250 }),
+      ]),
     });
 
     const rango = {
