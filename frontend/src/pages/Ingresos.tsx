@@ -479,12 +479,12 @@ export default function Ingresos() {
         gradient="from-amber-600 to-orange-500"
         icon={LogOut}
         titulo="Registrar Salida"
-        subtitulo="Revisa el desglose antes de confirmar"
+        subtitulo="Verifica el vehículo, el tiempo de permanencia y el importe que se registrará en caja."
         footer={
           <>
             <button onClick={() => { setMostrarModalSalida(false); setErrorSimulacion(""); }} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
             <button onClick={() => registrarSalida()} disabled={cargando} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-              {cargando ? "Procesando..." : "Confirmar Salida"}
+              {cargando ? "Registrando salida..." : "Registrar salida y cobrar"}
             </button>
           </>
         }
@@ -643,7 +643,7 @@ export default function Ingresos() {
       <ConfirmDialog
         abierto={!!eliminarId}
         titulo="Eliminar ingreso"
-        mensaje="¿Estás seguro de eliminar este ingreso? Esta acción no se puede deshacer."
+        mensaje="Vas a eliminar este registro de ingreso y las facturas asociadas. Esta acción solo está disponible para ingresos finalizados y no se puede deshacer; el historial de caja también se verá afectado."
         onConfirm={eliminarIngreso}
         onCancel={() => setEliminarId(null)}
       />
