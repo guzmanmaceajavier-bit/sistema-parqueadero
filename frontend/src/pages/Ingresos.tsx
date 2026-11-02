@@ -534,6 +534,12 @@ export default function Ingresos() {
               {simulacion.minutosCortesia > 0 && (
                 <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Cortesía:</span><span className="font-medium text-emerald-600 dark:text-emerald-400">{`-${simulacion.minutosCortesia} min`}</span></div>
               )}
+              {simulacion.minutosGratis > 0 && (
+                <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Minutos gratis de la tarifa:</span><span className="font-medium text-emerald-600 dark:text-emerald-400">{`-${simulacion.minutosGratis} min`}</span></div>
+              )}
+              {simulacion.minutosGracia > 0 && (
+                <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Gracia de configuración:</span><span className="font-medium text-emerald-600 dark:text-emerald-400">{`-${simulacion.minutosGracia} min`}</span></div>
+              )}
               <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Minutos facturables:</span><span className="font-medium dark:text-white">{`${simulacion.minutosFacturables} min`}</span></div>
               {simulacion.saldoUsado > 0 && (
                 <>
