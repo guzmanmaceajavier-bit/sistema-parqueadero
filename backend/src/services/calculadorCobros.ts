@@ -38,7 +38,11 @@ function diffMeses(fechaEntrada, fechaSalida) {
 
 export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSalida, ticketExtraviado, tarifaId }: { ingreso: any; tipoVehiculo?: string; modalidad?: string; fechaSalida?: Date; ticketExtraviado?: boolean; tarifaId?: number }) {
   const salida = fechaSalida || new Date();
-  const totalMinutos = diffMinutos(ingreso.fechaEntrada, salida);
+  const entrada = new Date(ingreso.fechaEntrada);
+  if (!Number.isFinite(entrada.getTime()) || !Number.isFinite(salida.getTime()) || salida < entrada) {
+    return { error: "La fecha de salida no puede ser anterior a la fecha de entrada.", total: 0, detalle: [] };
+  }
+  const totalMinutos = diffMinutos(entrada, salida);
 
   if (!tipoVehiculo) {
     const primerVehiculo = await prisma.vehiculo.findFirst({ where: { id: ingreso.vehiculoId } });
@@ -72,10 +76,6 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   if (!tarifa) {
     return { error: `No hay tarifa activa para ${tipoVehiculo} con modalidad ${modalidadNormalizada}`, total: 0, detalle: [] };
-  }
-
-  if (!tarifa) {
-    return { error: `No hay tarifa activa para ${tipoVehiculo}`, total: 0, detalle: [] };
   }
 
   const config = await prisma.configuracion.findFirst();
