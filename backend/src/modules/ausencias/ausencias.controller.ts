@@ -38,13 +38,13 @@ export const crearAusencia = asyncHandler(async (req, res) => {
 
     if (ingresoActivo) {
       const ahora = new Date();
-      const tiempoMinutos = Math.ceil((ahora - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
+      const tiempoMinutos = Math.ceil((ahora.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
 
       const numeroFactura = await generarNumeroFactura("FACT");
       const tarifa = await tx.tarifa.findFirst({
-        where: { tipoVehiculo: ingresoActivo.vehiculo.tipo, activa: true, sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null },
+        where: { tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined, activa: true, sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null },
         orderBy: { valor: "asc" },
       });
       let valorPagado = 0;
@@ -115,7 +115,7 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
   const existente = await prisma.ausencia.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
 
-  const data = {};
+  const data: any = {};
   if (fechaSalida) data.fechaSalida = new Date(fechaSalida);
   if (fechaRegreso !== undefined) data.fechaRegreso = fechaRegreso ? new Date(fechaRegreso) : null;
   if (motivo !== undefined) data.motivo = motivo;
