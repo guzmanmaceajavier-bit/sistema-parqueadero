@@ -19,6 +19,17 @@ describe("obtenerPeriodoReporte", () => {
     expect(finExclusivo.toISOString()).toBe("2026-10-02T00:00:00.000Z");
   });
 
+  it("calcula correctamente el inicio del día en zonas al este de UTC", () => {
+    const { inicio, finExclusivo } = obtenerPeriodoReporte(
+      "2026-01-15",
+      "2026-01-15",
+      new Date("2026-01-15T12:00:00.000Z"),
+      "Europe/Berlin",
+    );
+    expect(inicio.toISOString()).toBe("2026-01-14T23:00:00.000Z");
+    expect(finExclusivo.toISOString()).toBe("2026-01-15T23:00:00.000Z");
+  });
+
   it("rechaza fechas inexistentes y formatos ambiguos", () => {
     expect(() => obtenerPeriodoReporte("2026-02-30", "2026-03-01")).toThrow(RangeError);
     expect(() => obtenerPeriodoReporte("01/10/2026", "2026-10-02")).toThrow(RangeError);
