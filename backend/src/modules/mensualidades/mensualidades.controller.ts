@@ -119,7 +119,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
 export const obtenerMensualidades = asyncHandler(async (req, res) => {
   const { page, limit, estado, q } = req.query;
   const where: Prisma.MensualidadWhereInput = {};
-  if (typeof estado === "string") where.estado = estado as Prisma.EnumEstadoMensualidadFilter["equals"];
+  if (typeof estado === "string") where.estado = estado as string;
   if (typeof q === "string") {
     where.OR = [
       { cliente: { nombres: { contains: q, mode: "insensitive" } } },
