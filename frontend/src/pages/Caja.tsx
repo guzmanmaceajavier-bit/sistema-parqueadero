@@ -45,7 +45,7 @@ export default function Caja() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [cargando, setCargando] = useState(false);
-  const [eliminarId, setEliminarId] = useState(null);
+  const [eliminarId, setEliminarId] = useState(null);\n  const [movimientoAnular, setMovimientoAnular] = useState(null);
 
   const [mostrarCerrar, setMostrarCerrar] = useState(false);
   const [mostrarEditar, setMostrarEditar] = useState(false);
@@ -446,7 +446,7 @@ export default function Caja() {
                                   <button onClick={() => abrirEditMov(m)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400" title="Editar">
                                     <PenSquare className="w-3.5 h-3.5" />
                                   </button>
-                                  <button onClick={() => anularMovimiento(m.id)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400" title="Anular">
+                                  <button onClick={() => setMovimientoAnular(m)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400" title="Anular">
                                     <X className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
@@ -617,13 +617,13 @@ export default function Caja() {
 
               <div>
                 <label className={labelClass}>Observación (opcional)</label>
-                <textarea placeholder="Nota de cierre..." value={formCerrar.observacion} onChange={(e) => setFormCerrar(p => ({ ...p, observacion: e.target.value }))} className={inputClass + " resize-none"} rows={2} />
+                <textarea placeholder="Ej. Diferencia por cambio, retiro de efectivo o novedad del turno..." value={formCerrar.observacion} onChange={(e) => setFormCerrar(p => ({ ...p, observacion: e.target.value }))} className={inputClass + " resize-none"} rows={2} />
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700">
               <button onClick={() => setMostrarCerrar(false)} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
               <button onClick={cerrarCaja} disabled={cargando} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-                {cargando ? "Cerrando..." : "Cerrar Caja"}
+                {cargando ? "Guardando cierre..." : "Cerrar turno y guardar arqueo"}
               </button>
             </div>
           </div>
@@ -806,7 +806,7 @@ export default function Caja() {
         </div>
       )}
 
-      <ConfirmDialog abierto={!!eliminarId} titulo="Eliminar caja" mensaje="¿Estás seguro de eliminar este registro de caja? Esta acción no se puede deshacer." onConfirm={eliminarCaja} onCancel={() => setEliminarId(null)} />
+      <ConfirmDialog abierto={!!eliminarId} titulo="Eliminar registro de caja" mensaje="Vas a eliminar este registro y sus movimientos asociados. Esta operación afecta el historial financiero y no se puede deshacer. Antes de continuar, verifica que no corresponda a un turno que deba conservarse para auditoría." confirmLabel="Eliminar registro" onConfirm={eliminarCaja} onCancel={() => setEliminarId(null)} />\n      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se anulará el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. El importe dejará de formar parte del resumen de esta caja.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ScrollLock cuando={mostrarCerrar || mostrarEditar || !!mostrarDetalle || !!editMovimiento} />
     </div>
