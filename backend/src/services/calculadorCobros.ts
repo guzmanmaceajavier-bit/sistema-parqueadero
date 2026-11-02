@@ -189,11 +189,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     default: {
-      const horas = minutosFacturables <= 0 ? 0 : Math.max(1, Math.ceil(minutosFacturables / 60));
-      const valor = aplicarTopeDiario(horas * tarifa.valor);
-      detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) (tarifa por defecto) × ${tarifa.valor}`, valor });
-      total = valor;
-      desglose = { minutosFacturables, horas, valor, unidad: "hora" };
+      return { error: "La modalidad de tarifa no está soportada.", total: 0, detalle: [] };
     }
   }
 
