@@ -76,7 +76,8 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   const existe = await prisma.gasto.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Gasto no encontrado", 404);
 
-  const movimiento = await prisma.cajaMovimiento.findFirst({ where: { gastoId: Number(id) }, include: { caja: true } });
+  const movimiento = await prisma.cajaMovimiento.findFirst({ where: { gastoId: Number(id), anulado: false }, include: { caja: true } });
+  if (movimiento?.anulado) throw new AppError("No se puede modificar un gasto cuyo movimiento ya fue anulado", 409);
   if (movimiento && movimiento.caja?.estado === "CERRADA") {
     throw new AppError("No se puede modificar un gasto que pertenece a una caja cerrada", 400);
   }
@@ -112,17 +113,17 @@ export const eliminarGasto = asyncHandler(async (req, res) => {
   if (!gasto) throw new AppError("Gasto no encontrado", 404);
 
   const movimientos = await prisma.cajaMovimiento.findMany({
-    where: { gastoId: Number(id), anulado: false },
+    where: { gastoId: Number(id) },
     include: { caja: true },
   });
-  if (movimientos.some(m => m.caja?.estado === "CERRADA")) {
+  if (movimientos.some(m => !m.anulado && m.caja?.estado === "CERRADA")) {
     throw new AppError("No se puede eliminar un gasto que participó en una caja cerrada. El registro financiero debe conservarse.", 409);
   }
 
   await prisma.$transaction(async (tx) => {
     if (movimientos.length > 0) {
       await tx.cajaMovimiento.updateMany({
-        where: { gastoId: Number(id), anulado: false },
+        where: { gastoId: Number(id) },
         data: {
           anulado: true,
           anuladoEn: new Date(),
