@@ -31,6 +31,13 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
   const sucursalFilter = sucursalId ? { sucursalId } : {};
   const puestoSucursalFilter = sucursalId ? { puesto: { sucursalId } } : {};
+  const ahora = new Date();
+  const mensualidadVigenteFilter = {
+    estado: "ACTIVA",
+    fechaInicio: { lte: ahora },
+    fechaFin: { gte: ahora },
+    ...sucursalFilter,
+  };
 
   const [
     puestos,
@@ -61,7 +68,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
     prisma.gasto.aggregate({ _sum: { valor: true }, where: { fecha: { gte: hoy }, ...sucursalFilter } }),
 
-    prisma.mensualidad.groupBy({ by: ["estado"], _count: true, where: { estado: "ACTIVA", ...sucursalFilter } }),
+    prisma.mensualidad.groupBy({ by: ["estado"], _count: true, where: mensualidadVigenteFilter }),
 
     prisma.cliente.groupBy({ by: ["estado"], _count: true, where: sucursalId ? { vehiculos: { some: { sucursalId } } } : {} }),
 
@@ -96,7 +103,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     prisma.reserva.groupBy({ by: ["estado"], _count: true, where: { createdAt: { gte: hoy }, ...sucursalFilter } }),
 
     prisma.mensualidad.count({ where: { fechaFin: { lt: hoy }, estado: "ACTIVA", ...sucursalFilter } }),
-    prisma.mensualidad.count({ where: { fechaFin: { gte: hoy, lte: finSemana }, estado: "ACTIVA", ...sucursalFilter } }),
+    prisma.mensualidad.count({ where: { ...mensualidadVigenteFilter, fechaFin: { gte: ahora, lte: finSemana } } }),
 
     prisma.factura.findMany({ where: { createdAt: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.gasto.findMany({ where: { fecha: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, fecha: true }, orderBy: { fecha: "asc" } }),
