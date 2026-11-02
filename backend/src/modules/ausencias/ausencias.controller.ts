@@ -159,7 +159,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     }
 
     const ingresoAusencia = await tx.ingreso.findFirst({
-      where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
+      where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { vehiculo: { sucursalId } } : {}), estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
       orderBy: { fechaSalida: "desc" },
     });
     if (ingresoAusencia?.puestoId) {
@@ -207,7 +207,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
 export const eliminarAusencia = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const existente = await prisma.ausencia.findUnique({ where: { id: Number(id) } });
+  const existente = await prisma.ausencia.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
 
   await prisma.ausencia.delete({ where: { id: Number(id) } });
