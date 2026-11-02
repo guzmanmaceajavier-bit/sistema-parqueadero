@@ -67,24 +67,26 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
 
   let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId);
-  let planDetectado = null;
-  if (reservaVinculada) {
-    if (reservaVinculada.puestoId && puestoId && Number(puestoId) !== reservaVinculada.puestoId) {
-      throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Utiliza el puesto reservado.", 409);
+  let planDetectado = await prisma.mensualidad.findFirst({
+    where: {
+      vehiculoId,
+      estado: "ACTIVA",
+      fechaInicio: { lte: new Date() },
+      fechaFin: { gte: new Date() },
+      puestoId: { not: null },
+    },
+    include: { plan: true, puesto: true },
+  });
+
+  if (reservaVinculada?.puestoId && planDetectado?.puestoId && reservaVinculada.puestoId !== planDetectado.puestoId) {
+    throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
+  }
+  const puestoAsignado = reservaVinculada?.puestoId ?? planDetectado?.puestoId;
+  if (puestoAsignado) {
+    if (puestoId && Number(puestoId) !== puestoAsignado) {
+      throw new AppError("El vehículo tiene un puesto asignado por su reserva o mensualidad. Utiliza el puesto indicado.", 409);
     }
-    if (reservaVinculada.puestoId) puestoId = reservaVinculada.puestoId;
-  } else {
-    const mensualidadVigente = await prisma.mensualidad.findFirst({
-      where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
-      include: { plan: true, puesto: true },
-    });
-    if (mensualidadVigente?.puestoId) {
-      if (puestoId && Number(puestoId) !== mensualidadVigente.puestoId) {
-        throw new AppError("El vehículo tiene un puesto asignado por su mensualidad. Utiliza el puesto del plan.", 409);
-      }
-      puestoId = mensualidadVigente.puestoId;
-      planDetectado = mensualidadVigente;
-    }
+    puestoId = puestoAsignado;
   }
 
   if (!puestoId) throw new AppError("Debes seleccionar un puesto o tener una reserva activa o plan vigente", 400);
