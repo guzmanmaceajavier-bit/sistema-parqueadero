@@ -2,7 +2,7 @@ import prisma from "../../config/prisma.js";
 
 export async function calcularTotalesHelper(cajaId: number, db: { cajaMovimiento: typeof prisma.cajaMovimiento } = prisma) {
   const movs = await db.cajaMovimiento.findMany({
-    where: { cajaId },
+    where: { cajaId, anulado: false },
     select: { monto: true, tipo: true, metodoPago: true },
   });
 
