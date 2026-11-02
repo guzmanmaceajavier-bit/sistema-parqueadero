@@ -27,7 +27,15 @@ const PRESETS = [
 
 export default function Reportes() {
   const { config } = useConfig();
-  const zonaHoraria = config?.zonaHoraria || "America/Bogota";
+  const zonaHoraria = (() => {
+    const candidata = config?.zonaHoraria || "America/Bogota";
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: candidata }).format(new Date());
+      return candidata;
+    } catch {
+      return "America/Bogota";
+    }
+  })();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [preset, setPreset] = useState("mes");
