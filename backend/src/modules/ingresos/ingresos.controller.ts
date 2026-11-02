@@ -123,6 +123,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
           fechaInicio: { lte: ahora },
           OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
         },
+        include: { puesto: true },
         orderBy: { fechaInicio: "asc" },
       }),
       tx.mensualidad.findFirst({
