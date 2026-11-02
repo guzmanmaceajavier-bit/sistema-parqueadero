@@ -1,12 +1,18 @@
 import prisma from "../../config/prisma.js";
-import { asyncHandler } from "../../middlewares/error.middleware.js";
+import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 
 export const obtenerDashboard = asyncHandler(async (req, res) => {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
   const filtro = req.query.filtro || "hoy";
-  const sucursalId = req.query.sucursalId ? Number(req.query.sucursalId) : undefined;
+  if (!["hoy", "semana", "mes"].includes(String(filtro))) {
+    throw new AppError("El período del dashboard no es válido", 400);
+  }
+  const sucursalId = req.query.sucursalId === undefined ? undefined : Number(req.query.sucursalId);
+  if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId <= 0)) {
+    throw new AppError("La sucursal seleccionada no es válida", 400);
+  }
 
   let inicioSemana, principioMes, sieteDiasAtras, principioAnio, finSemana;
 
@@ -62,9 +68,9 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     prisma.ingreso.count({ where: { estado: "ACTIVO", ...puestoSucursalFilter } }),
     prisma.ingreso.count({ where: { createdAt: { gte: hoy }, ...puestoSucursalFilter } }),
 
-    prisma.factura.aggregate({ _sum: { valor: true }, where: { createdAt: { gte: hoy }, ...sucursalFilter } }),
-    prisma.factura.aggregate({ _sum: { valor: true }, where: { createdAt: { gte: principioMes }, ...sucursalFilter } }),
-    prisma.factura.aggregate({ _sum: { valor: true }, where: { createdAt: { gte: inicioSemana }, ...sucursalFilter } }),
+    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: hoy }, ...sucursalFilter } }),
+    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: principioMes }, ...sucursalFilter } }),
+    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: inicioSemana }, ...sucursalFilter } }),
 
     prisma.gasto.aggregate({ _sum: { valor: true }, where: { fecha: { gte: hoy }, ...sucursalFilter } }),
 
@@ -100,15 +106,15 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
         ).catch(() => []),
     prisma.caja.findFirst({ where: { estado: "ABIERTA", ...sucursalFilter }, select: { id: true, apertura: true, createdAt: true } }),
 
-    prisma.reserva.groupBy({ by: ["estado"], _count: true, where: { createdAt: { gte: hoy }, ...sucursalFilter } }),
+    prisma.reserva.groupBy({ by: ["estado"], _count: true, where: { fechaInicio: { gte: hoy, lt: new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1) }, ...sucursalFilter } }),
 
     prisma.mensualidad.count({ where: { fechaFin: { lt: hoy }, estado: "ACTIVA", ...sucursalFilter } }),
     prisma.mensualidad.count({ where: { ...mensualidadVigenteFilter, fechaFin: { gte: ahora, lte: finSemana } } }),
 
-    prisma.factura.findMany({ where: { createdAt: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+    prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.gasto.findMany({ where: { fecha: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, fecha: true }, orderBy: { fecha: "asc" } }),
     prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: sucursalFilter }),
-    prisma.factura.findMany({ where: { createdAt: { gte: principioAnio || new Date(hoy.getFullYear(), 0, 1) }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+    prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: principioAnio || new Date(hoy.getFullYear(), 0, 1) }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const puestosMap = Object.fromEntries(puestos.map(p => [p.estado, p._count]));
