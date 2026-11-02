@@ -536,7 +536,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
-  const fechaSalida = new Date();
+  let fechaSalida = new Date();
   const mp = metodoPago || "efectivo";
 
   const ahora = new Date();
@@ -588,17 +588,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
     // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
-    // Serializa consumos de saldo incluso si provienen de otros ingresos del cliente.
-    if (!cubiertoPorPlan && ingreso.clienteId) {
-      await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
-      const clienteActual = await tx.cliente.findUnique({
-        where: { id: ingreso.clienteId },
-        select: { saldo: true },
-      });
-      const saldoDisponible = clienteActual?.saldo ?? 0;
-      saldoUsado = Math.min(Math.max(0, saldoDisponible), cobroTotal);
-      valorFinal = Math.max(0, cobroTotal - saldoUsado);
-    }
+    // La hora efectiva se fija después de obtener los bloqueos, no antes de esperar.
+    fechaSalida = new Date();
 
     const ingresoActual = await tx.ingreso.findUnique({
       where: { id: Number(id) },
@@ -627,13 +618,39 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       throw new AppError("La cobertura de la mensualidad cambió durante la operación. Vuelve a simular el cobro.", 409);
     }
 
+    // Recalcula con la hora efectiva de salida tras esperar los bloqueos.
+    if (!cubiertoPorPlan) {
+      const cobroActual = await calcularCobro({
+        ingreso,
+        tipoVehiculo: ingreso.vehiculo.tipo || undefined,
+        fechaSalida,
+        ticketExtraviado,
+        tarifaId: ingreso.vehiculo.tarifaId ?? undefined,
+      });
+      if (cobroActual.error) throw new AppError(cobroActual.error, 400);
+      cobroTotal = cobroActual.total;
+      cobroTotalMinutos = cobroActual.totalMinutos ?? 0;
+
+      // Bloquea y lee el saldo actual para evitar consumir crédito ya utilizado.
+      if (ingreso.clienteId) {
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
+        const clienteActual = await tx.cliente.findUnique({
+          where: { id: ingreso.clienteId },
+          select: { saldo: true },
+        });
+        const saldoDisponible = clienteActual?.saldo ?? 0;
+        saldoUsado = Math.min(Math.max(0, saldoDisponible), cobroTotal);
+      }
+      valorFinal = Math.max(0, cobroTotal - saldoUsado);
+    }
+
     const salidaActualizada = await tx.ingreso.updateMany({
       where: { id: Number(id), estado: "ACTIVO" },
       data: {
         fechaSalida,
         estado: "FINALIZADO",
         tiempoMinutos: cobroTotalMinutos,
-        valorPagado: cubiertoPorPlan ? 0 : cobroTotal,
+        valorPagado: cubiertoPorPlan ? 0 : valorFinal,
         ...(ticketExtraviado ? { ticketExtraviado: true } : {}),
       },
     });
