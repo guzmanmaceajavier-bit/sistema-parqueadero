@@ -5,6 +5,7 @@ const prismaMock = vi.hoisted(() => ({
   gasto: { findMany: vi.fn() },
   ingreso: { findMany: vi.fn() },
   puesto: { groupBy: vi.fn() },
+  configuracion: { findFirst: vi.fn() },
 }));
 
 vi.mock("../../config/prisma.js", () => ({ default: prismaMock }));
@@ -19,6 +20,7 @@ describe("obtenerReporte", () => {
     prismaMock.gasto.findMany.mockResolvedValue([]);
     prismaMock.ingreso.findMany.mockResolvedValue([]);
     prismaMock.puesto.groupBy.mockResolvedValue([]);
+    prismaMock.configuracion.findFirst.mockResolvedValue({ zonaHoraria: "UTC" });
   });
 
   it("aplica fechas y sucursal, y separa facturas pendientes de ingresos cobrados", async () => {
