@@ -42,6 +42,11 @@ function partesFechaEnZona(fecha: Date, timeZone: string): FechaCalendario {
   return { year, month, day };
 }
 
+export function obtenerFechaClaveEnZona(fecha: Date, timeZone: string): string {
+  const partes = partesFechaEnZona(fecha, timeZone);
+  return `${partes.year}-${String(partes.month).padStart(2, "0")}-${String(partes.day).padStart(2, "0")}`;
+}
+
 function parseFechaCalendario(value: unknown, campo: string): FechaCalendario {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new RangeError(`La fecha ${campo} debe tener formato YYYY-MM-DD`);
