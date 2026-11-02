@@ -1,6 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
+import { resumirEstadosPuestos } from "../../utils/puestos.js";
 
 export const obtenerReporte = asyncHandler(async (req, res) => {
   const { fechaInicio, fechaFin } = req.query;
@@ -43,9 +44,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  const totalPuestos = puestos.reduce((s, p) => s + p._count, 0);
-  const puestosOcupados = puestos.find(p => p.estado === "OCUPADO")?._count || 0;
-  const puestosLibres = puestos.find(p => p.estado === "LIBRE")?._count || 0;
+  const resumenPuestos = resumirEstadosPuestos(puestos);
 
   const totalIngresos = facturas.reduce((s, f) => s + f.valor, 0);
   const totalGastos = gastos.reduce((s, g) => s + g.valor, 0);
@@ -83,7 +82,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       facturas: facturas.length,
       ingresosCount: ingresosPeriodo.length,
       gastosCount: gastos.length,
-      puestos: { total: totalPuestos, ocupados: puestosOcupados, libres: puestosLibres },
+      puestos: resumenPuestos,
     },
     ingresosPorDia,
     ocupacionPorHora: horas,
