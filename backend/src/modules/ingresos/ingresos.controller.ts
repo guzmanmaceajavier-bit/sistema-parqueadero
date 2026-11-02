@@ -185,15 +185,16 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
 
 export const obtenerIngresos = asyncHandler(async (req, res) => {
   const { page, limit, estado, clienteId, q } = req.query;
-  const where = {};
-  if (estado) where.estado = estado;
+  const where: any = {};
+  if (estado) where.estado = String(estado);
   if (clienteId) where.clienteId = Number(clienteId);
   if (q) {
+    const queryText = String(q);
     where.OR = [
-      { cliente: { nombres: { contains: q, mode: "insensitive" } } },
-      { cliente: { apellidos: { contains: q, mode: "insensitive" } } },
-      { vehiculo: { placa: { contains: q, mode: "insensitive" } } },
-      { puesto: { codigo: { contains: q, mode: "insensitive" } } },
+      { cliente: { nombres: { contains: queryText, mode: "insensitive" } } },
+      { cliente: { apellidos: { contains: queryText, mode: "insensitive" } } },
+      { vehiculo: { placa: { contains: queryText, mode: "insensitive" } } },
+      { puesto: { codigo: { contains: queryText, mode: "insensitive" } } },
     ];
   }
 
@@ -203,8 +204,8 @@ export const obtenerIngresos = asyncHandler(async (req, res) => {
     orderBy: { id: "desc" },
   });
 
-  const vehiculoIdsFinalizados = [...new Set(ingresos.filter(i => i.fechaSalida).map(i => i.vehiculoId))];
-  let ausenciasMap = {};
+  const vehiculoIdsFinalizados: number[] = [...new Set<number>(ingresos.filter((i: any) => i.fechaSalida).map((i: any) => Number(i.vehiculoId)))];
+  const ausenciasMap: Record<number, any> = {};
   if (vehiculoIdsFinalizados.length > 0) {
     const ausencias = await prisma.ausencia.findMany({
       where: { vehiculoId: { in: vehiculoIdsFinalizados }, estado: "FINALIZADA" },
@@ -771,9 +772,9 @@ export const ticketEntrada = asyncHandler(async (req, res) => {
     ingreso: ing.fechaEntrada ? new Date(ing.fechaEntrada).toLocaleString('es-CO') : '',
     puesto: ing.puesto?.codigo || '',
     parqueadero: config?.nombreParqueadero || 'Parqueadero',
-    direccion: config?.direccion,
-    telefono: config?.telefono,
-    correo: config?.correo,
+    direccion: config?.direccion ?? undefined,
+    telefono: config?.telefono ?? undefined,
+    correo: config?.correo ?? undefined,
   });
 
   res.setHeader('Content-Type', 'application/pdf');
