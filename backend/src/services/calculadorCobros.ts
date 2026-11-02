@@ -4,14 +4,6 @@ function diffMinutos(fechaEntrada: Date, fechaSalida: Date): number {
   return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60));
 }
 
-function diffDias(fechaEntrada: Date, fechaSalida: Date): number {
-  return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function diffSemanas(fechaEntrada: Date, fechaSalida: Date): number {
-  return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60 * 60 * 24 * 7));
-}
-
 function diffMeses(fechaEntrada: Date, fechaSalida: Date): number {
   // Cada periodo vence en el aniversario mensual; si el mes no tiene ese día,
   // se utiliza su último día (por ejemplo, 31 de enero -> 28/29 de febrero).
@@ -83,7 +75,9 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   const minutosGratis = tarifa.minutosGratis || 0;
   const cortesia = tarifa.minutosCortesia || 0;
 
-  let minutosFacturables = Math.max(0, totalMinutos - cortesia - minutosGratis - minutosGracia);
+  const minutosNoFacturables = cortesia + minutosGratis + minutosGracia;
+  const minutosFacturables = Math.max(0, totalMinutos - minutosNoFacturables);
+  const fechaInicioFacturable = new Date(entrada.getTime() + minutosNoFacturables * 60000);
 
   // Ticket extraviado: cobrar tarifa máxima del día
   if (ticketExtraviado && tarifa.tarifaMaximaDiaria) {
@@ -109,6 +103,13 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     return minutosFacturables <= 0 ? 0 : valor;
   }
 
+  // El máximo diario se aplica por cada bloque de 24 horas facturables.
+  function aplicarTopeDiario(valor: number): number {
+    if (minutosFacturables <= 0 || tarifa.tarifaMaximaDiaria == null || tarifa.tarifaMaximaDiaria <= 0) return valor;
+    const bloquesDiarios = Math.ceil(minutosFacturables / 1440);
+    return Math.min(valor, tarifa.tarifaMaximaDiaria * bloquesDiarios);
+  }
+
   let detalle = [];
   let total = 0;
   let desglose = {};
@@ -118,7 +119,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   switch (tarifa.modalidad) {
     case "minuto": {
       const base = Math.ceil(minutosFacturables * tarifa.valor);
-      const valor = minCargo(base);
+      const valor = aplicarTopeDiario(minCargo(base));
       detalle.push({ concepto: `${totalMinutos} min - ${cortesia + minutosGratis + minutosGracia} min gratis = ${minutosFacturables} min facturables → $${valor}`, valor });
       total = valor;
       desglose = { minutosFacturables, valor, unidad: "min" };
@@ -134,15 +135,13 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
             valor += (horas - 1) * (tarifa.precioHoraAdicional ?? 0);
           }
         }
-        if (tarifa.tarifaMaximaDiaria && valor > tarifa.tarifaMaximaDiaria) {
-          valor = tarifa.tarifaMaximaDiaria;
-        }
+        valor = aplicarTopeDiario(valor);
         detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) (1ª hra: $${tarifa.precioPrimeraHora}, adic: $${tarifa.precioHoraAdicional})`, valor });
         total = valor;
         desglose = { minutosFacturables, horas, valor, unidad: "hora_progresiva" };
       } else {
         const horas = Math.ceil(minutosFacturables / 60);
-        const valor = horas * tarifa.valor;
+        const valor = aplicarTopeDiario(horas * tarifa.valor);
         detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) × $${tarifa.valor}`, valor });
         total = valor;
         desglose = { minutosFacturables, horas, valor, unidad: "hora" };
@@ -150,7 +149,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "diario": {
-      const dias = minutosFacturables <= 0 ? 0 : Math.max(1, diffDias(ingreso.fechaEntrada, salida));
+      const dias = Math.ceil(minutosFacturables / 1440);
       const valor = dias * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${dias} día(s) × $${tarifa.valor}`, valor });
       total = valor;
@@ -158,7 +157,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "semanal": {
-      const semanas = minutosFacturables <= 0 ? 0 : Math.max(1, diffSemanas(ingreso.fechaEntrada, salida));
+      const semanas = Math.ceil(minutosFacturables / (7 * 1440));
       const valor = semanas * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${semanas} semana(s) × $${tarifa.valor}`, valor });
       total = valor;
@@ -166,7 +165,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "quincenal": {
-      const quincenas = minutosFacturables <= 0 ? 0 : Math.max(1, Math.ceil(diffDias(ingreso.fechaEntrada, salida) / 15));
+      const quincenas = Math.ceil(minutosFacturables / (15 * 1440));
       const valor = quincenas * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${quincenas} quincena(s) × $${tarifa.valor}`, valor });
       total = valor;
@@ -174,7 +173,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "mensual": {
-      const meses = minutosFacturables <= 0 ? 0 : diffMeses(ingreso.fechaEntrada, salida);
+      const meses = minutosFacturables <= 0 ? 0 : diffMeses(fechaInicioFacturable, salida);
       const valor = meses * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${meses} mes(es) × $${tarifa.valor}`, valor });
       total = valor;
