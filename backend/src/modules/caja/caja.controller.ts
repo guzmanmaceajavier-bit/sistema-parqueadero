@@ -50,11 +50,23 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
     let diferencia = 0;
 
     if (conteo) {
+      const billetesValidos = new Set([100000, 50000, 20000, 10000, 5000, 2000, 1000]);
+      const monedasValidas = new Set([1000, 500, 200, 100, 50]);
       for (const [denom, count] of Object.entries(conteo.billetes || {})) {
-        totalConteo += Number(denom) * (Number(count) || 0);
+        const denominacion = Number(denom);
+        const cantidad = Number(count);
+        if (!billetesValidos.has(denominacion) || !Number.isInteger(cantidad) || cantidad < 0) {
+          throw new AppError("El conteo contiene una denominación de billete o cantidad no válida", 400);
+        }
+        totalConteo += denominacion * cantidad;
       }
       for (const [denom, count] of Object.entries(conteo.monedas || {})) {
-        totalConteo += Number(denom) * (Number(count) || 0);
+        const denominacion = Number(denom);
+        const cantidad = Number(count);
+        if (!monedasValidas.has(denominacion) || !Number.isInteger(cantidad) || cantidad < 0) {
+          throw new AppError("El conteo contiene una denominación de moneda o cantidad no válida", 400);
+        }
+        totalConteo += denominacion * cantidad;
       }
       diferencia = totalConteo - esperado;
       const arqueoData = { conteo, totalConteo, esperado, diferencia };
