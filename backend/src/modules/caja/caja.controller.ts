@@ -5,14 +5,16 @@ import { emitirEvento } from "../../services/socket.js";
 import { paginate } from "../../utils/pagination.js";
 import { calcularTotalesHelper } from "./caja.helpers.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const abrirCaja = asyncHandler(async (req, res) => {
   const { apertura, password, observacion } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
 
   const caja = await prisma.$transaction(async (tx) => {
     // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+    const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) } });
     if (abierta) throw new AppError("Ya hay una caja abierta", 400);
 
     const usuarioId = req.usuario?.id;
@@ -24,7 +26,7 @@ export const abrirCaja = asyncHandler(async (req, res) => {
     if (!valida) throw new AppError("Contraseña incorrecta", 401);
 
     return tx.caja.create({
-      data: { apertura: Number(apertura), observacion, usuarioId },
+      data: { apertura: Number(apertura), observacion, usuarioId, sucursalId: sucursalId ?? null },
     });
   });
 
@@ -37,11 +39,12 @@ export const abrirCaja = asyncHandler(async (req, res) => {
 export const cerrarCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { observacion, conteo } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
 
   const resultado = await prisma.$transaction(async (tx) => {
     // Comparte el bloqueo global con la apertura para evitar cierres/aperturas solapados.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const caja = await tx.caja.findUnique({ where: { id: Number(id) } });
+    const caja = await tx.caja.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (!caja) throw new AppError("Caja no encontrada", 404);
     if (caja.estado !== "ABIERTA") throw new AppError("La caja ya está cerrada", 409);
 
@@ -92,8 +95,9 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
 });
 
 export const obtenerCajaActiva = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const caja = await prisma.caja.findFirst({
-    where: { estado: "ABIERTA" },
+    where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) },
     include: { usuario: { select: { id: true, nombre: true, usuario: true } } },
   });
   if (!caja) return res.json({ ok: true, caja: null });
@@ -112,8 +116,10 @@ export const obtenerCajaActiva = asyncHandler(async (req, res) => {
 
 export const obtenerCajas = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { data: cajas, pagination } = await paginate(prisma, "caja", {
     page, limit,
+    where: sucursalId ? { sucursalId } : {},
     orderBy: { id: "desc" },
     include: {
       usuario: { select: { id: true, nombre: true, usuario: true } },
@@ -124,8 +130,9 @@ export const obtenerCajas = asyncHandler(async (req, res) => {
 
 export const obtenerCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const caja = await prisma.caja.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const caja = await prisma.caja.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: {
       movimientos: { orderBy: { createdAt: "desc" } },
       usuario: { select: { id: true, nombre: true, usuario: true } },
@@ -139,11 +146,12 @@ export const obtenerCaja = asyncHandler(async (req, res) => {
 
 export const actualizarCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { apertura, observacion } = req.body;
 
   const caja = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const existente = await tx.caja.findUnique({ where: { id: Number(id) } });
+    const existente = await tx.caja.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (!existente) throw new AppError("Caja no encontrada", 404);
 
     if (existente.estado !== "ABIERTA") {
