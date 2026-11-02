@@ -110,6 +110,22 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const existe = await tx.gasto.findUnique({ where: { id: Number(id) } });
     if (!existe) throw new AppError("Gasto no encontrado", 404);
+
+    const recurrenciaFinal = recurrente !== undefined ? recurrente : existe.recurrente;
+    const periodicidadFinal = periodicidad !== undefined ? periodicidad : existe.periodicidad;
+    if (recurrenciaFinal) {
+      if (!periodicidadFinal) throw new AppError("Selecciona una periodicidad para el gasto recurrente", 400);
+      data.recurrente = true;
+      data.periodicidad = periodicidadFinal;
+      if (recurrente === true || periodicidad !== undefined) {
+        data.proximaGeneracion = calcularProximaGeneracion(periodicidadFinal);
+      }
+    } else if (recurrente === false) {
+      data.recurrente = false;
+      data.proximaGeneracion = null;
+    }
+
+    if (Object.keys(data).length === 0) throw new AppError("No hay cambios válidos para guardar", 400);
     const movimientos = await tx.cajaMovimiento.findMany({
       where: { gastoId: Number(id) },
       include: { caja: true },
