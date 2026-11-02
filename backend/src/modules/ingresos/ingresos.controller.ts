@@ -126,6 +126,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
         where: {
           clienteId,
           vehiculoId,
+          ...(sucursalId ? { sucursalId } : {}),
           estado: { in: ["PENDIENTE", "CONFIRMADA"] },
           fechaInicio: { lte: ahora },
           OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
@@ -136,6 +137,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       tx.mensualidad.findFirst({
         where: {
           vehiculoId,
+          ...(sucursalId ? { sucursalId } : {}),
           estado: "ACTIVA",
           fechaInicio: { lte: ahora },
           fechaFin: { gte: ahora },
@@ -258,6 +260,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   const planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
+      ...(sucursalId ? { sucursalId } : {}),
       estado: "ACTIVA",
       fechaInicio: { lte: new Date() },
       fechaFin: { gte: new Date() },
@@ -355,6 +358,14 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
 
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (vehiculo.sucursalId !== ingreso.vehiculo.sucursalId || (sucursalId && vehiculo.sucursalId !== sucursalId)) {
+    throw new AppError("No puedes reasignar el ingreso a un vehículo de otra sucursal", 403);
+  }
+  const puestoDestino = await prisma.puesto.findUnique({ where: { id: nuevoPuestoId } });
+  if (!puestoDestino) throw new AppError("Puesto no encontrado", 404);
+  if (puestoDestino.sucursalId !== ingreso.vehiculo.sucursalId || (sucursalId && puestoDestino.sucursalId !== sucursalId)) {
+    throw new AppError("No puedes reasignar el ingreso a un puesto de otra sucursal", 403);
+  }
   if (vehiculo.clienteId !== ingreso.clienteId) throw new AppError("El vehículo no pertenece al cliente de este ingreso", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -575,6 +586,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   const mensualidadVigente = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
+      ...(sucursalId ? { sucursalId } : {}),
       estado: "ACTIVA",
       fechaInicio: { lte: ahora },
       fechaFin: { gte: ahora },
