@@ -314,7 +314,7 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const ingreso = await prisma.ingreso.findUnique({
     where: { id: Number(id) },
-    include: { facturas: { select: { numero: true } } },
+    include: { facturas: { select: { id: true, numero: true } } },
   });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "ACTIVO") throw new AppError("No se puede eliminar un ingreso activo. Finalícelo primero.", 400);
@@ -322,15 +322,26 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
     throw new AppError("Este ingreso tiene facturas emitidas. No se puede eliminar porque forma parte del historial financiero; conserva el registro para auditoría.", 409);
   }
 
-  const facturaIds = ingreso.facturas.map(f => f.id);
-
   await prisma.$transaction(async (tx) => {
-    if (ingreso.puestoId) await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: "LIBRE" } });
-    await tx.cajaMovimiento.deleteMany({ where: { facturaId: { in: facturaIds } } });
-    await tx.factura.deleteMany({ where: { ingresoId: Number(id) } });
     await tx.ingreso.delete({ where: { id: Number(id) } });
+    if (ingreso.puestoId) {
+      const ahora = new Date();
+      const [otrosIngresos, mensualidades, reservas] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+        tx.reserva.count({
+          where: {
+            puestoId: ingreso.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+        }),
+      ]);
+      const estadoPuesto = otrosIngresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: estadoPuesto } });
+    }
   });
-  await registrarMovimiento("INGRESOS", "ELIMINAR", `Ingreso #${id} eliminado${facturaIds.length ? ` (${facturaIds.length} factura(s) anulada(s))` : ""}`, req.usuario?.usuario || "admin");
+  await registrarMovimiento("INGRESOS", "ELIMINAR", `Ingreso #${id} eliminado`, req.usuario?.usuario || "admin");
   res.json({ ok: true, message: "Ingreso eliminado correctamente" });
 });
 
