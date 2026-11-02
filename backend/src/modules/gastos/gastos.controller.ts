@@ -12,7 +12,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!concepto) throw new AppError("Concepto es requerido", 400);
 
-  await getCajaOError();
+  await getCajaOError(sucursalId);
 
   const [gasto] = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
@@ -178,14 +178,17 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
     const generado = await prisma.$transaction(async (tx) => {
       // Comparte el bloqueo de caja con cobros, gastos y cierres.
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) } });
-      if (!cajaAbierta) return false;
-
       // Releer después del lock evita que dos solicitudes generen el mismo período.
       const plantilla = await tx.gasto.findFirst({ where: { id: pendiente.id, ...(sucursalId ? { sucursalId } : {}) } });
       if (!plantilla || !plantilla.recurrente || !plantilla.proximaGeneracion || plantilla.proximaGeneracion > ahora) {
         return false;
       }
+      // En una ejecución administrativa global, cada ocurrencia se carga a la caja
+      // de su propia sucursal y nunca a la primera caja abierta que devuelva la BD.
+      const cajaAbierta = await tx.caja.findFirst({
+        where: { estado: "ABIERTA", ...(plantilla.sucursalId ? { sucursalId: plantilla.sucursalId } : {}) },
+      });
+      if (!cajaAbierta) return false;
 
       const siguienteFecha = calcularProximaGeneracion(plantilla.periodicidad, plantilla.proximaGeneracion);
       const reclamado = await tx.gasto.updateMany({
