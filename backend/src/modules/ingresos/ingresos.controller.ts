@@ -528,7 +528,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
     return res.json({ ok: true, cobro: { total: 0, totalMinutos, error: null, plan: planActivo.plan?.nombre || "Plan activo" }, ingreso });
   }
 
-  await getCajaOError();
+  await getCajaOError(sucursalId ?? ingreso.vehiculo.sucursalId ?? undefined);
 
   const cobro = await calcularCobro({
     ingreso,
@@ -738,7 +738,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   if (!cubiertoPorPlan) {
     await registrarMovimiento("FACTURACION", "CREAR", `Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}${saldoUsado > 0 ? ` (saldo usado: $${saldoUsado})` : ""}`, req.usuario?.usuario || "admin");
-    const cajaResp = await getCajaAbierta();
+    const cajaResp = await getCajaAbierta(sucursalId ?? ingreso.vehiculo.sucursalId ?? undefined);
     emitirEvento("ingreso:salida", {
       mensaje: `Vehículo ${ingreso.vehiculo.placa} salió — Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}`,
       factura: facturaCreada, ingreso: salida, valor: valorFinal,
