@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
+  port: parseInt(process.env.SMTP_PORT || "587", 10),
   secure: process.env.SMTP_SECURE === "true",
   auth: {
     user: process.env.SMTP_USER,
@@ -10,9 +10,9 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendResetPasswordEmail(to, nombre, token) {
+export async function sendResetPasswordEmail(to: string, nombre: string, token: string): Promise<void> {
   const baseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
   await transporter.sendMail({
     from: `"${process.env.SMTP_FROM_NAME || "ParkAdmin"}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
