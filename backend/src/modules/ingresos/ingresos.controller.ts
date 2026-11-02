@@ -102,8 +102,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
 
   const ingreso = await prisma.$transaction(async (tx) => {
     // Bloqueos transaccionales por vehículo y puesto: serializan intentos simultáneos.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124021, ${vehiculoId})`;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124020, ${Number(puestoId)})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vehiculoId})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${Number(puestoId)})`;
     const vehiculoYaDentro = await tx.ingreso.findFirst({
       where: { vehiculoId, estado: "ACTIVO" },
       select: { id: true },
@@ -256,10 +256,10 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
 
   const actualizado = await prisma.$transaction(async (tx) => {
     // Bloquear vehículo y ambos puestos evita colisiones al editar un ingreso activo.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124021, ${vid})`;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vid})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
     if (nuevoPuestoId !== ingreso.puestoId) {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124020, ${nuevoPuestoId})`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${nuevoPuestoId})`;
     }
 
     const duplicado = await tx.ingreso.findFirst({
