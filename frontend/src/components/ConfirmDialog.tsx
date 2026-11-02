@@ -3,6 +3,12 @@ import { AlertTriangle } from "lucide-react";
 export default function ConfirmDialog({ abierto, titulo, mensaje, onConfirm, onCancel, confirmLabel = "Sí, continuar", cancelLabel = "Volver", tone = "danger" }) {
   if (!abierto) return null;
 
+  const confirmStyle = tone === "warning"
+    ? "bg-amber-600 hover:bg-amber-700 focus:ring-amber-500"
+    : tone === "primary"
+    ? "bg-teal-600 hover:bg-teal-700 focus:ring-teal-500"
+    : "bg-red-600 hover:bg-red-700 focus:ring-red-500";
+
   return (
     <div className="fixed inset-0 z-[60] flex justify-center items-center px-4">
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onCancel} />
