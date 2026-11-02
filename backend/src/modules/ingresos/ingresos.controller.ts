@@ -68,11 +68,13 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (vehiculo.clienteId !== clienteId) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado y no puede ingresar", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
+  const sucursalOperativa = vehiculo.sucursalId ?? sucursalId ?? null;
 
-  let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId);
+  let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId, sucursalOperativa);
   let planDetectado = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId,
+      sucursalId: sucursalOperativa,
       estado: "ACTIVA",
       fechaInicio: { lte: new Date() },
       fechaFin: { gte: new Date() },
@@ -126,7 +128,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
         where: {
           clienteId,
           vehiculoId,
-          ...(sucursalId ? { sucursalId } : {}),
+          sucursalId: sucursalOperativa,
           estado: { in: ["PENDIENTE", "CONFIRMADA"] },
           fechaInicio: { lte: ahora },
           OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
@@ -137,7 +139,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       tx.mensualidad.findFirst({
         where: {
           vehiculoId,
-          ...(sucursalId ? { sucursalId } : {}),
+          sucursalId: sucursalOperativa,
           estado: "ACTIVA",
           fechaInicio: { lte: ahora },
           fechaFin: { gte: ahora },
@@ -253,14 +255,15 @@ export const obtenerIngreso = asyncHandler(async (req, res) => {
 export const liberarPuesto = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const ingreso = await prisma.ingreso.findFirst({ where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) } });
+  const ingreso = await prisma.ingreso.findFirst({ where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) }, include: { vehiculo: true } });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
+  const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
   const planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
-      ...(sucursalId ? { sucursalId } : {}),
+      sucursalId: sucursalOperativa,
       estado: "ACTIVA",
       fechaInicio: { lte: new Date() },
       fechaFin: { gte: new Date() },
@@ -524,9 +527,11 @@ export const simularCobro = asyncHandler(async (req, res) => {
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
+  const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
   const planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
+      sucursalId: sucursalOperativa,
       estado: "ACTIVA",
       fechaInicio: { lte: new Date() },
       fechaFin: { gte: new Date() },
@@ -582,11 +587,12 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   const mp = metodoPago || "efectivo";
 
   const ahora = new Date();
+  const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
 
   const mensualidadVigente = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
-      ...(sucursalId ? { sucursalId } : {}),
+      sucursalId: sucursalOperativa,
       estado: "ACTIVA",
       fechaInicio: { lte: ahora },
       fechaFin: { gte: ahora },
@@ -657,6 +663,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         AND "estado" = 'ACTIVA'
         AND "fechaInicio" <= ${fechaSalida}
         AND "fechaFin" >= ${fechaSalida}
+        AND "sucursalId" IS NOT DISTINCT FROM ${sucursalOperativa}
         AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
       FOR UPDATE
     `;
