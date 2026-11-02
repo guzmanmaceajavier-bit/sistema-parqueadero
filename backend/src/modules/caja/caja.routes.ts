@@ -34,7 +34,7 @@ const router = express.Router();
  *       400:
  *         description: Ya hay una caja abierta
  */
-router.post("/abrir", verificarToken, cajaLimiter, validate(abrirCajaSchema), abrirCaja);
+router.post("/abrir", verificarToken, verificarRol("admin", "supervisor"), cajaLimiter, validate(abrirCajaSchema), abrirCaja);
 
 /**
  * @swagger
