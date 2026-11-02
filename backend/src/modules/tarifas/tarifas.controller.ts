@@ -4,57 +4,106 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 
 export const crearTarifa = asyncHandler(async (req, res) => {
-  const { nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis, precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion } = req.body;
+  const {
+    nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis,
+    precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion,
+  } = req.body;
+
   if (!nombre) throw new AppError("Nombre es requerido", 400);
   if (!tipoVehiculo) throw new AppError("Tipo de vehículo es requerido", 400);
   if (!modalidad) throw new AppError("Modalidad es requerida", 400);
+
   const val = Number(valor);
-  if (!val || val < 0) throw new AppError("Valor debe ser un número válido y no negativo", 400);
+  if (!Number.isFinite(val) || val <= 0) {
+    throw new AppError("Valor debe ser un número válido y positivo", 400);
+  }
+  if ((precioPrimeraHora == null) !== (precioHoraAdicional == null)) {
+    throw new AppError("Configura juntos el precio de la primera hora y el de las horas adicionales.", 400);
+  }
+
   const tarifa = await prisma.tarifa.create({
-    data: {\n      nombre, tipoVehiculo, modalidad: String(modalidad).toLowerCase(), valor: val,\n      minutosCortesia: minutosCortesia ?? 0, minutosGratis: minutosGratis ?? 0,\n      precioPrimeraHora: precioPrimeraHora ?? null, precioHoraAdicional: precioHoraAdicional ?? null,\n      tarifaMaximaDiaria: tarifaMaximaDiaria ?? null, descripcion,\n    },
+    data: {
+      nombre,
+      tipoVehiculo,
+      modalidad: String(modalidad).trim().toLowerCase(),
+      valor: val,
+      minutosCortesia: minutosCortesia ?? 0,
+      minutosGratis: minutosGratis ?? 0,
+      precioPrimeraHora: precioPrimeraHora ?? null,
+      precioHoraAdicional: precioHoraAdicional ?? null,
+      tarifaMaximaDiaria: tarifaMaximaDiaria ?? null,
+      descripcion,
+    },
   });
+
   await registrarMovimiento("TARIFAS", "CREAR", `Tarifa creada: ${tarifa.nombre}`, req.usuario?.usuario || "admin");
   res.status(201).json({ ok: true, tarifa });
 });
 
 export const obtenerTarifas = asyncHandler(async (req, res) => {
   const { page, limit, q } = req.query;
-  const where = {};
+  const where: any = {};
+
   if (q) {
+    const query = String(q);
     where.OR = [
-      { nombre: { contains: q, mode: "insensitive" } },
-      { tipoVehiculo: { contains: q, mode: "insensitive" } },
-      { modalidad: { contains: q, mode: "insensitive" } },
+      { nombre: { contains: query, mode: "insensitive" } },
+      { tipoVehiculo: { contains: query, mode: "insensitive" } },
+      { modalidad: { contains: query, mode: "insensitive" } },
     ];
   }
+
   if (page) {
-    const { data: tarifas, pagination } = await paginate(prisma, "tarifa", { page, limit, where, orderBy: { id: "desc" } });
+    const { data: tarifas, pagination } = await paginate(prisma, "tarifa", {
+      page, limit, where, orderBy: { id: "desc" },
+    });
     return res.json({ ok: true, tarifas, pagination });
   }
+
   const tarifas = await prisma.tarifa.findMany({ where, orderBy: { id: "desc" } });
   res.json({ ok: true, tarifas });
 });
 
 export const obtenerTarifa = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
+  const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(req.params.id) } });
   if (!tarifa) throw new AppError("Tarifa no encontrada", 404);
   res.json({ ok: true, tarifa });
 });
 
 export const actualizarTarifa = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis, precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion, activa } = req.body;
+  const {
+    nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis,
+    precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion, activa,
+  } = req.body;
 
   const existe = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Tarifa no encontrada", 404);
 
-  const data = {};
-  if (nombre) data.nombre = nombre;
-  if (tipoVehiculo) data.tipoVehiculo = tipoVehiculo;
-  if (modalidad) data.modalidad = String(modalidad).toLowerCase();
-  if (valor !== undefined) { const v = Number(valor); if (!v && v !== 0) throw new AppError("Valor debe ser un número válido", 400); if (v < 0) throw new AppError("Valor no puede ser negativo", 400); data.valor = v; }
-  if (minutosCortesia !== undefined) data.minutosCortesia = Number(minutosCortesia);\n  if (minutosGratis !== undefined) data.minutosGratis = Number(minutosGratis);\n  if (precioPrimeraHora !== undefined) data.precioPrimeraHora = precioPrimeraHora;\n  if (precioHoraAdicional !== undefined) data.precioHoraAdicional = precioHoraAdicional;\n  if (tarifaMaximaDiaria !== undefined) data.tarifaMaximaDiaria = tarifaMaximaDiaria;
+  const primeraHoraFinal = precioPrimeraHora !== undefined ? precioPrimeraHora : existe.precioPrimeraHora;
+  const horaAdicionalFinal = precioHoraAdicional !== undefined ? precioHoraAdicional : existe.precioHoraAdicional;
+  if ((primeraHoraFinal == null) !== (horaAdicionalFinal == null)) {
+    throw new AppError("Configura juntos el precio de la primera hora y el de las horas adicionales.", 400);
+  }
+
+  const data: any = {};
+  if (nombre !== undefined) data.nombre = nombre;
+  if (tipoVehiculo !== undefined) data.tipoVehiculo = tipoVehiculo;
+  if (modalidad !== undefined) data.modalidad = String(modalidad).trim().toLowerCase();
+
+  if (valor !== undefined) {
+    const val = Number(valor);
+    if (!Number.isFinite(val) || val <= 0) {
+      throw new AppError("Valor debe ser un número válido y positivo", 400);
+    }
+    data.valor = val;
+  }
+
+  if (minutosCortesia !== undefined) data.minutosCortesia = Number(minutosCortesia);
+  if (minutosGratis !== undefined) data.minutosGratis = Number(minutosGratis);
+  if (precioPrimeraHora !== undefined) data.precioPrimeraHora = precioPrimeraHora;
+  if (precioHoraAdicional !== undefined) data.precioHoraAdicional = precioHoraAdicional;
+  if (tarifaMaximaDiaria !== undefined) data.tarifaMaximaDiaria = tarifaMaximaDiaria;
   if (descripcion !== undefined) data.descripcion = descripcion;
   if (activa !== undefined) data.activa = activa;
 
