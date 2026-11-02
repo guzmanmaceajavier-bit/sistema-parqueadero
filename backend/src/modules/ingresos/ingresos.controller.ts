@@ -230,7 +230,12 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
         },
       }),
       tx.reserva.count({
-        where: { puestoId: ingreso.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }] },
+        where: {
+          puestoId: ingreso.puestoId,
+          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          ...(ingreso.reservaId ? { id: { not: ingreso.reservaId } } : {}),
+          OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }],
+        },
       }),
     ]);
     const estadoPuesto = otroIngresoActivo > 0
@@ -414,6 +419,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       estado: "ACTIVA",
       fechaInicio: { lte: ahora },
       fechaFin: { gte: ahora },
+      // La mensualidad solo cubre el puesto que tiene asignado (o todos si no fija uno).
+      OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
     include: { plan: true, puesto: true },
   });
@@ -451,6 +458,10 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   let facturaCreada: any = null;
   const [salida, factura] = await prisma.$transaction(async (tx) => {
+    // Usa los mismos bloqueos que el registro de entrada para serializar la ocupación.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
+
     const salidaActualizada = await tx.ingreso.updateMany({
       where: { id: Number(id), estado: "ACTIVO" },
       data: {
