@@ -11,7 +11,7 @@ export const abrirCaja = asyncHandler(async (req, res) => {
 
   const caja = await prisma.$transaction(async (tx) => {
     // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
     const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
     if (abierta) throw new AppError("Ya hay una caja abierta", 400);
 
@@ -38,7 +38,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
 
   const resultado = await prisma.$transaction(async (tx) => {
     // Comparte el bloqueo global con la apertura para evitar cierres/aperturas solapados.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
     const caja = await tx.caja.findUnique({ where: { id: Number(id) } });
     if (!caja) throw new AppError("Caja no encontrada", 404);
     if (caja.estado !== "ABIERTA") throw new AppError("La caja ya está cerrada", 409);
