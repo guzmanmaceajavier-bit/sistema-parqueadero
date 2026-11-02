@@ -83,7 +83,7 @@ router.get("/", verificarTokenOpcional, obtenerConfiguracion);
  *       200:
  *         description: Configuracion guardada
  */
-router.post("/", verificarToken, validate(actualizarConfiguracionSchema), guardarConfiguracion);
+router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(actualizarConfiguracionSchema), guardarConfiguracion);
 
 /**
  * @swagger
@@ -119,7 +119,7 @@ router.post("/formatear", verificarToken, verificarRol("admin"), formatearSistem
  *       200:
  *         description: Logo subido correctamente
  */
-router.post("/upload-logo", verificarToken, (req, res) => {
+router.post("/upload-logo", verificarToken, verificarRol("admin", "supervisor"), (req, res) => {
   upload.single("logo")(req, res, async (err) => {
     if (err) return res.status(400).json({ ok: false, message: err.message });
     if (!req.file) return res.status(400).json({ ok: false, message: "No se envió ninguna imagen" });
@@ -149,7 +149,7 @@ router.post("/upload-logo", verificarToken, (req, res) => {
  *       200:
  *         description: Logo eliminado
  */
-router.delete("/logo", verificarToken, async (req, res) => {
+router.delete("/logo", verificarToken, verificarRol("admin", "supervisor"), async (req, res) => {
   const existe = await service.obtenerConfiguracion();
   if (existe?.logo) {
     const oldPath = path.join(uploadDir, path.basename(existe.logo));
@@ -179,7 +179,7 @@ router.delete("/logo", verificarToken, async (req, res) => {
  *       200:
  *         description: Fondo subido correctamente
  */
-router.post("/upload-fondo", verificarToken, (req, res) => {
+router.post("/upload-fondo", verificarToken, verificarRol("admin", "supervisor"), (req, res) => {
   uploadFondo.single("fondo")(req, res, async (err) => {
     if (err) return res.status(400).json({ ok: false, message: err.message });
     if (!req.file) return res.status(400).json({ ok: false, message: "No se envio ninguna imagen" });
@@ -214,7 +214,7 @@ router.post("/upload-fondo", verificarToken, (req, res) => {
  *       200:
  *         description: Fondo eliminado
  */
-router.delete("/fondo", verificarToken, async (req, res) => {
+router.delete("/fondo", verificarToken, verificarRol("admin", "supervisor"), async (req, res) => {
   try {
     const existe = await service.obtenerConfiguracion();
     if (existe?.fondoLogin) {
