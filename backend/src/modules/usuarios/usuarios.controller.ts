@@ -164,7 +164,7 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
     if (adminsActivos <= 1) throw new AppError("No puedes degradar al último administrador activo", 409);
   }
 
-  const data: Record<string, unknown> = {};
+  const data: any = {};
   if (nombre !== undefined) data.nombre = nombre;
   if (correo !== undefined) data.correo = correo;
   if (rol !== undefined) data.rol = rol;
