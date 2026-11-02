@@ -338,8 +338,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   let facturaCreada: any = null;
   const [salida, factura] = await prisma.$transaction(async (tx) => {
-    const s = await tx.ingreso.update({
-      where: { id: Number(id) },
+    const salidaActualizada = await tx.ingreso.updateMany({
+      where: { id: Number(id), estado: "ACTIVO" },
       data: {
         fechaSalida,
         estado: "FINALIZADO",
@@ -347,6 +347,12 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         valorPagado: cubiertoPorPlan ? 0 : cobroTotal,
         ...(ticketExtraviado ? { ticketExtraviado: true } : {}),
       },
+    });
+    if (salidaActualizada.count !== 1) {
+      throw new AppError("La salida ya fue registrada por otro usuario. Actualiza la lista antes de continuar.", 409);
+    }
+    const s = await tx.ingreso.findUnique({
+      where: { id: Number(id) },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
 
