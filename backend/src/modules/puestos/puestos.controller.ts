@@ -21,6 +21,7 @@ async function siguienteNumeroPuesto(prefijo = "Puesto") {
 
 export const crearPuesto = asyncHandler(async (req, res) => {
   let { codigo, tipoPuesto, zona } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!codigo) {
     const n = await siguienteNumeroPuesto();
     codigo = `Puesto ${n}`;
@@ -28,12 +29,13 @@ export const crearPuesto = asyncHandler(async (req, res) => {
   const existe = await prisma.puesto.findUnique({ where: { codigo } });
   if (existe) throw new AppError("El puesto ya existe", 400);
 
-  const puesto = await prisma.puesto.create({ data: { codigo, tipoPuesto, zona: zona || null } });
+  const puesto = await prisma.puesto.create({ data: { codigo, tipoPuesto, zona: zona || null, sucursalId: sucursalId ?? null } });
   res.status(201).json({ ok: true, puesto });
 });
 
 export const crearPuestosMasivos = asyncHandler(async (req, res) => {
   let { prefijo, cantidad, tipoPuesto, zona } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!cantidad) throw new AppError("cantidad es requerido", 400);
   if (!prefijo) prefijo = "Puesto";
 
@@ -53,7 +55,7 @@ export const crearPuestosMasivos = asyncHandler(async (req, res) => {
   let n = 1;
   while (puestos.length < cantidad) {
     if (!nums.has(n)) {
-      puestos.push({ codigo: `${prefijo} ${n}`, tipoPuesto: tipoPuesto || "carro", zona: zona || null });
+      puestos.push({ codigo: `${prefijo} ${n}`, tipoPuesto: tipoPuesto || "carro", zona: zona || null, sucursalId: sucursalId ?? null });
     }
     n++;
   }
@@ -68,7 +70,8 @@ export const crearPuestosMasivos = asyncHandler(async (req, res) => {
 
 export const obtenerPuestos = asyncHandler(async (req, res) => {
   const { page, limit, estado, q, all } = req.query;
-  const where = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { sucursalId } : {};
   if (estado) where.estado = estado;
   if (q) {
     where.OR = [
@@ -133,8 +136,9 @@ export const obtenerPuestos = asyncHandler(async (req, res) => {
 
 export const obtenerPuesto = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const puesto = await prisma.puesto.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const puesto = await prisma.puesto.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: {
       ingresos: { where: { estado: "ACTIVO" }, include: { cliente: { select: { id: true, nombres: true, apellidos: true, documento: true, telefono: true, email: true } }, vehiculo: { select: { id: true, placa: true, marca: true, modelo: true, color: true, tipo: true } } } },
       mensualidades: { where: { estado: "ACTIVA" }, include: { cliente: { select: { id: true, nombres: true, apellidos: true, documento: true, telefono: true, email: true } }, vehiculo: { select: { id: true, placa: true, marca: true, modelo: true, color: true, tipo: true } }, plan: { select: { id: true, nombre: true, duracionDias: true, valor: true } } } },
@@ -148,7 +152,8 @@ export const obtenerPuesto = asyncHandler(async (req, res) => {
 export const actualizarPuesto = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { codigo, estado, tipoPuesto, observacion, zona, activo } = req.body;
-  const puesto = await prisma.puesto.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const puesto = await prisma.puesto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
 
   if (estado && ["LIBRE", "MANTENIMIENTO"].includes(estado) && !["LIBRE", "MANTENIMIENTO"].includes(puesto.estado)) {
@@ -191,7 +196,8 @@ export const actualizarPuesto = asyncHandler(async (req, res) => {
 
 export const eliminarPuesto = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existe = await prisma.puesto.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const existe = await prisma.puesto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existe) throw new AppError("Puesto no encontrado", 404);
 
   const [ingresos, mensualidades, reservas] = await Promise.all([
@@ -209,7 +215,8 @@ export const eliminarPuesto = asyncHandler(async (req, res) => {
 
 export const togglePuesto = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const puesto = await prisma.puesto.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const puesto = await prisma.puesto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
 
   if (puesto.estado === "OCUPADO") {
