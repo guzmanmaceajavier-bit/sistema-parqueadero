@@ -51,7 +51,7 @@ describe("calcularCobro", () => {
   });
 
   it("descuenta cortesía, minutos gratis y gracia antes de redondear horas", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({
+    prismaMock.tarifa.findFirst.mockResolvedValue({
       ...tarifaBase,
       valor: 5000,
       minutosCortesia: 5,
@@ -71,7 +71,7 @@ describe("calcularCobro", () => {
   });
 
   it("aplica el redondeo de la tarifa por hora al superar el período gratuito", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, valor: 5000, minutosCortesia: 10 });
+    prismaMock.tarifa.findFirst.mockResolvedValue({ ...tarifaBase, valor: 5000, minutosCortesia: 10 });
 
     const result = await calcularCobro({
       ingreso: { id: 3, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
@@ -97,7 +97,7 @@ describe("calcularCobro", () => {
   });
 
   it("normaliza modalidades guardadas en mayúsculas y calcula la unidad correcta", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, modalidad: "DIARIO", valor: 12000 });
+    prismaMock.tarifa.findFirst.mockResolvedValue({ ...tarifaBase, modalidad: "DIARIO", valor: 12000 });
 
     const result = await calcularCobro({
       ingreso: { id: 5, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
@@ -111,7 +111,7 @@ describe("calcularCobro", () => {
   });
 
   it("calcula tarifa progresiva y respeta el tope diario por bloques de 24 horas", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({
+    prismaMock.tarifa.findFirst.mockResolvedValue({
       ...tarifaBase,
       modalidad: "HORA",
       precioPrimeraHora: 7000,
@@ -132,7 +132,7 @@ describe("calcularCobro", () => {
   });
 
   it("rechaza modalidades desconocidas en lugar de cobrarlas como hora", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, modalidad: "festivo" });
+    prismaMock.tarifa.findFirst.mockResolvedValue({ ...tarifaBase, modalidad: "festivo" });
 
     const result = await calcularCobro({
       ingreso: { id: 7, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
@@ -147,7 +147,7 @@ describe("calcularCobro", () => {
 
 
   it("rechaza una tarifa progresiva incompleta antes de calcular el importe", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({
+    prismaMock.tarifa.findFirst.mockResolvedValue({
       ...tarifaBase,
       precioPrimeraHora: 7000,
       precioHoraAdicional: null,
@@ -166,7 +166,7 @@ describe("calcularCobro", () => {
 
 
   it("no cobra un ticket extraviado con tarifa normal si falta el máximo diario", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, tarifaMaximaDiaria: null });
+    prismaMock.tarifa.findFirst.mockResolvedValue({ ...tarifaBase, tarifaMaximaDiaria: null });
 
     const result = await calcularCobro({
       ingreso: { id: 9, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
@@ -181,7 +181,7 @@ describe("calcularCobro", () => {
   });
 
   it("aplica el máximo diario configurado cuando se pierde el ticket", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, tarifaMaximaDiaria: 30000 });
+    prismaMock.tarifa.findFirst.mockResolvedValue({ ...tarifaBase, tarifaMaximaDiaria: 30000 });
 
     const result = await calcularCobro({
       ingreso: { id: 10, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
