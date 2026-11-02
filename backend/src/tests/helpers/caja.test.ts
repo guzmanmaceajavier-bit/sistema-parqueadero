@@ -97,6 +97,7 @@ describe("Cálculo de tarifas por tiempo facturable", () => {
     tarifaMaximaDiaria: null,
     precioPrimeraHora: null,
     precioHoraAdicional: null,
+    sucursalId: null,
   };
 
   beforeEach(() => {
