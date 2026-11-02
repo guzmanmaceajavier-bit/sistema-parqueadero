@@ -63,7 +63,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     facturas7d, gastos7d, metodosPago, facturasPorMes,
   ] = await Promise.all([
 
-    prisma.puesto.groupBy({ by: ["estado"], _count: true, where: sucursalFilter }),
+    prisma.puesto.groupBy({ by: ["estado"], _count: true, where: { activo: true, ...sucursalFilter } }),
 
     prisma.ingreso.count({ where: { estado: "ACTIVO", ...puestoSucursalFilter } }),
     prisma.ingreso.count({ where: { createdAt: { gte: hoy }, ...puestoSucursalFilter } }),
