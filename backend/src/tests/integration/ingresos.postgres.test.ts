@@ -6,6 +6,7 @@ let clienteId = 0;
 let vehiculoId = 0;
 let vehiculosIds: number[] = [];
 let puestoId = 0;
+let puestosIds: number[] = [];
 
 beforeEach(async () => {
   const suffix = `it-${process.pid}-${Date.now()}-${++fixtureCounter}`;
@@ -36,6 +37,7 @@ beforeEach(async () => {
     },
   });
   puestoId = puesto.id;
+  puestosIds = [puestoId];
 });
 
 afterEach(async () => {
@@ -43,7 +45,7 @@ afterEach(async () => {
     await prisma.ingreso.deleteMany({ where: { vehiculoId: { in: vehiculosIds } } });
     await prisma.vehiculo.deleteMany({ where: { id: { in: vehiculosIds } } });
   }
-  if (puestoId) await prisma.puesto.deleteMany({ where: { id: puestoId } });
+  if (puestosIds.length) await prisma.puesto.deleteMany({ where: { id: { in: puestosIds } } });
   if (clienteId) await prisma.cliente.deleteMany({ where: { id: clienteId } });
 });
 
@@ -87,6 +89,42 @@ describe("Concurrencia de ingresos y salidas (PostgreSQL real)", () => {
     expect(resultados.filter(Boolean)).toHaveLength(1);
     expect(await prisma.ingreso.count({ where: { puestoId, estado: "ACTIVO" } })).toBe(1);
     expect((await prisma.puesto.findUniqueOrThrow({ where: { id: puestoId } })).estado).toBe("OCUPADO");
+  });
+
+  it("impide dos entradas simultáneas del mismo vehículo en puestos diferentes", async () => {
+    const segundoPuesto = await prisma.puesto.create({
+      data: {
+        codigo: `P-SEG-${process.pid}-${fixtureCounter}`,
+        tipoPuesto: "carro",
+        estado: "LIBRE",
+      },
+    });
+    puestosIds.push(segundoPuesto.id);
+
+    const intentarEntrada = (idPuesto: number) => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${idPuesto}::integer)) AS advisory_lock`;
+
+      const existente = await tx.ingreso.findFirst({
+        where: { vehiculoId, estado: "ACTIVO" },
+        select: { id: true },
+      });
+      if (existente) return false;
+
+      const puestoActualizado = await tx.puesto.updateMany({
+        where: { id: idPuesto, activo: true, estado: "LIBRE" },
+        data: { estado: "OCUPADO" },
+      });
+      if (puestoActualizado.count !== 1) return false;
+
+      await tx.ingreso.create({ data: { clienteId, vehiculoId, puestoId: idPuesto } });
+      return true;
+    });
+
+    const resultados = await Promise.all([intentarEntrada(puestoId), intentarEntrada(segundoPuesto.id)]);
+
+    expect(resultados.filter(Boolean)).toHaveLength(1);
+    expect(await prisma.ingreso.count({ where: { vehiculoId, estado: "ACTIVO" } })).toBe(1);
   });
 
   it("permite una sola salida simultánea y finaliza el ingreso una vez", async () => {
