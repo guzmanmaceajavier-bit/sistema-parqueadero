@@ -58,7 +58,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
       }
       diferencia = totalConteo - esperado;
       const arqueoData = { conteo, totalConteo, esperado, diferencia };
-      obsFinal = obsFinal ? obsFinal + "\\n" + JSON.stringify(arqueoData) : JSON.stringify(arqueoData);
+      obsFinal = obsFinal ? obsFinal + "\n" + JSON.stringify(arqueoData) : JSON.stringify(arqueoData);
     }
 
     const actualizada = await tx.caja.updateMany({
