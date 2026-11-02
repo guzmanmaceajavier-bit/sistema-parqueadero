@@ -1,16 +1,18 @@
 import { z } from "zod";
 
+const conteoDenominaciones = z.record(z.string(), z.coerce.number().int().min(0));
+
 export const abrirCajaSchema = z.object({
-  apertura: z.coerce.number().min(0, "Apertura no puede ser negativa"),
+  apertura: z.coerce.number().finite().min(0, "Apertura no puede ser negativa"),
   password: z.string().min(1, "Contraseña requerida").max(128),
   observacion: z.string().trim().max(500).optional().nullable(),
 });
 
 export const cerrarCajaSchema = z.object({
-  cierre: z.coerce.number().min(0, "Cierre no puede ser negativo").optional(),
+  cierre: z.coerce.number().finite().min(0, "Cierre no puede ser negativo").optional(),
   observacion: z.string().trim().max(500).optional().nullable(),
   conteo: z.object({
-    billetes: z.record(z.coerce.number().int().min(0)).optional(),
-    monedas: z.record(z.coerce.number()).optional(),
+    billetes: conteoDenominaciones.optional(),
+    monedas: conteoDenominaciones.optional(),
   }).optional().nullable(),
 });
