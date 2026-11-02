@@ -432,20 +432,37 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
 });
 
 export const eliminarReserva = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const existente = await prisma.reserva.findUnique({ where: { id: Number(id) } });
+  const id = Number(req.params.id);
+  const existente = await prisma.reserva.findUnique({ where: { id } });
   if (!existente) throw new AppError("Reserva no encontrada", 404);
-  if (existente.estado === "ACTIVA") {
-    throw new AppError("No se puede eliminar una reserva activa", 400);
-  }
-  if (existente.estado !== "CANCELADA" && existente.puestoId) {
-    await liberarPuesto(existente.puestoId, req.usuario?.usuario, "eliminada");
-  }
-  await prisma.reserva.delete({ where: { id: Number(id) } });
+  if (existente.estado === "ACTIVA") throw new AppError("No se puede eliminar una reserva activa; registre primero la salida", 409);
+
+  await prisma.$transaction(async (tx) => {
+    if (existente.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
+    const actual = await tx.reserva.findUnique({ where: { id } });
+    if (!actual || actual.vehiculoId !== existente.vehiculoId || actual.puestoId !== existente.puestoId) {
+      throw new AppError("La reserva cambió mientras se eliminaba. Actualiza e inténtalo nuevamente.", 409);
+    }
+    if (actual.estado === "ACTIVA") throw new AppError("No se puede eliminar una reserva activa", 409);
+    await tx.reserva.delete({ where: { id } });
+    if (actual.puestoId) {
+      const ahora = new Date();
+      const [ingresos, mensualidades, reservas] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+        tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+      ]);
+      const estadoPuesto = ingresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
+    }
+  });
   await registrarMovimiento("RESERVAS", "ELIMINAR", `Reserva #${id} eliminada`, req.usuario?.usuario);
   emitirEvento("reserva:eliminada", { mensaje: `Reserva #${id} eliminada` });
   res.json({ ok: true, message: "Reserva eliminada" });
 });
+
 
 export const liberarReservasVencidas = asyncHandler(async (req, res) => {
   const ahora = new Date();
