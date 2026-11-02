@@ -482,7 +482,7 @@ export default function Clientes() {
   };
 
   const confirmarEliminar = (id) => {
-    setConfirm({ abierto: true, titulo: "Eliminar cliente", mensaje: "¿Estás seguro de eliminar este cliente? Se eliminarán también sus vehículos.", onConfirm: () => eliminarCliente(id) });
+    setConfirm({ abierto: true, titulo: "Eliminar cliente", mensaje: "Vas a eliminar este cliente y los vehículos asociados. Esta operación no se puede deshacer. Si tiene ingresos, reservas o movimientos vinculados, el sistema puede impedir la eliminación para conservar el historial.", onConfirm: () => eliminarCliente(id) });
   };
 
   const abrirNuevo = () => {
