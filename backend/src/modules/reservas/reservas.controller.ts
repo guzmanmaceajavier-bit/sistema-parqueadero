@@ -413,9 +413,9 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
     const actual = await tx.reserva.findUnique({ where: { id: Number(id) } });
     if (!actual) throw new AppError("Reserva no encontrada", 404);
     if (actual.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${actual.vehiculoId}::integer)) AS advisory_lock`;
-    if (bloqueada.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${bloqueada.puestoId}::integer)) AS advisory_lock`;
+    if (actual.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${actual.puestoId}::integer)) AS advisory_lock`;
     const bloqueada = await tx.reserva.findUnique({ where: { id: Number(id) } });
-    if (!bloqueada || bloqueada.vehiculoId !== actual.vehiculoId || bloqueada.puestoId !== bloqueada.puestoId) {
+    if (!bloqueada || bloqueada.vehiculoId !== actual.vehiculoId || bloqueada.puestoId !== actual.puestoId) {
       throw new AppError("La reserva cambió mientras se cancelaba. Actualiza e inténtalo nuevamente.", 409);
     }
     if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(bloqueada.estado)) {
