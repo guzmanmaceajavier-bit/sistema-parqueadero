@@ -51,8 +51,8 @@ export const descargarFacturaPDF = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
-    prisma.factura.findUnique({
-      where: { id: Number(id) },
+    prisma.factura.findFirst({
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true, puesto: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),
