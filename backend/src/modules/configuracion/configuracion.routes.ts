@@ -197,7 +197,7 @@ router.post("/upload-fondo", verificarToken, verificarRol("admin", "supervisor")
       res.json({ ok: true, fondoLogin: fondoUrl });
     } catch (error) {
       console.error("Error al subir fondo:", error);
-      res.status(500).json({ ok: false, message: error.message });
+      res.status(500).json({ ok: false, message: error instanceof Error ? error.message : String(error) });
     }
   });
 });
@@ -225,7 +225,7 @@ router.delete("/fondo", verificarToken, verificarRol("admin", "supervisor"), asy
     res.json({ ok: true, message: "Fondo de login eliminado" });
   } catch (error) {
     console.error("Error al eliminar fondo:", error);
-    res.status(500).json({ ok: false, message: error.message });
+    res.status(500).json({ ok: false, message: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -259,7 +259,7 @@ router.post("/fix-listas", verificarToken, verificarRol("admin"), async (req, re
 
     res.json({ ok: true, message: "Datos corregidos", updates });
   } catch (error) {
-    res.status(500).json({ ok: false, message: error.message });
+    res.status(500).json({ ok: false, message: error instanceof Error ? error.message : String(error) });
   }
 });
 
