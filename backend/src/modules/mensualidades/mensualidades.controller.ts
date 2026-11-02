@@ -6,10 +6,12 @@ import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { sumarMesesConTope } from "../../utils/fechas.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 
 export const crearMensualidad = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, planId, fechaInicio, fechaFin, valor, observacion } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   const cid = Number(clienteId);
   const vid = Number(vehiculoId);
 
@@ -19,6 +21,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
 
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -41,6 +44,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   if (puestoId) {
     puesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
     if (!puesto) throw new AppError("Puesto no encontrado", 404);
+    if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
     if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
     if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
   }
@@ -105,7 +109,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
       }
     }
     const m = await tx.mensualidad.create({
-      data: { clienteId: cid, vehiculoId: vid, planId: plan ? Number(planId) : undefined, puestoId: puesto ? Number(puestoId) : undefined, ...data },
+      data: { clienteId: cid, vehiculoId: vid, planId: plan ? Number(planId) : undefined, puestoId: puesto ? Number(puestoId) : undefined, sucursalId: sucursalId ?? null, ...data },
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
     });
     if (puesto) {
@@ -130,7 +134,8 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
 });
 export const obtenerMensualidades = asyncHandler(async (req, res) => {
   const { page, limit, estado, q } = req.query;
-  const where: Prisma.MensualidadWhereInput = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: Prisma.MensualidadWhereInput = sucursalId ? { sucursalId } : {};
   if (typeof estado === "string") where.estado = estado as string;
   if (typeof q === "string") {
     where.OR = [
@@ -163,8 +168,9 @@ export const obtenerMensualidades = asyncHandler(async (req, res) => {
 
 export const obtenerMensualidad = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const mensualidad = await prisma.mensualidad.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const mensualidad = await prisma.mensualidad.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: { cliente: true, vehiculo: true, plan: true, puesto: true, facturas: true },
   });
   if (!mensualidad) throw new AppError("Mensualidad no encontrada", 404);
@@ -177,8 +183,9 @@ export const obtenerMensualidad = asyncHandler(async (req, res) => {
 
 export const obtenerVencidas = asyncHandler(async (req, res) => {
   const hoy = new Date();
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const vencidas = await prisma.mensualidad.findMany({
-    where: { fechaFin: { lt: hoy }, estado: { in: ["ACTIVA", "VENCIDA"] } },
+    where: { ...(sucursalId ? { sucursalId } : {}), fechaFin: { lt: hoy }, estado: { in: ["ACTIVA", "VENCIDA"] } },
     include: { cliente: true, vehiculo: true, plan: true, puesto: true },
   });
   res.json({ ok: true, vencidas });
