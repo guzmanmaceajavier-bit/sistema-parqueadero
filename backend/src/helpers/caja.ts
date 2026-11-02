@@ -1,9 +1,9 @@
 import prisma from "../config/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
 
-export async function getCajaAbierta() {
+export async function getCajaAbierta(sucursalId?: number) {
   const caja = await prisma.caja.findFirst({
-    where: { estado: "ABIERTA" },
+    where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) },
     include: { usuario: { select: { id: true, nombre: true, usuario: true } } },
   });
   if (!caja) return null;
@@ -11,8 +11,8 @@ export async function getCajaAbierta() {
   return { ...caja, ingresos, egresos, saldo: caja.apertura + ingresos - egresos };
 }
 
-export async function getCajaOError() {
-  const caja = await getCajaAbierta();
+export async function getCajaOError(sucursalId?: number) {
+  const caja = await getCajaAbierta(sucursalId);
   if (!caja) throw new AppError("Caja cerrada", 400);
   return caja;
 }
