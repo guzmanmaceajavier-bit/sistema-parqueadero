@@ -245,29 +245,48 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
   if (!existente) throw new AppError("Reserva no encontrada", 404);
 
   const reserva = await prisma.$transaction(async (tx) => {
-    await tx.reserva.update({
-      where: { id: Number(id) },
-      data: { estado },
-    });
-
     if (estado === "ACTIVA") {
       if (!existente.puestoId) throw new AppError("Debe asignar un puesto antes de activar la reserva", 400);
       if (!existente.vehiculoId) throw new AppError("Debe asignar un vehículo antes de activar la reserva", 400);
+
+      // La activación compite con entradas y otras reservas: utiliza los mismos bloqueos.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId})`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId})`;
+      const actual = await tx.reserva.findUnique({ where: { id: Number(id) } });
+      if (!actual || !["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) {
+        throw new AppError("La reserva ya no está disponible para activarse", 409);
+      }
+      const ahora = new Date();
+      if (actual.fechaInicio > ahora || (actual.fechaFin && actual.fechaFin < ahora)) {
+        throw new AppError("La reserva solo puede activarse dentro de su horario vigente", 409);
+      }
+
       const puesto = await tx.puesto.findUnique({ where: { id: existente.puestoId } });
       if (!puesto) throw new AppError("Puesto no encontrado", 404);
       if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
-      if (puesto.estado !== "LIBRE") throw new AppError("El puesto no está disponible (estado: " + puesto.estado + ")", 400);
       const ingresoYaActivo = await tx.ingreso.findFirst({ where: { vehiculoId: existente.vehiculoId, estado: "ACTIVO" } });
-      if (ingresoYaActivo) throw new AppError("El vehículo ya tiene un ingreso activo", 400);
-      await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "OCUPADO" } });
+      if (ingresoYaActivo) throw new AppError("El vehículo ya tiene un ingreso activo", 409);
+
+      const asignado = await tx.puesto.updateMany({
+        where: { id: existente.puestoId, activo: true, estado: "LIBRE" },
+        data: { estado: "OCUPADO" },
+      });
+      if (asignado.count !== 1) throw new AppError("El puesto ya fue asignado. Actualiza la disponibilidad.", 409);
+
+      await tx.reserva.update({ where: { id: Number(id) }, data: { estado } });
       await tx.ingreso.create({
         data: {
           clienteId: existente.clienteId,
           vehiculoId: existente.vehiculoId,
           puestoId: existente.puestoId,
           reservaId: existente.id,
-          fechaEntrada: new Date(),
+          fechaEntrada: ahora,
         },
+      });
+    } else {
+      await tx.reserva.update({
+        where: { id: Number(id) },
+        data: { estado },
       });
     }
 
