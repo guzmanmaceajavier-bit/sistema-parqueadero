@@ -4,14 +4,14 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 
 export const crearTarifa = asyncHandler(async (req, res) => {
-  const { nombre, tipoVehiculo, modalidad, valor, minutosCortesia, descripcion } = req.body;
+  const { nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis, precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion } = req.body;
   if (!nombre) throw new AppError("Nombre es requerido", 400);
   if (!tipoVehiculo) throw new AppError("Tipo de vehículo es requerido", 400);
   if (!modalidad) throw new AppError("Modalidad es requerida", 400);
   const val = Number(valor);
   if (!val || val < 0) throw new AppError("Valor debe ser un número válido y no negativo", 400);
   const tarifa = await prisma.tarifa.create({
-    data: { nombre, tipoVehiculo, modalidad, valor: val, minutosCortesia: minutosCortesia ? Number(minutosCortesia) : 0, descripcion },
+    data: {\n      nombre, tipoVehiculo, modalidad: String(modalidad).toLowerCase(), valor: val,\n      minutosCortesia: minutosCortesia ?? 0, minutosGratis: minutosGratis ?? 0,\n      precioPrimeraHora: precioPrimeraHora ?? null, precioHoraAdicional: precioHoraAdicional ?? null,\n      tarifaMaximaDiaria: tarifaMaximaDiaria ?? null, descripcion,\n    },
   });
   await registrarMovimiento("TARIFAS", "CREAR", `Tarifa creada: ${tarifa.nombre}`, req.usuario?.usuario || "admin");
   res.status(201).json({ ok: true, tarifa });
@@ -44,7 +44,7 @@ export const obtenerTarifa = asyncHandler(async (req, res) => {
 
 export const actualizarTarifa = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { nombre, tipoVehiculo, modalidad, valor, minutosCortesia, descripcion, activa } = req.body;
+  const { nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis, precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion, activa } = req.body;
 
   const existe = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Tarifa no encontrada", 404);
@@ -52,9 +52,9 @@ export const actualizarTarifa = asyncHandler(async (req, res) => {
   const data = {};
   if (nombre) data.nombre = nombre;
   if (tipoVehiculo) data.tipoVehiculo = tipoVehiculo;
-  if (modalidad) data.modalidad = modalidad;
+  if (modalidad) data.modalidad = String(modalidad).toLowerCase();
   if (valor !== undefined) { const v = Number(valor); if (!v && v !== 0) throw new AppError("Valor debe ser un número válido", 400); if (v < 0) throw new AppError("Valor no puede ser negativo", 400); data.valor = v; }
-  if (minutosCortesia !== undefined) data.minutosCortesia = Number(minutosCortesia);
+  if (minutosCortesia !== undefined) data.minutosCortesia = Number(minutosCortesia);\n  if (minutosGratis !== undefined) data.minutosGratis = Number(minutosGratis);\n  if (precioPrimeraHora !== undefined) data.precioPrimeraHora = precioPrimeraHora;\n  if (precioHoraAdicional !== undefined) data.precioHoraAdicional = precioHoraAdicional;\n  if (tarifaMaximaDiaria !== undefined) data.tarifaMaximaDiaria = tarifaMaximaDiaria;
   if (descripcion !== undefined) data.descripcion = descripcion;
   if (activa !== undefined) data.activa = activa;
 
