@@ -20,12 +20,13 @@ import {
 const $ = (v: number) => formatCurrency(v);
 const n = (v: number) => (v ?? 0).toLocaleString();
 const hoy = () => new Date();
+const fechaLocalInput = (fecha: Date) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`;
 const days7 = (ref: Date) => {
   const r: { label: string; date: string }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(ref);
     d.setDate(d.getDate() - i);
-    r.push({ label: d.toLocaleDateString("es-CO", { weekday: "short" }), date: d.toISOString().slice(0, 10) });
+    r.push({ label: d.toLocaleDateString("es-CO", { weekday: "short" }), date: fechaLocalInput(d) });
   }
   return r;
 };
@@ -50,6 +51,8 @@ export default function DashboardPage() {
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [recarga, setRecarga] = useState(0);
   const [filtro, setFiltro] = useState("hoy");
   const [sucursales, setSucursales] = useState<Array<{ id: number; nombre: string }>>([]);
   const [sucursalSel, setSucursalSel] = useState("");
@@ -73,13 +76,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setLoading(true);
+    setError("");
     const params: Record<string, string> = { filtro };
     if (sucursalSel) params.sucursalId = sucursalSel;
     api.get("/dashboard", { params })
       .then((res) => { setData(res.data); })
-      .catch(() => { /* ignore */ })
+      .catch((requestError) => {
+        setData(null);
+        setError(requestError?.response?.data?.message || "No fue posible cargar el dashboard. Intenta nuevamente.");
+      })
       .finally(() => { setLoading(false); });
-  }, [filtro, sucursalSel]);
+  }, [filtro, sucursalSel, recarga]);
 
   if (loading) {
     return (
@@ -91,6 +98,19 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
           <div className="lg:col-span-4 h-60 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse" />
           <div className="lg:col-span-3 h-60 bg-slate-100 dark:bg-slate-800 rounded-xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+          <p className="font-semibold">{error}</p>
+          <button onClick={() => setRecarga((value) => value + 1)} className="mt-3 rounded-lg bg-red-600 px-3 py-2 font-medium text-white hover:bg-red-700">
+            Reintentar
+          </button>
         </div>
       </div>
     );
