@@ -43,10 +43,16 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
 
       const numeroFactura = await generarNumeroFactura("FACT");
-      const tarifa = await tx.tarifa.findFirst({
-        where: { tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined, activa: true, sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null },
+      const sucursalIngreso = ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null;
+      const tarifas = await tx.tarifa.findMany({
+        where: {
+          tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
+          activa: true,
+          OR: [{ sucursalId: sucursalIngreso }, { sucursalId: null }],
+        },
         orderBy: { valor: "asc" },
       });
+      const tarifa = tarifas.find(t => t.sucursalId === sucursalIngreso) ?? tarifas.find(t => t.sucursalId === null);
       let valorPagado = 0;
       if (tarifa) {
         const cortesia = tarifa.minutosCortesia || 0;
