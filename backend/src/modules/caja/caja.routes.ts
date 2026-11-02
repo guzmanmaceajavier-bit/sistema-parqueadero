@@ -116,8 +116,8 @@ router.get("/", verificarToken, verificarRol("admin", "supervisor"), obtenerCaja
 router.get("/:id", verificarToken, validateIdParam, obtenerCaja);
 router.get("/:id/movimientos", verificarToken, validateIdParam, obtenerMovimientosCaja);
 router.put("/:id", verificarToken, validateIdParam, verificarRol("admin"), actualizarCaja);
-router.put("/movimiento/:id", verificarToken, validateIdParam, actualizarMovimientoCaja);
+router.put("/movimiento/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, actualizarMovimientoCaja);
 router.delete("/:id", verificarToken, validateIdParam, verificarRol("admin"), eliminarCaja);
-router.delete("/movimiento/:id", verificarToken, validateIdParam, eliminarMovimientoCaja);
+router.delete("/movimiento/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, eliminarMovimientoCaja);
 
 export default router;
