@@ -36,45 +36,45 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { observacion, conteo } = req.body;
 
-  const caja = await prisma.caja.findUnique({ where: { id: Number(id) } });
-  if (!caja) throw new AppError("Caja no encontrada", 404);
-  if (caja.estado === "CERRADA") throw new AppError("La caja ya está cerrada", 400);
+  const resultado = await prisma.$transaction(async (tx) => {
+    // Comparte el bloqueo global con la apertura para evitar cierres/aperturas solapados.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    const caja = await tx.caja.findUnique({ where: { id: Number(id) } });
+    if (!caja) throw new AppError("Caja no encontrada", 404);
+    if (caja.estado !== "ABIERTA") throw new AppError("La caja ya está cerrada", 409);
 
-  const totales = await calcularTotalesHelper(caja.id);
-  const esperado = caja.apertura + totales.ingresosEfectivo - totales.egresos;
+    const totales = await calcularTotalesHelper(caja.id, tx);
+    const esperado = caja.apertura + totales.ingresosEfectivo - totales.egresos;
+    let obsFinal = observacion || "";
+    let totalConteo = 0;
+    let diferencia = 0;
 
-  let obsFinal = observacion || "";
-  let totalConteo = 0;
-  let diferencia = 0;
-
-  if (conteo) {
-    // suma el total del conteo
-    if (conteo.billetes) {
-      for (const [denom, count] of Object.entries(conteo.billetes)) {
-        totalConteo += parseInt(denom) * (Number(count) || 0);
+    if (conteo) {
+      for (const [denom, count] of Object.entries(conteo.billetes || {})) {
+        totalConteo += Number(denom) * (Number(count) || 0);
       }
-    }
-    if (conteo.monedas) {
-      for (const [denom, count] of Object.entries(conteo.monedas)) {
-        totalConteo += parseInt(denom) * (Number(count) || 0);
+      for (const [denom, count] of Object.entries(conteo.monedas || {})) {
+        totalConteo += Number(denom) * (Number(count) || 0);
       }
+      diferencia = totalConteo - esperado;
+      const arqueoData = { conteo, totalConteo, esperado, diferencia };
+      obsFinal = obsFinal ? obsFinal + "\\n" + JSON.stringify(arqueoData) : JSON.stringify(arqueoData);
     }
-    diferencia = totalConteo - esperado;
-    const arqueoData = { conteo, totalConteo, esperado, diferencia };
-    obsFinal = obsFinal
-      ? obsFinal + "\n" + JSON.stringify(arqueoData)
-      : JSON.stringify(arqueoData);
-  }
 
-  const actualizada = await prisma.caja.update({
-    where: { id: Number(id) },
-    data: { cierre: esperado, observacion: obsFinal, estado: "CERRADA" },
+    const actualizada = await tx.caja.updateMany({
+      where: { id: Number(id), estado: "ABIERTA" },
+      data: { cierre: esperado, observacion: obsFinal, estado: "CERRADA" },
+    });
+    if (actualizada.count !== 1) throw new AppError("La caja fue cerrada por otra operación", 409);
+
+    const cajaCerrada = await tx.caja.findUniqueOrThrow({ where: { id: Number(id) } });
+    return { caja: cajaCerrada, totales, totalConteo, esperado, diferencia };
   });
 
-  await registrarMovimiento("CAJA", "CERRAR", `Caja #${id} cerrada — Efectivo $${esperado} (Ingresos: $${totales.ingresos}, Egresos: $${totales.egresos})`, req.usuario?.usuario);
-  emitirEvento("caja:cerrada", { mensaje: "Caja cerrada", caja: actualizada });
+  await registrarMovimiento("CAJA", "CERRAR", `Caja #${id} cerrada — Efectivo $${resultado.esperado} (Ingresos: $${resultado.totales.ingresos}, Egresos: $${resultado.totales.egresos})`, req.usuario?.usuario);
+  emitirEvento("caja:cerrada", { mensaje: "Caja cerrada", caja: resultado.caja });
 
-  res.json({ ok: true, caja: { ...actualizada, ...totales }, totalConteo, esperado, diferencia });
+  res.json({ ok: true, caja: { ...resultado.caja, ...resultado.totales }, totalConteo: resultado.totalConteo, esperado: resultado.esperado, diferencia: resultado.diferencia });
 });
 
 export const obtenerCajaActiva = asyncHandler(async (req, res) => {
