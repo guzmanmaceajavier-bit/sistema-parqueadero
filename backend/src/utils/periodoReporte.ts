@@ -3,33 +3,109 @@ export interface PeriodoReporte {
   finExclusivo: Date;
 }
 
-function parseFechaLocal(value: unknown, campo: string): Date {
+interface FechaCalendario {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function partesFechaEnZona(fecha: Date, timeZone: string): FechaCalendario {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(fecha);
+  const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+  return {
+    year: Number(valores.year),
+    month: Number(valores.month),
+    day: Number(valores.day),
+  };
+}
+
+function parseFechaCalendario(value: unknown, campo: string): FechaCalendario {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new RangeError(`La fecha ${campo} debe tener formato YYYY-MM-DD`);
   }
   const [year, month, day] = value.split("-").map(Number);
-  const fecha = new Date(year, month - 1, day);
-  if (fecha.getFullYear() !== year || fecha.getMonth() !== month - 1 || fecha.getDate() !== day) {
+  const comprobacion = new Date(0);
+  comprobacion.setUTCHours(0, 0, 0, 0);
+  comprobacion.setUTCFullYear(year, month - 1, day);
+  if (
+    comprobacion.getUTCFullYear() !== year ||
+    comprobacion.getUTCMonth() !== month - 1 ||
+    comprobacion.getUTCDate() !== day
+  ) {
     throw new RangeError(`La fecha ${campo} no es válida`);
   }
-  return fecha;
+  return { year, month, day };
+}
+
+function inicioDiaEnZona(fecha: FechaCalendario, timeZone: string): Date {
+  const objetivo = Date.UTC(fecha.year, fecha.month - 1, fecha.day);
+  let instante = objetivo;
+
+  // Ajusta la diferencia entre la hora UTC candidata y la medianoche local.
+  for (let intento = 0; intento < 4; intento++) {
+    const representada = partesFechaEnZona(new Date(instante), timeZone);
+    const medianocheRepresentada = Date.UTC(
+      representada.year,
+      representada.month - 1,
+      representada.day,
+    );
+    const diferencia = objetivo - medianocheRepresentada;
+    if (diferencia === 0) break;
+
+    const horaPartes = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(instante));
+    const hora = Object.fromEntries(horaPartes.map((parte) => [parte.type, parte.value]));
+    const segundosDesdeMedianoche =
+      Number(hora.hour) * 3600 + Number(hora.minute) * 60 + Number(hora.second);
+    instante += diferencia - segundosDesdeMedianoche * 1000;
+  }
+
+  return new Date(instante);
 }
 
 export function obtenerPeriodoReporte(
   fechaInicio?: unknown,
   fechaFin?: unknown,
   ahora = new Date(),
+  timeZone = "America/Bogota",
 ): PeriodoReporte {
-  const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
-  const inicio = fechaInicio === undefined ? hoy : parseFechaLocal(fechaInicio, "inicial");
-  const fin = fechaFin === undefined ? hoy : parseFechaLocal(fechaFin, "final");
+  const hoy = partesFechaEnZona(ahora, timeZone);
+  const inicioCalendario = fechaInicio === undefined
+    ? hoy
+    : parseFechaCalendario(fechaInicio, "inicial");
+  const finCalendario = fechaFin === undefined
+    ? hoy
+    : parseFechaCalendario(fechaFin, "final");
 
-  if (inicio.getTime() > fin.getTime()) {
+  const inicioOrden = Date.UTC(inicioCalendario.year, inicioCalendario.month - 1, inicioCalendario.day);
+  const finOrden = Date.UTC(finCalendario.year, finCalendario.month - 1, finCalendario.day);
+  if (inicioOrden > finOrden) {
     throw new RangeError("La fecha inicial no puede ser posterior a la fecha final");
   }
 
+  const diaSiguiente = new Date(Date.UTC(
+    finCalendario.year,
+    finCalendario.month - 1,
+    finCalendario.day + 1,
+  ));
+
   return {
-    inicio,
-    finExclusivo: new Date(fin.getFullYear(), fin.getMonth(), fin.getDate() + 1),
+    inicio: inicioDiaEnZona(inicioCalendario, timeZone),
+    finExclusivo: inicioDiaEnZona({
+      year: diaSiguiente.getUTCFullYear(),
+      month: diaSiguiente.getUTCMonth() + 1,
+      day: diaSiguiente.getUTCDate(),
+    }, timeZone),
   };
 }
