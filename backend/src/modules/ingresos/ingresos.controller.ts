@@ -328,6 +328,9 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
 
   const vid = vehiculoId !== undefined ? Number(vehiculoId) : ingreso.vehiculoId;
   const nuevoPuestoId = puestoId !== undefined ? Number(puestoId) : ingreso.puestoId;
+  if (ingreso.reservaId && (vid !== ingreso.vehiculoId || nuevoPuestoId !== ingreso.puestoId)) {
+    throw new AppError("Este ingreso está vinculado a una reserva. Modifica la reserva para conservar la trazabilidad de la asignación.", 409);
+  }
   if (!Number.isInteger(vid) || vid <= 0) throw new AppError("Vehículo no válido", 400);
   if (!Number.isInteger(nuevoPuestoId) || nuevoPuestoId <= 0) throw new AppError("Puesto no válido", 400);
 
@@ -354,34 +357,34 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
     });
     if (duplicado) throw new AppError("El vehículo ya tiene otro ingreso activo", 409);
 
-    if (nuevoPuestoId !== ingreso.puestoId) {
-      const ahora = new Date();
-      const [reservaVehiculo, mensualidadAsignada] = await Promise.all([
-        tx.reserva.findFirst({
-          where: {
-            vehiculoId: vid,
-            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            fechaInicio: { lte: ahora },
-            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
-          },
-          select: { id: true, puestoId: true },
-        }),
-        tx.mensualidad.findFirst({
-          where: {
-            vehiculoId: vid,
-            estado: "ACTIVA",
-            fechaInicio: { lte: ahora },
-            fechaFin: { gte: ahora },
-            puestoId: { not: null },
-          },
-          select: { id: true, puestoId: true },
-        }),
-      ]);
-      if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva vigente. No se puede cambiar su puesto desde un ingreso activo.", 409);
-      if (mensualidadAsignada?.puestoId && mensualidadAsignada.puestoId !== nuevoPuestoId) {
-        throw new AppError("El vehículo tiene otro puesto asignado por su mensualidad", 409);
-      }
+    const ahora = new Date();
+    const [reservaVehiculo, mensualidadAsignada] = await Promise.all([
+      tx.reserva.findFirst({
+        where: {
+          vehiculoId: vid,
+          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lte: ahora },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+        },
+        select: { id: true, puestoId: true },
+      }),
+      tx.mensualidad.findFirst({
+        where: {
+          vehiculoId: vid,
+          estado: "ACTIVA",
+          fechaInicio: { lte: ahora },
+          fechaFin: { gte: ahora },
+          puestoId: { not: null },
+        },
+        select: { id: true, puestoId: true },
+      }),
+    ]);
+    if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva vigente. No se puede cambiar su asignación desde un ingreso activo.", 409);
+    if (mensualidadAsignada?.puestoId && mensualidadAsignada.puestoId !== nuevoPuestoId) {
+      throw new AppError("El vehículo tiene otro puesto asignado por su mensualidad", 409);
+    }
 
+    if (nuevoPuestoId !== ingreso.puestoId) {
       const disponible = await puestoEstaDisponibleParaAsignar(tx, nuevoPuestoId, { vehiculoId: vid });
       if (!disponible) throw new AppError("El nuevo puesto ya no está disponible", 409);
       const reservado = await tx.puesto.updateMany({
