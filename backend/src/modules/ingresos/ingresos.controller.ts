@@ -28,7 +28,7 @@ async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asigna
     tx.reserva.count({
       where: {
         puestoId,
-        estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+        estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
         OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
         ...(asignacion.reservaId ? { id: { not: asignacion.reservaId } } : {}),
       },
@@ -590,6 +590,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
     // La hora efectiva se fija después de obtener los bloqueos, no antes de esperar.
     fechaSalida = new Date();
+    if (cubiertoPorPlan) {
+      cobroTotalMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
+    }
 
     const ingresoActual = await tx.ingreso.findUnique({
       where: { id: Number(id) },
