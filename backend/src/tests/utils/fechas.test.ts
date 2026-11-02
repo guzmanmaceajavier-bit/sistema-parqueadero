@@ -17,6 +17,15 @@ describe("sumarMesesConTope", () => {
     expect(result.toISOString()).toBe("2026-09-30T08:00:00.000Z");
   });
 
+  it("mantiene el fin de mes al renovar períodos consecutivos", () => {
+    const febrero = sumarMesesConTope(new Date("2025-01-31T10:30:00.000Z"), 1);
+    const marzo = sumarMesesConTope(febrero, 1);
+    const abril = sumarMesesConTope(marzo, 1);
+    expect(febrero.toISOString()).toBe("2025-02-28T10:30:00.000Z");
+    expect(marzo.toISOString()).toBe("2025-03-31T10:30:00.000Z");
+    expect(abril.toISOString()).toBe("2025-04-30T10:30:00.000Z");
+  });
+
   it("mantiene la hora y los minutos originales", () => {
     const result = sumarMesesConTope(new Date("2026-03-15T18:45:12.000Z"), 1);
     expect(result.toISOString()).toBe("2026-04-15T18:45:12.000Z");
