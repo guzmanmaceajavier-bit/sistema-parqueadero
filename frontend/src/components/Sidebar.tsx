@@ -119,6 +119,8 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
 
   function Section({ label, icon: Icon, color, open, onToggle, children, id }) {
     const sectionRef = useRef(null);
+    const rawSubmenuChildren = children?.props?.children;
+    const submenuItems = (Array.isArray(rawSubmenuChildren) ? rawSubmenuChildren : [rawSubmenuChildren]).filter(Boolean);
     return (
       <div ref={sectionRef}>
         <div
