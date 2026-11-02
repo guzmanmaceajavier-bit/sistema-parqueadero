@@ -1,6 +1,6 @@
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
-import { obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
+import { obtenerPeriodoReporte, obtenerFechaClaveEnZona } from "../../utils/periodoReporte.js";
 import { resumirEstadosPuestos } from "../../utils/puestos.js";
 
 export const obtenerReporte = asyncHandler(async (req, res) => {
@@ -12,9 +12,10 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   let inicio: Date;
   let finExclusivo: Date;
+  let zonaHoraria = "America/Bogota";
   try {
     const configuracion = await prisma.configuracion.findFirst({ select: { zonaHoraria: true } });
-    let zonaHoraria = configuracion?.zonaHoraria || "America/Bogota";
+    zonaHoraria = configuracion?.zonaHoraria || "America/Bogota";
     try {
       new Intl.DateTimeFormat("en-US", { timeZone: zonaHoraria }).format(new Date());
     } catch {
@@ -75,14 +76,17 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
   const utilidad = totalIngresos - totalGastos;
 
   const ingresosPorDia = [];
-  const iter = new Date(inicio);
-  while (iter < finExclusivo) {
+  const claveInicio = obtenerFechaClaveEnZona(inicio, zonaHoraria);
+  const claveFin = obtenerFechaClaveEnZona(finExclusivo, zonaHoraria);
+  const iter = new Date(`${claveInicio}T00:00:00.000Z`);
+  const finIter = new Date(`${claveFin}T00:00:00.000Z`);
+  while (iter < finIter) {
     const key = iter.toISOString().slice(0, 10);
-    const label = iter.toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
-    const ing = facturasPagadas.filter(f => f.createdAt.toISOString().slice(0, 10) === key).reduce((s, f) => s + f.valor, 0);
-    const gas = gastos.filter(g => new Date(g.fecha).toISOString().slice(0, 10) === key).reduce((s, g) => s + g.valor, 0);
+    const label = iter.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", timeZone: "UTC" });
+    const ing = facturasPagadas.filter(f => obtenerFechaClaveEnZona(f.createdAt, zonaHoraria) === key).reduce((s, f) => s + f.valor, 0);
+    const gas = gastos.filter(g => obtenerFechaClaveEnZona(new Date(g.fecha), zonaHoraria) === key).reduce((s, g) => s + g.valor, 0);
     ingresosPorDia.push({ label, fecha: key, ingresos: ing, gastos: gas });
-    iter.setDate(iter.getDate() + 1);
+    iter.setUTCDate(iter.getUTCDate() + 1);
   }
 
   const horas = Array.from({ length: 24 }, (_, h) => ({
