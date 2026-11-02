@@ -273,11 +273,11 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
 
   const resultado = await prisma.$transaction(async (tx) => {
     // Bloquea la mensualidad para que dos abonos simultáneos no excedan su saldo.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124018, ${Number(id)}::integer)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${Number(id)}::integer)) AS advisory_lock`;
     await tx.$queryRaw`SELECT id FROM "Mensualidad" WHERE id = ${Number(id)} FOR UPDATE`;
 
     // El mismo bloqueo global de caja se usa al abrir, cerrar y registrar otros movimientos.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
 
     const mensualidad = await tx.mensualidad.findUnique({
       where: { id: Number(id) },
