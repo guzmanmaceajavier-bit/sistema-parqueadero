@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { BarChart3, DollarSign, TrendingUp, TrendingDown, Download, FileText, Calendar, Car, CreditCard, Banknote, Landmark, Receipt } from "lucide-react";
 import api from "../services/api";
 import Card from "../components/ui/Card";
-import { formatCurrency, formatDate } from "../utils/formatters";
+import { formatCurrency } from "../utils/formatters";
 import ExportButton from "../components/ExportButton";
 import { useConfig } from "../context/ConfigContext";
 import { jsPDF } from "jspdf";
@@ -16,6 +16,20 @@ const fechaLocalInput = (fecha, zonaHoraria) => {
   }).formatToParts(fecha);
   const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
   return `${valores.year}-${valores.month}-${valores.day}`;
+};
+
+const formatFechaZona = (fecha, zonaHoraria) => {
+  if (!fecha) return "—";
+  const valor = new Date(fecha);
+  if (Number.isNaN(valor.getTime())) return "—";
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: zonaHoraria,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(valor);
 };
 
 const PRESETS = [
@@ -113,7 +127,7 @@ export default function Reportes() {
       doc.autoTable({
         startY: 70,
         head: [["#", "Cliente", "Placa", "Valor", "Método", "Fecha"]],
-        body: data.facturas.map(f => [f.numero, f.cliente || "—", f.placa || "—", $(f.valor), f.metodoPago || f.estadoPago || "Pendiente", formatDate(f.createdAt)]),
+        body: data.facturas.map(f => [f.numero, f.cliente || "—", f.placa || "—", $(f.valor), f.metodoPago || f.estadoPago || "Pendiente", formatFechaZona(f.createdAt, zonaHoraria)]),
       });
     }
     if (data.gastos.length > 0) {
@@ -122,7 +136,7 @@ export default function Reportes() {
       doc.autoTable({
         startY: y + 4,
         head: [["Concepto", "Categoría", "Valor", "Fecha"]],
-        body: data.gastos.map(g => [g.concepto, g.categoria || "—", $(g.valor), formatDate(g.fecha)]),
+        body: data.gastos.map(g => [g.concepto, g.categoria || "—", $(g.valor), formatFechaZona(g.fecha, zonaHoraria)]),
       });
     }
     doc.save(`reporte-${fechaInicio}-al-${fechaFin}.pdf`);
@@ -162,7 +176,7 @@ export default function Reportes() {
               Valor: $(f.valor),
               Estado: f.estadoPago || "Pendiente",
               Metodo: f.metodoPago || "—",
-              Fecha: formatDate(f.createdAt),
+              Fecha: formatFechaZona(f.createdAt, zonaHoraria),
             }))}
             filename={`facturas-${fechaInicio}-al-${fechaFin}`}
             title="Facturas"
@@ -181,7 +195,7 @@ export default function Reportes() {
               Concepto: g.concepto,
               Categoria: g.categoria || "—",
               Valor: $(g.valor),
-              Fecha: formatDate(g.fecha),
+              Fecha: formatFechaZona(g.fecha, zonaHoraria),
             }))}
             filename={`gastos-${fechaInicio}-al-${fechaFin}`}
             title="Gastos"
@@ -393,7 +407,7 @@ export default function Reportes() {
                           <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
                             #{f.numero} — {f.cliente || "Inv."} {f.placa ? `(${f.placa})` : ""}
                           </p>
-                          <p className="text-xs text-slate-400">{f.metodoPago || f.estadoPago || "Pendiente"} · {formatDate(f.createdAt)}</p>
+                          <p className="text-xs text-slate-400">{f.metodoPago || f.estadoPago || "Pendiente"} · {formatFechaZona(f.createdAt, zonaHoraria)}</p>
                         </div>
                         <span className="text-sm font-semibold text-slate-800 dark:text-white ml-3">{$(f.valor)}</span>
                       </div>
