@@ -8,10 +8,11 @@ export function calcularProximaGeneracion(periodicidad: string | null | undefine
       return siguiente;
     case "mensual": {
       const dia = siguiente.getDate();
+      const eraFinDeMes = dia === new Date(siguiente.getFullYear(), siguiente.getMonth() + 1, 0).getDate();
       siguiente.setDate(1);
       siguiente.setMonth(siguiente.getMonth() + 1);
       const ultimoDia = new Date(siguiente.getFullYear(), siguiente.getMonth() + 1, 0).getDate();
-      siguiente.setDate(Math.min(dia, ultimoDia));
+      siguiente.setDate(eraFinDeMes ? ultimoDia : Math.min(dia, ultimoDia));
       return siguiente;
     }
     case "anual": {
