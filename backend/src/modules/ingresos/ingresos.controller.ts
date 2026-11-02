@@ -574,13 +574,10 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     cobroTotalMinutos = cobro.totalMinutos ?? 0;
   }
 
+  // El saldo se calcula dentro de la transacción, después de bloquear el registro
+  // del cliente. Así dos salidas simultáneas no pueden consumir el mismo crédito.
   let valorFinal = cobroTotal;
   let saldoUsado = 0;
-  const saldoCliente = ingreso.cliente?.saldo ?? 0;
-  if (!cubiertoPorPlan && saldoCliente > 0 && valorFinal > 0) {
-    saldoUsado = Math.min(saldoCliente, valorFinal);
-    valorFinal -= saldoUsado;
-  }
 
   const numeroFactura = cubiertoPorPlan ? null : await generarNumeroFactura("FACT");
 
@@ -591,6 +588,17 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
     // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    // Serializa consumos de saldo incluso si provienen de otros ingresos del cliente.
+    if (!cubiertoPorPlan && ingreso.clienteId) {
+      await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
+      const clienteActual = await tx.cliente.findUnique({
+        where: { id: ingreso.clienteId },
+        select: { saldo: true },
+      });
+      const saldoDisponible = clienteActual?.saldo ?? 0;
+      saldoUsado = Math.min(Math.max(0, saldoDisponible), cobroTotal);
+      valorFinal = Math.max(0, cobroTotal - saldoUsado);
+    }
 
     const ingresoActual = await tx.ingreso.findUnique({
       where: { id: Number(id) },
@@ -643,7 +651,13 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: fechaSalida }, fechaFin: { gte: fechaSalida } },
       }),
       tx.reserva.count({
-        where: { puestoId: ingreso.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }] },
+        where: {
+          puestoId: ingreso.puestoId,
+          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          ...(ingreso.reservaId ? { id: { not: ingreso.reservaId } } : {}),
+          fechaInicio: { lte: fechaSalida },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }],
+        },
       }),
     ]);
     const nuevoEstadoPuesto = otroIngresoActivo > 0 ? "OCUPADO" : mensualidadEnPuesto + reservaFutura > 0 ? "RESERVADO" : "LIBRE";
