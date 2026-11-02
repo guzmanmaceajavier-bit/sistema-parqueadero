@@ -181,12 +181,27 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   const tiempoMinutos = Math.ceil((fechaSalida - ingreso.fechaEntrada) / (1000 * 60));
 
   await prisma.$transaction(async (tx) => {
-    await tx.ingreso.update({
-      where: { id: Number(id) },
+    const finalizado = await tx.ingreso.updateMany({
+      where: { id: Number(id), estado: "ACTIVO" },
       data: { fechaSalida, estado: "FINALIZADO", tiempoMinutos, valorPagado: 0 },
     });
-    const otroIngresoActivo = await tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } });
-    await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: otroIngresoActivo > 0 ? "OCUPADO" : "LIBRE" } });
+    if (finalizado.count !== 1) throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
+
+    const [otroIngresoActivo, mensualidadVigenteEnPuesto] = await Promise.all([
+      tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
+      tx.mensualidad.count({
+        where: {
+          puestoId: ingreso.puestoId,
+          estado: "ACTIVA",
+          fechaInicio: { lte: fechaSalida },
+          fechaFin: { gte: fechaSalida },
+        },
+      }),
+    ]);
+    const estadoPuesto = otroIngresoActivo > 0
+      ? "OCUPADO"
+      : mensualidadVigenteEnPuesto > 0 ? "RESERVADO" : "LIBRE";
+    await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: estadoPuesto } });
   });
   await registrarMovimiento("INGRESOS", "LIBERAR", `Ingreso #${id} finalizado — plan activo, puesto físicamente libre (asignación de plan preservada)`, req.usuario?.usuario || "admin");
 
