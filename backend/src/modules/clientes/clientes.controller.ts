@@ -29,7 +29,7 @@ export const crearCliente = asyncHandler(async (req, res) => {
 
 export const obtenerClientes = asyncHandler(async (req, res) => {
   const { page, limit, estado, q, deseaReservar } = req.query;
-  const where = {};
+  const where: any = {};
   if (estado) where.estado = estado;
   if (deseaReservar === "true") where.deseaReservar = true;
   if (q) {
@@ -104,7 +104,7 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
   if (!existe) throw new AppError("Cliente no encontrado", 404);
 
   const { nombres, apellidos, telefono, direccion, email, observaciones, estado, deseaReservar, bloqueado, saldo } = req.body;
-  const data = {};
+  const data: any = {};
   if (nombres) data.nombres = nombres;
   if (apellidos) data.apellidos = apellidos;
   if (telefono !== undefined) data.telefono = telefono;
@@ -186,7 +186,7 @@ export const perfilCliente = asyncHandler(async (req, res) => {
   const todosIngresos = cliente.vehiculos.flatMap(v => v.ingresos?.map(i => ({ ...i, placa: v.placa, vehiculoId: v.id, marca: v.marca, modelo: v.modelo })) || []);
   todosIngresos.sort((a, b) => new Date(b.fechaEntrada).getTime() - new Date(a.fechaEntrada).getTime());
 
-  const totalGastado = todosIngresos.reduce((sum, i) => sum + (i.factura?.valor || 0), 0);
+  const totalGastado = todosIngresos.reduce((sum, i) => sum + (i.facturas || []).reduce((subtotal, factura) => subtotal + (factura.valor || 0), 0), 0);
   const totalVisitas = todosIngresos.length;
   const ultimaVisita = todosIngresos[0]?.fechaEntrada || null;
   const deudaPendiente = (cliente.vehiculos?.flatMap(v => v.mensualidades || []) || []).reduce((sum, m) => {
@@ -195,14 +195,14 @@ export const perfilCliente = asyncHandler(async (req, res) => {
   }, 0);
 
   const pagos = [
-    ...todosIngresos.filter(i => i.factura).map(i => ({
-      id: i.factura.id,
-      fecha: i.factura.createdAt || i.fechaEntrada,
+    ...todosIngresos.flatMap(i => (i.facturas || []).map(factura => ({
+      id: factura.id,
+      fecha: factura.createdAt || i.fechaEntrada,
       concepto: `Ingreso ${i.placa || ""}`.trim(),
-      metodo: i.factura.metodoPago,
-      valor: i.factura.valor || 0,
+      metodo: factura.metodoPago,
+      valor: factura.valor || 0,
       tipo: "ingreso",
-    })),
+    }))),
     ...(cliente.vehiculos?.flatMap(v => v.mensualidades?.filter(m => m.facturas?.length > 0).flatMap(m => (m.facturas || []).map(f => ({
       id: f.id,
       fecha: f.createdAt,
@@ -302,7 +302,7 @@ export const importarClientes = asyncHandler(async (req, res) => {
 
       creados.push(cliente);
     } catch (err) {
-      errores.push({ ...c, error: err.message });
+      errores.push({ ...c, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
