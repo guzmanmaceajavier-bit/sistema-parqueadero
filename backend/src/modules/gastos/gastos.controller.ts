@@ -5,13 +5,32 @@ import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { emitirEvento } from "../../services/socket.js";
 import { getCajaOError } from "../../helpers/caja.js";
 
-function calcularProximaGeneracion(periodicidad) {
-  const ahora = new Date();
+function calcularProximaGeneracion(periodicidad: string | null | undefined, desde = new Date()) {
+  const siguiente = new Date(desde);
   switch (periodicidad) {
-    case "semanal": return new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000);
-    case "mensual": return new Date(ahora.getFullYear(), ahora.getMonth() + 1, ahora.getDate());
-    case "anual": return new Date(ahora.getFullYear() + 1, ahora.getMonth(), ahora.getDate());
-    default: return null;
+    case "semanal":
+      siguiente.setDate(siguiente.getDate() + 7);
+      return siguiente;
+    case "mensual": {
+      const dia = siguiente.getDate();
+      siguiente.setDate(1);
+      siguiente.setMonth(siguiente.getMonth() + 1);
+      const ultimoDia = new Date(siguiente.getFullYear(), siguiente.getMonth() + 1, 0).getDate();
+      siguiente.setDate(Math.min(dia, ultimoDia));
+      return siguiente;
+    }
+    case "anual": {
+      const mes = siguiente.getMonth();
+      const dia = siguiente.getDate();
+      siguiente.setDate(1);
+      siguiente.setFullYear(siguiente.getFullYear() + 1);
+      siguiente.setMonth(mes);
+      const ultimoDia = new Date(siguiente.getFullYear(), mes + 1, 0).getDate();
+      siguiente.setDate(Math.min(dia, ultimoDia));
+      return siguiente;
+    }
+    default:
+      throw new AppError("Periodicidad no válida. Usa semanal, mensual o anual.", 400);
   }
 }
 
@@ -154,36 +173,72 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
   const ahora = new Date();
   const pendientes = await prisma.gasto.findMany({
     where: { recurrente: true, proximaGeneracion: { lte: ahora } },
+    orderBy: { proximaGeneracion: "asc" },
+    select: { id: true },
   });
 
   let generados = 0;
-  for (const g of pendientes) {
-    await prisma.$transaction(async (tx) => {
+  let omitidos = 0;
+  for (const pendiente of pendientes) {
+    const generado = await prisma.$transaction(async (tx) => {
+      // Comparte el bloqueo de caja con cobros, gastos y cierres.
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
-      await tx.gasto.create({
+      if (!cajaAbierta) return false;
+
+      // Releer después del lock evita que dos solicitudes generen el mismo período.
+      const plantilla = await tx.gasto.findUnique({ where: { id: pendiente.id } });
+      if (!plantilla || !plantilla.recurrente || !plantilla.proximaGeneracion || plantilla.proximaGeneracion > ahora) {
+        return false;
+      }
+
+      const siguienteFecha = calcularProximaGeneracion(plantilla.periodicidad, plantilla.proximaGeneracion);
+      const reclamado = await tx.gasto.updateMany({
+        where: {
+          id: plantilla.id,
+          recurrente: true,
+          proximaGeneracion: plantilla.proximaGeneracion,
+        },
+        data: { proximaGeneracion: siguienteFecha },
+      });
+      if (reclamado.count !== 1) return false;
+
+      // Cada ocurrencia es un gasto independiente; el movimiento apunta a ese gasto,
+      // no a la plantilla recurrente.
+      const ocurrencia = await tx.gasto.create({
         data: {
-          concepto: g.concepto,
-          descripcion: g.descripcion,
-          categoria: g.categoria,
-          valor: g.valor,
+          concepto: plantilla.concepto,
+          descripcion: plantilla.descripcion,
+          categoria: plantilla.categoria,
+          valor: plantilla.valor,
           fecha: ahora,
+          recurrente: false,
         },
       });
-      if (cajaAbierta) {
-        await tx.cajaMovimiento.create({
-          data: { cajaId: cajaAbierta.id, tipo: "EGRESO", concepto: `Gasto recurrente: ${g.concepto}`, monto: g.valor, gastoId: g.id },
-        });
-      }
-      await tx.gasto.update({
-        where: { id: g.id },
-        data: { proximaGeneracion: calcularProximaGeneracion(g.periodicidad) },
+      await tx.cajaMovimiento.create({
+        data: {
+          cajaId: cajaAbierta.id,
+          tipo: "EGRESO",
+          concepto: `Gasto recurrente: ${plantilla.concepto}`,
+          monto: plantilla.valor,
+          gastoId: ocurrencia.id,
+        },
       });
+      return true;
     });
-    generados++;
+    if (generado) generados++;
+    else omitidos++;
   }
 
-  await registrarMovimiento("GASTOS", "GENERAR_RECURRENTES", `${generados} gasto(s) recurrente(s) generados`, req.usuario?.usuario || "admin");
+  if (generados > 0) {
+    await registrarMovimiento("GASTOS", "GENERAR_RECURRENTES", `${generados} gasto(s) recurrente(s) generados`, req.usuario?.usuario || "admin");
+  }
 
-  res.json({ ok: true, generados, total: pendientes.length });
+  res.json({
+    ok: true,
+    generados,
+    omitidos,
+    totalPendientes: pendientes.length,
+    message: omitidos > 0 ? "Algunos gastos se omitieron porque ya fueron procesados o no hay caja abierta." : "Generación completada.",
+  });
 });
