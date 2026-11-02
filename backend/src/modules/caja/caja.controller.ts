@@ -192,8 +192,9 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
 export const obtenerMovimientosCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { tipo, metodoPago, q, page, limit } = req.query;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
 
-  const caja = await prisma.caja.findUnique({ where: { id: Number(id) } });
+  const caja = await prisma.caja.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!caja) throw new AppError("Caja no encontrada", 404);
 
   const where: any = { cajaId: caja.id };
@@ -249,7 +250,8 @@ export const obtenerMovimientosCaja = asyncHandler(async (req, res) => {
 
 export const eliminarCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existente = await prisma.caja.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const existente = await prisma.caja.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Caja no encontrada", 404);
 
   throw new AppError("No se pueden eliminar cajas cerradas. El historial de caja debe preservarse para auditoría.", 400);
@@ -257,12 +259,14 @@ export const eliminarCaja = asyncHandler(async (req, res) => {
 
 export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const anulado = await prisma.$transaction(async (tx) => {
     // El mismo bloqueo protege el cierre: un movimiento no cambia durante el arqueo.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const movimiento = await tx.cajaMovimiento.findUnique({ where: { id: Number(id) } });
     if (!movimiento) throw new AppError("Movimiento no encontrado", 404);
-    const caja = await tx.caja.findUnique({ where: { id: movimiento.cajaId } });
+    const caja = await tx.caja.findFirst({ where: { id: movimiento.cajaId, ...(sucursalId ? { sucursalId } : {}) } });
+    if (!caja) throw new AppError("Movimiento no encontrado", 404);
     if (caja && caja.estado === "CERRADA") throw new AppError("No se puede anular un movimiento de una caja cerrada", 400);
     if (movimiento.anulado) throw new AppError("Este movimiento ya fue anulado", 409);
     if (movimiento.facturaId || movimiento.gastoId) {
@@ -287,6 +291,7 @@ export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
 export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { concepto, monto, metodoPago } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const actualizado = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const movimiento = await tx.cajaMovimiento.findUnique({ where: { id: Number(id) } });
@@ -295,8 +300,9 @@ export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
     if (movimiento.facturaId || movimiento.gastoId) {
       throw new AppError("Este movimiento proviene de una factura o gasto. Modifica la operación desde su módulo de origen.", 409);
     }
-    const caja = await tx.caja.findUnique({ where: { id: movimiento.cajaId } });
-    if (caja && caja.estado === "CERRADA") throw new AppError("No se puede modificar una caja cerrada", 400);
+    const caja = await tx.caja.findFirst({ where: { id: movimiento.cajaId, ...(sucursalId ? { sucursalId } : {}) } });
+    if (!caja) throw new AppError("Movimiento no encontrado", 404);
+    if (caja.estado === "CERRADA") throw new AppError("No se puede modificar una caja cerrada", 400);
     const data: any = {};
     if (concepto !== undefined) {
       if (typeof concepto !== "string" || !concepto.trim() || concepto.trim().length > 255) {
