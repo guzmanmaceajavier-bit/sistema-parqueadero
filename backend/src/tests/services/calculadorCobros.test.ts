@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
   vehiculo: { findFirst: vi.fn() },
-  tarifa: { findUnique: vi.fn(), findFirst: vi.fn() },
+  tarifa: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
   configuracion: { findFirst: vi.fn() },
 }));
 
@@ -36,7 +36,7 @@ describe("calcularCobro", () => {
   });
 
   it("usa la tarifa asignada al vehículo aunque no se envíe una modalidad", async () => {
-    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, modalidad: "diario", valor: 12000 });
+    prismaMock.tarifa.findFirst.mockResolvedValue({ ...tarifaBase, modalidad: "diario", valor: 12000 });
 
     const result = await calcularCobro({
       ingreso: { id: 1, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
@@ -45,7 +45,7 @@ describe("calcularCobro", () => {
       fechaSalida: new Date("2026-01-01T09:00:00"),
     });
 
-    expect(prismaMock.tarifa.findUnique).toHaveBeenCalledWith({ where: { id: 7 } });
+    expect(prismaMock.tarifa.findFirst).toHaveBeenCalledWith({ where: { id: 7, OR: [{ sucursalId: null }, { sucursalId: null }] } });
     expect(prismaMock.tarifa.findFirst).not.toHaveBeenCalled();
     expect(result.total).toBe(12000);
   });
