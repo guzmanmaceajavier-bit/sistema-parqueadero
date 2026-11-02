@@ -1,5 +1,6 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
+import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearAusenciaSchema, actualizarAusenciaSchema } from "../../schemas/ausencia.schema.js";
@@ -70,7 +71,7 @@ router.get("/", verificarToken, obtenerAusencias);
  *         description: Ausencia no encontrada
  */
 router.get("/:id", verificarToken, validateIdParam, obtenerAusencia);
-router.put("/:id", verificarToken, validateIdParam, validate(actualizarAusenciaSchema), actualizarAusencia);
+router.put("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, validate(actualizarAusenciaSchema), actualizarAusencia);
 
 /**
  * @swagger
@@ -89,7 +90,7 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarAusenciaS
  *       200:
  *         description: Ausencia finalizada
  */
-router.put("/finalizar/:id", verificarToken, validateIdParam, finalizarAusencia);
+router.put("/finalizar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, finalizarAusencia);
 
 /**
  * @swagger
@@ -110,6 +111,6 @@ router.put("/finalizar/:id", verificarToken, validateIdParam, finalizarAusencia)
  *       404:
  *         description: Ausencia no encontrada
  */
-router.delete("/:id", verificarToken, validateIdParam, eliminarAusencia);
+router.delete("/:id", verificarToken, verificarRol("admin"), validateIdParam, eliminarAusencia);
 
 export default router;
