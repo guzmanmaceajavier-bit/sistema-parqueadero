@@ -38,7 +38,7 @@ describe("obtenerReporte", () => {
       lt: new Date("2026-11-01T00:00:00.000Z"),
     };
     expect(prismaMock.factura.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { createdAt: rango, metodoPago: { not: null }, sucursalId: 7 },
+      where: { createdAt: rango, sucursalId: 7 },
       include: expect.objectContaining({
         ingreso: expect.any(Object),
         mensualidad: expect.objectContaining({
