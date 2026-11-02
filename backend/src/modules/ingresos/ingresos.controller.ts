@@ -264,6 +264,9 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
       select: { id: true, vehiculoId: true, puestoId: true, reservaId: true, fechaEntrada: true },
     });
     if (!ingresoActual) throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
+    if (ingresoActual.vehiculoId !== ingreso.vehiculoId || ingresoActual.puestoId !== ingreso.puestoId) {
+      throw new AppError("La asignación del ingreso cambió mientras se procesaba. Actualiza e inténtalo de nuevo.", 409);
+    }
 
     const planesActuales = await tx.$queryRaw<Array<{ id: number }>>`
       SELECT "id"
@@ -350,6 +353,15 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
     }
     for (const lockPuestoId of [...new Set([ingreso.puestoId, nuevoPuestoId])].sort((a, b) => a - b)) {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${lockPuestoId})`;
+    }
+
+    const ingresoActual = await tx.ingreso.findUnique({
+      where: { id: Number(id) },
+      select: { estado: true, vehiculoId: true, puestoId: true },
+    });
+    if (!ingresoActual || ingresoActual.estado !== "ACTIVO") throw new AppError("El ingreso ya no está activo", 409);
+    if (ingresoActual.vehiculoId !== ingreso.vehiculoId || ingresoActual.puestoId !== ingreso.puestoId) {
+      throw new AppError("La asignación del ingreso cambió. Actualiza e inténtalo de nuevo.", 409);
     }
 
     const duplicado = await tx.ingreso.findFirst({
@@ -447,6 +459,9 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
     const actual = await tx.ingreso.findUnique({ where: { id: Number(id) } });
     if (!actual || actual.estado === "ACTIVO") {
       throw new AppError("El ingreso cambió de estado y ya no puede eliminarse", 409);
+    }
+    if (actual.puestoId !== ingreso.puestoId) {
+      throw new AppError("El puesto del ingreso cambió. Actualiza la lista antes de eliminarlo.", 409);
     }
     await tx.ingreso.delete({ where: { id: Number(id) } });
     if (ingreso.puestoId) {
@@ -576,6 +591,17 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
     // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+
+    const ingresoActual = await tx.ingreso.findUnique({
+      where: { id: Number(id) },
+      select: { estado: true, vehiculoId: true, puestoId: true, reservaId: true },
+    });
+    if (!ingresoActual || ingresoActual.estado !== "ACTIVO") {
+      throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
+    }
+    if (ingresoActual.vehiculoId !== ingreso.vehiculoId || ingresoActual.puestoId !== ingreso.puestoId) {
+      throw new AppError("La asignación del ingreso cambió mientras se procesaba. Vuelve a simular la salida.", 409);
+    }
 
     // La cobertura del plan puede cambiar entre la simulación y la confirmación.
     // Si cambió, no se cobra ni se libera el vehículo con una regla desactualizada.
