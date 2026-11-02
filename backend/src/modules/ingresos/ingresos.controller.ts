@@ -136,7 +136,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
           fechaFin: { gte: ahora },
           puestoId: { not: null },
         },
-        include: { plan: true },
+        include: { plan: true, puesto: true },
       }),
     ]);
 
