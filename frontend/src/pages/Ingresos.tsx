@@ -55,7 +55,8 @@ function EstadoIngresoBadge({ estado }) {
 }
 
 export default function Ingresos() {
-  const navigate = useNavigate();\n  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { config } = useConfig();
   const { requestAbrirCaja } = useCaja();
   const [ingresos, setIngresos] = useState([]);
@@ -119,7 +120,11 @@ export default function Ingresos() {
     try { const res = await api.get("/puestos"); setPuestos(res.data.puestos || []); } catch (error) { console.log(error); }
   };
 
-  useEffect(() => {\n    const query = searchParams.get("q") || "";\n    setBusqueda(query);\n  }, [searchParams]);\n  useEffect(() => { setPage(1); }, [filtroEstado]);
+  useEffect(() => {
+    const query = searchParams.get("q") || "";
+    setBusqueda(query);
+  }, [searchParams]);
+  useEffect(() => { setPage(1); }, [filtroEstado]);
   useEffect(() => { cargarIngresos(page); }, [page, filtroEstado]);
   useEffect(() => { cargarIngresos(1); }, [busquedaDebounced]);
   useEffect(() => { cargarClientes(); cargarPuestos(); }, []);
