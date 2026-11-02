@@ -5,6 +5,7 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { sumarMesesConTope } from "../../utils/fechas.js";
+import { calcularPagadoMensualidad } from "../../utils/saldos.js";
 
 
 export const crearMensualidad = asyncHandler(async (req, res) => {
@@ -153,9 +154,7 @@ export const obtenerMensualidades = asyncHandler(async (req, res) => {
   const activasSet = new Set(ausenciasActivas.map(a => a.vehiculoId));
 
   const result = mensualidades.map((m) => {
-    const pagadoPeriodo = m.facturas
-      .filter((f: { createdAt: Date; valor: number; metodoPago: string | null }) => f.metodoPago !== null && new Date(f.createdAt) >= new Date(m.fechaInicio))
-      .reduce((sum: number, f: { valor: number }) => sum + f.valor, 0);
+    const pagadoPeriodo = calcularPagadoMensualidad(m.facturas, m.fechaInicio);
     return { ...m, saldoPendiente: Math.max(0, m.valor - pagadoPeriodo), ausente: activasSet.has(m.vehiculoId) };
   });
 
@@ -172,9 +171,7 @@ export const obtenerMensualidad = asyncHandler(async (req, res) => {
   const ausenciaActiva = mensualidad.vehiculoId ? await prisma.ausencia.findFirst({
     where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVA" },
   }) : null;
-  const pagadoPeriodo = mensualidad.facturas
-    .filter((f) => f.metodoPago !== null && new Date(f.createdAt) >= new Date(mensualidad.fechaInicio))
-    .reduce((sum, f) => sum + f.valor, 0);
+  const pagadoPeriodo = calcularPagadoMensualidad(mensualidad.facturas, mensualidad.fechaInicio);
   res.json({ ok: true, mensualidad: { ...mensualidad, saldoPendiente: Math.max(0, mensualidad.valor - pagadoPeriodo), ausente: !!ausenciaActiva, ausencia: ausenciaActiva } });
 });
 
