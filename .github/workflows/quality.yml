@@ -3,11 +3,6 @@ name: Quality checks
 on:
   pull_request:
     branches: [main]
-  push:
-    branches:
-      - main
-      - mejoras/seguridad-ux-logica
-
 jobs:
   backend:
     name: Backend typecheck and unit tests
@@ -27,6 +22,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests without database
+        if: always()
         run: npx vitest run src/tests/helpers/caja.test.ts src/tests/schemas/usuario.test.ts src/tests/services/ticket.test.ts
 
   frontend:
