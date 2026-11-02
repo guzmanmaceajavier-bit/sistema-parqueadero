@@ -117,18 +117,18 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
 
 export const eliminarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const gasto = await prisma.gasto.findUnique({ where: { id: Number(id) } });
-  if (!gasto) throw new AppError("Gasto no encontrado", 404);
+  const gasto = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    const existente = await tx.gasto.findUnique({ where: { id: Number(id) } });
+    if (!existente) throw new AppError("Gasto no encontrado", 404);
+    const movimientos = await tx.cajaMovimiento.findMany({
+      where: { gastoId: Number(id) },
+      include: { caja: true },
+    });
+    if (movimientos.some(m => !m.anulado && m.caja?.estado === "CERRADA")) {
+      throw new AppError("No se puede eliminar un gasto que participó en una caja cerrada. El registro financiero debe conservarse.", 409);
+    }
 
-  const movimientos = await prisma.cajaMovimiento.findMany({
-    where: { gastoId: Number(id) },
-    include: { caja: true },
-  });
-  if (movimientos.some(m => !m.anulado && m.caja?.estado === "CERRADA")) {
-    throw new AppError("No se puede eliminar un gasto que participó en una caja cerrada. El registro financiero debe conservarse.", 409);
-  }
-
-  await prisma.$transaction(async (tx) => {
     if (movimientos.length > 0) {
       await tx.cajaMovimiento.updateMany({
         where: { gastoId: Number(id) },
@@ -138,11 +138,12 @@ export const eliminarGasto = asyncHandler(async (req, res) => {
           anuladoPor: req.usuario?.usuario || "usuario",
           motivoAnulacion: "Gasto eliminado desde el módulo de gastos",
           gastoId: null,
-          concepto: `Gasto anulado: ${gasto.concepto}`,
+          concepto: `Gasto anulado: ${existente.concepto}`,
         },
       });
     }
     await tx.gasto.delete({ where: { id: Number(id) } });
+    return existente;
   });
   await registrarMovimiento("GASTOS", "ELIMINAR", `Gasto #${id} eliminado y movimiento(s) de caja anulados: ${gasto.concepto} - $${gasto.valor}`, req.usuario?.usuario || "admin");
   emitirEvento("gasto:eliminado", { mensaje: `Gasto #${id} eliminado: ${gasto.concepto}`, gasto });
