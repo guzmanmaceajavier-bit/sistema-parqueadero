@@ -285,7 +285,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
+    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } },
     include: { plan: true },
   });
   if (planActivo) {
