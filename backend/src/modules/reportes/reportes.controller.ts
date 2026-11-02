@@ -1,6 +1,6 @@
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
-import { obtenerPeriodoReporte, obtenerFechaClaveEnZona } from "../../utils/periodoReporte.js";
+import { obtenerPeriodoReporte, obtenerFechaClaveEnZona, obtenerHoraEnZona } from "../../utils/periodoReporte.js";
 import { resumirEstadosPuestos } from "../../utils/puestos.js";
 
 export const obtenerReporte = asyncHandler(async (req, res) => {
@@ -91,7 +91,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   const horas = Array.from({ length: 24 }, (_, h) => ({
     hora: `${h.toString().padStart(2, "0")}:00`,
-    count: ocupacionPorHora.filter(i => new Date(i.fechaEntrada).getHours() === h).length,
+    count: ocupacionPorHora.filter(i => obtenerHoraEnZona(new Date(i.fechaEntrada), zonaHoraria) === h).length,
   }));
 
   const metodosPago = await prisma.factura.groupBy({
