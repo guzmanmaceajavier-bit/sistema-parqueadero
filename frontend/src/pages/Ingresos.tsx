@@ -535,6 +535,12 @@ export default function Ingresos() {
                 <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Cortesía:</span><span className="font-medium text-emerald-600 dark:text-emerald-400">{`-${simulacion.minutosCortesia} min`}</span></div>
               )}
               <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Minutos facturables:</span><span className="font-medium dark:text-white">{`${simulacion.minutosFacturables} min`}</span></div>
+              {simulacion.saldoUsado > 0 && (
+                <>
+                  <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Subtotal:</span><span className="font-medium dark:text-white">${simulacion.totalBruto?.toLocaleString()}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Saldo aplicado:</span><span className="font-medium text-emerald-700 dark:text-emerald-400">-${simulacion.saldoUsado?.toLocaleString()}</span></div>
+                </>
+              )}
               <div className="border-t border-teal-200 dark:border-teal-800 pt-2 mt-2">
                 {simulacion.detalle?.map((d, i) => (
                   <div key={i} className="flex justify-between text-xs text-slate-500 dark:text-slate-400"><span>{d.concepto}</span><span className="font-medium dark:text-white">${d.valor?.toLocaleString()}</span></div>
