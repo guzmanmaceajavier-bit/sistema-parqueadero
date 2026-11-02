@@ -38,7 +38,7 @@ export const crearVehiculo = asyncHandler(async (req, res) => {
   }
 
   if (tarifaId) {
-    const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(tarifaId) } });
+    const tarifa = await prisma.tarifa.findFirst({ where: { id: Number(tarifaId), OR: [{ sucursalId: sucursalId ?? null }, { sucursalId: null }] } });
     if (!tarifa) throw new AppError("Tarifa no encontrada", 404);
     data.tarifaId = Number(tarifaId);
   }
@@ -125,7 +125,7 @@ export const actualizarVehiculo = asyncHandler(async (req, res) => {
   }
   if (tarifaId !== undefined) {
     if (tarifaId) {
-      const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(tarifaId) } });
+      const tarifa = await prisma.tarifa.findFirst({ where: { id: Number(tarifaId), OR: [{ sucursalId: existe.sucursalId ?? null }, { sucursalId: null }] } });
       if (!tarifa) throw new AppError("Tarifa no encontrada", 404);
       data.tarifaId = Number(tarifaId);
     } else {
