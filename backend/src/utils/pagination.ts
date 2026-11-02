@@ -1,18 +1,47 @@
-let defaultLimit = 20;
-export async function setDefaultLimit(limit) { if (limit > 0) defaultLimit = limit; }
+type PaginationOptions = {
+  page?: number | string;
+  limit?: number | string;
+  where?: any;
+  orderBy?: any;
+  include?: any;
+};
 
-export async function paginate(prisma, model, { page = 1, limit, where = {}, orderBy = { id: "desc" }, include } = {}) {
-  if (!limit) {
+type PaginationResult<T = any> = {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+};
+
+let defaultLimit = 20;
+
+export async function setDefaultLimit(limit: number): Promise<void> {
+  if (limit > 0) defaultLimit = limit;
+}
+
+export async function paginate(
+  prisma: any,
+  model: string,
+  { page = 1, limit, where = {}, orderBy = { id: "desc" }, include }: PaginationOptions = {},
+): Promise<PaginationResult> {
+  let resolvedLimit = limit;
+  if (!resolvedLimit) {
     const config = await prisma.configuracion.findFirst();
-    limit = config?.paginacionPorDefecto || defaultLimit;
+    resolvedLimit = config?.paginacionPorDefecto || defaultLimit;
   }
+
   const pageNum = Math.max(1, Number(page));
-  const limitNum = Math.min(100, Math.max(1, Number(limit)));
+  const limitNum = Math.min(100, Math.max(1, Number(resolvedLimit)));
   const skip = (pageNum - 1) * limitNum;
+  const delegate = prisma[model];
 
   const [data, total] = await Promise.all([
-    prisma[model].findMany({ where, orderBy, skip, take: limitNum, include }),
-    prisma[model].count({ where }),
+    delegate.findMany({ where, orderBy, skip, take: limitNum, include }),
+    delegate.count({ where }),
   ]);
 
   return {
