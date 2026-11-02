@@ -43,7 +43,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       puestoId = reservaVinculada.puestoId;
     } else {
       const mensualidadVigente = await prisma.mensualidad.findFirst({
-        where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaFin: { gte: new Date() }, puestoId: { not: null } },
+        where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
         include: { plan: true, puesto: true },
       });
       if (mensualidadVigente?.puestoId) {
