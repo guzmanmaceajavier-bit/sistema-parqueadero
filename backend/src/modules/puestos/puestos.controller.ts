@@ -183,7 +183,7 @@ export const actualizarPuesto = asyncHandler(async (req, res) => {
     }
   }
 
-  const data = {};
+  const data: any = {};
   if (codigo !== undefined) data.codigo = codigo;
   if (estado !== undefined) data.estado = estado;
   if (tipoPuesto !== undefined) data.tipoPuesto = tipoPuesto;
