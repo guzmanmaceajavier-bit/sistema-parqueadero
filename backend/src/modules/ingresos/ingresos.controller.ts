@@ -358,31 +358,33 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
     });
     if (duplicado) throw new AppError("El vehículo ya tiene otro ingreso activo", 409);
 
-    const ahora = new Date();
-    const [reservaVehiculo, mensualidadAsignada] = await Promise.all([
-      tx.reserva.findFirst({
-        where: {
-          vehiculoId: vid,
-          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-          fechaInicio: { lte: ahora },
-          OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
-        },
-        select: { id: true, puestoId: true },
-      }),
-      tx.mensualidad.findFirst({
-        where: {
-          vehiculoId: vid,
-          estado: "ACTIVA",
-          fechaInicio: { lte: ahora },
-          fechaFin: { gte: ahora },
-          puestoId: { not: null },
-        },
-        select: { id: true, puestoId: true },
-      }),
-    ]);
-    if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva vigente. No se puede cambiar su asignación desde un ingreso activo.", 409);
-    if (mensualidadAsignada?.puestoId && mensualidadAsignada.puestoId !== nuevoPuestoId) {
-      throw new AppError("El vehículo tiene otro puesto asignado por su mensualidad", 409);
+    if (vid !== ingreso.vehiculoId || nuevoPuestoId !== ingreso.puestoId) {
+      const ahora = new Date();
+      const [reservaVehiculo, mensualidadAsignada] = await Promise.all([
+        tx.reserva.findFirst({
+          where: {
+            vehiculoId: vid,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lte: ahora },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+          select: { id: true, puestoId: true },
+        }),
+        tx.mensualidad.findFirst({
+          where: {
+            vehiculoId: vid,
+            estado: "ACTIVA",
+            fechaInicio: { lte: ahora },
+            fechaFin: { gte: ahora },
+            puestoId: { not: null },
+          },
+          select: { id: true, puestoId: true },
+        }),
+      ]);
+      if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva vigente. No se puede cambiar su asignación desde un ingreso activo.", 409);
+      if (mensualidadAsignada?.puestoId && mensualidadAsignada.puestoId !== nuevoPuestoId) {
+        throw new AppError("El vehículo tiene otro puesto asignado por su mensualidad", 409);
+      }
     }
 
     if (nuevoPuestoId !== ingreso.puestoId) {
