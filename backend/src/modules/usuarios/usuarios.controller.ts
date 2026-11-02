@@ -160,7 +160,7 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
 
   const targetId = Number(id);
   const cambiaPrivilegios = (rol !== undefined && rol !== existe.rol) || password !== undefined;
-  if (targetId === req.usuario.id && rol !== undefined && rol !== "admin") {
+  if (targetId === req.usuario?.id && rol !== undefined && rol !== "admin") {
     throw new AppError("No puedes quitarte el rol de administrador desde tu propia sesión", 400);
   }
   if (existe.rol === "admin" && rol !== undefined && rol !== "admin") {
@@ -186,7 +186,7 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
     where: { id: targetId }, data,
     select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true },
   });
-  await registrarMovimiento("Usuarios", "USUARIO ACTUALIZADO", `Se actualizaron datos o privilegios del usuario ${usuario.usuario}`, req.usuario.usuario);
+  await registrarMovimiento("Usuarios", "USUARIO ACTUALIZADO", `Se actualizaron datos o privilegios del usuario ${usuario.usuario}`, req.usuario?.usuario || "admin");
   res.json({ ok: true, usuario });
 });
 
@@ -198,7 +198,7 @@ export const cambiarEstadoUsuario = asyncHandler(async (req, res) => {
   if (!existe) throw new AppError("Usuario no encontrado", 404);
 
   const targetId = Number(id);
-  if (targetId === req.usuario.id && estado === false) {
+  if (targetId === req.usuario?.id && estado === false) {
     throw new AppError("No puedes desactivar tu propia cuenta", 400);
   }
   if (existe.rol === "admin" && estado === false && existe.estado) {
