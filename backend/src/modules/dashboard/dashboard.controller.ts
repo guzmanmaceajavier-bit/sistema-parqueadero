@@ -171,7 +171,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     gastos7Dias.push({ label, total, dia: key });
   }
 
-  const metodosPagoData = metodosPago.reduce((acc, m) => {
+  const metodosPagoData = metodosPago.reduce<Record<string, { count: number; total: number }>>((acc, m) => {
     acc[m.metodoPago || "otros"] = { count: m._count, total: m._sum.valor || 0 };
     return acc;
   }, {});
