@@ -114,19 +114,29 @@ export const actualizarTarifa = asyncHandler(async (req, res) => {
 
 export const eliminarTarifa = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existe = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
-  if (!existe) throw new AppError("Tarifa no encontrada", 404);
+  const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
+  if (!tarifa) throw new AppError("Tarifa no encontrada", 404);
 
-  const ingresos = await prisma.ingreso.count({ where: { tarifaId: Number(id) } });
-  const facturas = await prisma.factura.count({ where: { tarifaId: Number(id) } });
+  // Las facturas históricas no guardan tarifaId; por eso no se elimina físicamente
+  // una tarifa que pudo haber intervenido en cobros anteriores.
+  const vehiculosAsignados = await prisma.vehiculo.count({ where: { tarifaId: Number(id) } });
+  const desactivada = await prisma.tarifa.update({
+    where: { id: Number(id) },
+    data: { activa: false },
+  });
 
-  if (ingresos > 0 || facturas > 0) {
-    await prisma.tarifa.update({ where: { id: Number(id) }, data: { activa: false } });
-    await registrarMovimiento("TARIFAS", "DESACTIVAR", `Tarifa #${id}: ${existe.nombre} desactivada (tiene registros asociados)`, req.usuario?.usuario || "admin");
-    return res.json({ ok: true, message: "Tarifa desactivada (tiene registros históricos asociados)" });
-  }
+  await registrarMovimiento(
+    "TARIFAS",
+    "DESACTIVAR",
+    `Tarifa #${id}: ${tarifa.nombre} desactivada; ${vehiculosAsignados} vehículo(s) aún la tienen asignada`,
+    req.usuario?.usuario || "admin",
+  );
 
-  await prisma.tarifa.delete({ where: { id: Number(id) } });
-  await registrarMovimiento("TARIFAS", "ELIMINAR", `Tarifa #${id}: ${existe.nombre}`, req.usuario?.usuario || "admin");
-  res.json({ ok: true, message: "Tarifa eliminada" });
+  res.json({
+    ok: true,
+    tarifa: desactivada,
+    message: vehiculosAsignados > 0
+      ? "Tarifa desactivada. Los vehículos asignados deben recibir otra tarifa antes de nuevos cobros."
+      : "Tarifa desactivada para conservar el historial de configuración.",
+  });
 });
