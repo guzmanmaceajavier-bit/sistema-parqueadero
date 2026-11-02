@@ -22,7 +22,6 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
   if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
-  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -48,7 +47,9 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
     if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
     if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
+    if (vehiculo.sucursalId !== puesto.sucursalId) throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
   }
+  const sucursalRegistro = sucursalId ?? vehiculo.sucursalId ?? puesto?.sucursalId ?? null;
 
   const ingresoActivo = await prisma.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
   if (ingresoActivo && (!puesto || ingresoActivo.puestoId !== puesto.id)) {
@@ -110,7 +111,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
       }
     }
     const m = await tx.mensualidad.create({
-      data: { clienteId: cid, vehiculoId: vid, planId: plan ? Number(planId) : undefined, puestoId: puesto ? Number(puestoId) : undefined, sucursalId: sucursalId ?? null, ...data },
+      data: { clienteId: cid, vehiculoId: vid, planId: plan ? Number(planId) : undefined, puestoId: puesto ? Number(puestoId) : undefined, sucursalId: sucursalRegistro, ...data },
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
     });
     if (puesto) {
