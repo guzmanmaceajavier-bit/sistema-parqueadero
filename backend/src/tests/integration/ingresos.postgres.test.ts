@@ -49,7 +49,14 @@ afterEach(async () => {
     await prisma.vehiculo.deleteMany({ where: { id: { in: vehiculosIds } } });
   }
   if (puestosIds.length) await prisma.puesto.deleteMany({ where: { id: { in: puestosIds } } });
+  if (cajasIds.length) await prisma.cajaMovimiento.deleteMany({ where: { cajaId: { in: cajasIds } } });
+  if (cajasIds.length) await prisma.caja.deleteMany({ where: { id: { in: cajasIds } } });
+  if (gastosIds.length) await prisma.gasto.deleteMany({ where: { id: { in: gastosIds } } });
+  if (usuariosIds.length) await prisma.usuario.deleteMany({ where: { id: { in: usuariosIds } } });
   if (clienteId) await prisma.cliente.deleteMany({ where: { id: clienteId } });
+  usuariosIds = [];
+  cajasIds = [];
+  gastosIds = [];
 });
 
 afterAll(async () => {
