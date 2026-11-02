@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
+import { obtenerFechaClaveEnZona, obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
 
 describe("obtenerPeriodoReporte", () => {
   it("incluye todo el último día mediante un límite exclusivo", () => {
@@ -28,6 +28,11 @@ describe("obtenerPeriodoReporte", () => {
     );
     expect(inicio.toISOString()).toBe("2026-01-14T23:00:00.000Z");
     expect(finExclusivo.toISOString()).toBe("2026-01-15T23:00:00.000Z");
+  });
+
+  it("agrupa las fechas usando la zona horaria configurada", () => {
+    expect(obtenerFechaClaveEnZona(new Date("2026-01-14T23:00:00.000Z"), "Europe/Berlin")).toBe("2026-01-15");
+    expect(obtenerFechaClaveEnZona(new Date("2026-01-15T23:00:00.000Z"), "Europe/Berlin")).toBe("2026-01-16");
   });
 
   it("rechaza fechas inexistentes y formatos ambiguos", () => {
