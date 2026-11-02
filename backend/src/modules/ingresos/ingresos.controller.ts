@@ -316,6 +316,9 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
   });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado === "ACTIVO") throw new AppError("No se puede eliminar un ingreso activo. Finalícelo primero.", 400);
+  if (ingreso.facturas.length > 0) {
+    throw new AppError("Este ingreso tiene facturas emitidas. No se puede eliminar porque forma parte del historial financiero; conserva el registro para auditoría.", 409);
+  }
 
   const facturaIds = ingreso.facturas.map(f => f.id);
 
