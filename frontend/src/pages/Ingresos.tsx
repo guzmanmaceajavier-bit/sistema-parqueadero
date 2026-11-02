@@ -71,7 +71,6 @@ export default function Ingresos() {
   const [ingresoSalida, setIngresoSalida] = useState(null);
   const [metodoPagoSalida, setMetodoPagoSalida] = useState("efectivo");
   const [simulacion, setSimulacion] = useState(null);
-  const [modalidadSalida, setModalidadSalida] = useState("hora");
   const [recibidoSalida, setRecibidoSalida] = useState("");
   const [ticketExtraviado, setTicketExtraviado] = useState(false);
   const [cargando, setCargando] = useState(false);
@@ -164,7 +163,7 @@ export default function Ingresos() {
     if (!id) return;
     setCargando(true);
     try {
-      const res = await api.post(`/ingresos/salida-con-cobro/${id}`, { metodoPago: metodoPagoSalida, modalidad: modalidadSalida, ticketExtraviado });
+      const res = await api.post(`/ingresos/salida-con-cobro/${id}`, { metodoPago: metodoPagoSalida, ticketExtraviado });
       setMostrarModalSalida(false);
       setIngresoSalida(null);
       setSimulacion(null);
@@ -254,18 +253,17 @@ export default function Ingresos() {
     setIngresoSalida(ingreso);
     setMetodoPagoSalida("efectivo");
     setRecibidoSalida("");
-    setModalidadSalida("hora");
     setSimulacion(null);
     setErrorSimulacion("");
     setTicketExtraviado(false);
     setMostrarModalSalida(true);
-    simularCobro(false);
   };
 
   useEffect(() => {
     if (!mostrarModalSalida || !ingresoSalida) return;
+    setErrorSimulacion("");
     simularCobro(ticketExtraviado);
-  }, [ticketExtraviado]);
+  }, [mostrarModalSalida, ingresoSalida, ticketExtraviado, simularCobro]);
 
   const activos = ingresos.filter(i => i.estado === "ACTIVO");
   const filtrados = ingresos;
@@ -550,34 +548,18 @@ export default function Ingresos() {
           )}
 
           {(!simulacion?.plan) && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <SelectWithOther
-                  label="Método de pago"
-                  name="metodoPago"
-                  value={metodoPagoSalida}
-                  onChange={(e) => setMetodoPagoSalida(e.target.value)}
-                  options={getMetodosPagoActivos(config).map(m => ({ value: m.key, label: m.label }))}
-                  otherLabel="Otro"
-                />
-              </div>
-              <div>
-                <SelectWithOther
-                  label="Modalidad de cobro"
-                  name="modalidad"
-                  value={modalidadSalida}
-                  onChange={(e) => setModalidadSalida(e.target.value)}
-                  options={[
-                    { value: "hora", label: "Por hora" },
-                    { value: "minuto", label: "Por minuto" },
-                    { value: "diario", label: "Diario" },
-                    { value: "semanal", label: "Semanal" },
-                    { value: "quincenal", label: "Quincenal" },
-                    { value: "mensual", label: "Mensual" },
-                  ]}
-                  otherLabel="Otra modalidad"
-                />
-              </div>
+            <div>
+              <SelectWithOther
+                label="Método de pago"
+                name="metodoPago"
+                value={metodoPagoSalida}
+                onChange={(e) => setMetodoPagoSalida(e.target.value)}
+                options={getMetodosPagoActivos(config).map(m => ({ value: m.key, label: m.label }))}
+                otherLabel="Otro"
+              />
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                El sistema aplicará la tarifa asignada al vehículo y mostrará el mismo criterio al registrar la salida.
+              </p>
             </div>
           )}
 
