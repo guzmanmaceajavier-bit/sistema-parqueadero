@@ -40,7 +40,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     puesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
     if (!puesto) throw new AppError("Puesto no encontrado", 404);
     if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
-    if (puesto.estado !== "LIBRE") throw new AppError("El puesto no está disponible (estado: " + puesto.estado + ")", 400);
+    if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
   }
 
   const ingresoActivo = await prisma.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
@@ -95,7 +95,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
           select: { id: true },
         }),
       ]);
-      if (puesto.estado !== "LIBRE" && !(ingresoActual && ingresoActual.puestoId === puesto.id)) {
+      if (puesto.estado === "OCUPADO" && !(ingresoActual && ingresoActual.puestoId === puesto.id)) {
         throw new AppError("El puesto ya no está disponible", 409);
       }
       if (otroIngreso || otraMensualidad || conflictoReserva || conflictosPuesto.length) {
