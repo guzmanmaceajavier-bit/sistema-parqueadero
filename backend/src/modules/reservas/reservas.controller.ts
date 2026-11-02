@@ -368,18 +368,34 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
     throw new AppError(`La reserva ya está ${existente.estado.toLowerCase()}`, 400);
   }
 
-  const reserva = await prisma.reserva.update({
-    where: { id: Number(id) }, data: { estado: "CANCELADA" },
-    include: { cliente: true, vehiculo: true, puesto: true },
-  });
-  if (reserva.puestoId) {
-    const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVO" } });
-    const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVA" } });
-    const otraReserva = await prisma.reserva.count({ where: { puestoId: reserva.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
-    if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
-      await liberarPuesto(reserva.puestoId, req.usuario?.usuario, "cancelada");
+  const reserva = await prisma.$transaction(async (tx) => {
+    const actual = await tx.reserva.findUnique({ where: { id: Number(id) } });
+    if (!actual) throw new AppError("Reserva no encontrada", 404);
+    if (actual.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${actual.vehiculoId}::integer)) AS advisory_lock`;
+    if (actual.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${actual.puestoId}::integer)) AS advisory_lock`;
+    if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(actual.estado)) {
+      throw new AppError(`La reserva ya está ${actual.estado.toLowerCase()}`, 409);
     }
-  }
+    const cancelada = await tx.reserva.updateMany({
+      where: { id: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
+      data: { estado: "CANCELADA" },
+    });
+    if (cancelada.count !== 1) throw new AppError("La reserva cambió mientras se cancelaba", 409);
+    if (actual.puestoId) {
+      const ahora = new Date();
+      const [ingresoActivo, mensualidadVigente, reservaVigente] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+        tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+      ]);
+      const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
+    }
+    return tx.reserva.findUniqueOrThrow({
+      where: { id: Number(id) },
+      include: { cliente: true, vehiculo: true, puesto: true },
+    });
+  });
   await registrarMovimiento("RESERVAS", "CANCELAR", `Reserva #${id} cancelada — ${reserva.cliente?.nombres}`, req.usuario?.usuario);
   emitirEvento("reserva:cancelada", { mensaje: `Reserva #${id} cancelada`, reserva });
   res.json({ ok: true, reserva });
