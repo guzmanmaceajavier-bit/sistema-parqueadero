@@ -48,6 +48,57 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   const data = { fechaInicio: inicio, fechaFin: fin, observacion, valor: monto };
 
   const mensualidad = await prisma.$transaction(async (tx) => {
+    // Usa los mismos bloqueos que ingresos y reservas para serializar la asignación.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
+    if (puesto) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puesto.id}::integer)) AS advisory_lock`;
+    const ahora = new Date();
+    const [ingresoActual, mensualidadVehiculo, reservaVehiculo, conflictosPuesto] = await Promise.all([
+      tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
+      tx.mensualidad.findFirst({
+        where: { vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lte: fin }, fechaFin: { gte: inicio } },
+        select: { id: true },
+      }),
+      tx.reserva.findFirst({
+        where: {
+          vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
+        },
+        select: { id: true },
+      }),
+      puesto ? tx.$queryRaw<Array<{ id: number }>>`SELECT "id" FROM "Reserva"
+        WHERE "puestoId" = ${puesto.id}
+          AND "estado" IN ('PENDIENTE', 'CONFIRMADA', 'ACTIVA')
+          AND "fechaInicio" < ${fin}
+          AND ("fechaFin" IS NULL OR "fechaFin" >= ${inicio})
+        LIMIT 1` : Promise.resolve([]),
+    ]);
+    if (mensualidadVehiculo) throw new AppError("El vehículo ya tiene una mensualidad que se cruza con este periodo", 409);
+    if (reservaVehiculo) throw new AppError("El vehículo tiene una reserva que se cruza con este periodo", 409);
+    if (ingresoActual && (!puesto || ingresoActual.puestoId !== puesto.id)) {
+      throw new AppError("El vehículo ya tiene un ingreso activo en otro puesto", 409);
+    }
+    if (puesto) {
+      const [otroIngreso, otraMensualidad, conflictoReserva] = await Promise.all([
+        tx.ingreso.findFirst({ where: { puestoId: puesto.id, estado: "ACTIVO", ...(ingresoActual ? { id: { not: ingresoActual.id } } : {}) }, select: { id: true } }),
+        tx.mensualidad.findFirst({
+          where: { puestoId: puesto.id, estado: "ACTIVA", fechaInicio: { lte: fin }, fechaFin: { gte: inicio } },
+          select: { id: true },
+        }),
+        tx.reserva.findFirst({
+          where: {
+            puestoId: puesto.id, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (puesto.estado !== "LIBRE" && !(ingresoActual && ingresoActual.puestoId === puesto.id)) {
+        throw new AppError("El puesto ya no está disponible", 409);
+      }
+      if (otroIngreso || otraMensualidad || conflictoReserva || conflictosPuesto.length) {
+        throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
+      }
+    }
     const m = await tx.mensualidad.create({
       data: { clienteId: cid, vehiculoId: vid, planId: plan ? Number(planId) : undefined, puestoId: puesto ? Number(puestoId) : undefined, ...data },
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
