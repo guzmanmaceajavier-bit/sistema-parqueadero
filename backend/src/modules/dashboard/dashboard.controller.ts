@@ -28,27 +28,18 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   const principioMesActual = inicioMesEnZona(hoy, zonaHoraria);
   const principioAnio = inicioAnioEnZona(hoy, zonaHoraria);
 
-  let inicioSemana: Date;
-  let principioMes: Date;
-  let sieteDiasAtras: Date;
-  let finSemana: Date;
-
-  if (filtro === "mes") {
-    principioMes = principioMesActual;
-    inicioSemana = principioMes;
-    sieteDiasAtras = principioMes;
-    finSemana = inicioMesEnZona(desplazarDiasEnZona(principioMes, 32, zonaHoraria), zonaHoraria);
-  } else if (filtro === "semana") {
-    inicioSemana = inicioSemanaActual;
-    principioMes = inicioSemana;
-    sieteDiasAtras = inicioSemana;
-    finSemana = desplazarDiasEnZona(inicioSemana, 7, zonaHoraria);
-  } else {
-    inicioSemana = inicioSemanaActual;
-    principioMes = principioMesActual;
-    sieteDiasAtras = desplazarDiasEnZona(hoy, -7, zonaHoraria);
-    finSemana = desplazarDiasEnZona(hoy, 7, zonaHoraria);
-  }
+  const inicioSemana = inicioSemanaActual;
+  const principioMes = principioMesActual;
+  const sieteDiasAtras = filtro === "mes"
+    ? principioMesActual
+    : filtro === "semana"
+      ? inicioSemanaActual
+      : desplazarDiasEnZona(hoy, -7, zonaHoraria);
+  const finSemana = filtro === "mes"
+    ? inicioMesEnZona(desplazarDiasEnZona(principioMesActual, 32, zonaHoraria), zonaHoraria)
+    : filtro === "semana"
+      ? desplazarDiasEnZona(inicioSemanaActual, 7, zonaHoraria)
+      : desplazarDiasEnZona(hoy, 7, zonaHoraria);
 
   const sucursalFilter = sucursalId ? { sucursalId } : {};
   const puestoSucursalFilter = sucursalId ? { puesto: { sucursalId } } : {};
