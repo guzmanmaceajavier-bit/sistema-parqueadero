@@ -50,7 +50,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     facturas7d, gastos7d, metodosPago, facturasPorMes,
   ] = await Promise.all([
 
-    prisma.puesto.groupBy({ by: ["estado"], _count: true }),
+    prisma.puesto.groupBy({ by: ["estado"], _count: true, where: sucursalFilter }),
 
     prisma.ingreso.count({ where: { estado: "ACTIVO", ...puestoSucursalFilter } }),
     prisma.ingreso.count({ where: { createdAt: { gte: hoy }, ...puestoSucursalFilter } }),
@@ -63,11 +63,11 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
     prisma.mensualidad.groupBy({ by: ["estado"], _count: true, where: { estado: "ACTIVA", ...sucursalFilter } }),
 
-    prisma.cliente.groupBy({ by: ["estado"], _count: true }),
+    prisma.cliente.groupBy({ by: ["estado"], _count: true, where: sucursalId ? { vehiculos: { some: { sucursalId } } } : {} }),
 
-    prisma.vehiculo.count(),
+    prisma.vehiculo.count({ where: sucursalFilter }),
 
-    prisma.vehiculo.groupBy({ by: ["tipo"], _count: true }),
+    prisma.vehiculo.groupBy({ by: ["tipo"], _count: true, where: sucursalFilter }),
 
     prisma.movimiento.findMany({ where: sucursalFilter, orderBy: { id: "desc" }, take: 20 }),
     prisma.ausencia.count({ where: { estado: "ACTIVA", ...sucursalFilter } }),
