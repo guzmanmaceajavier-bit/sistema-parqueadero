@@ -71,7 +71,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     prisma.puesto.groupBy({ by: ["estado"], _count: true, where: { activo: true, ...sucursalFilter } }),
 
     prisma.ingreso.count({ where: { estado: "ACTIVO", ...puestoSucursalFilter } }),
-    prisma.ingreso.count({ where: { createdAt: { gte: hoy, lt: manana }, ...puestoSucursalFilter } }),
+    prisma.ingreso.count({ where: { fechaEntrada: { gte: hoy, lt: manana }, ...puestoSucursalFilter } }),
 
     prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: hoy, lt: manana }, ...sucursalFilter } }),
     prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: principioMes, lt: manana }, ...sucursalFilter } }),
