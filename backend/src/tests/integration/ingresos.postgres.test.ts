@@ -329,3 +329,70 @@ describe("Concurrencia de reservas y mensualidades (PostgreSQL real)", () => {
       await prisma.mensualidad.count({ where: { vehiculoId, estado: "ACTIVA", fechaInicio: { lt: fin }, fechaFin: { gte: inicio } } })).toBe(1);
   });
 });
+
+
+describe("Reservas y mensualidades: conflictos de asignación y vencimientos", () => {
+  it("impide dos reservas simultáneas del mismo vehículo aunque usen puestos distintos", async () => {
+    const segundoPuesto = await prisma.puesto.create({
+      data: {
+        codigo: `P-RES-SEG-${process.pid}-${fixtureCounter}`,
+        tipoPuesto: "carro",
+        estado: "LIBRE",
+      },
+    });
+    puestosIds.push(segundoPuesto.id);
+    const inicio = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const fin = new Date(inicio.getTime() + 24 * 60 * 60 * 1000);
+
+    const intentarReserva = (idPuesto: number) => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${idPuesto}::integer)) AS advisory_lock`;
+      const existente = await tx.reserva.findFirst({
+        where: {
+          vehiculoId,
+          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lt: fin },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
+        },
+        select: { id: true },
+      });
+      if (existente) return false;
+      const reserva = await tx.reserva.create({
+        data: { clienteId, vehiculoId, puestoId: idPuesto, fechaInicio: inicio, fechaFin: fin },
+      });
+      reservasIds.push(reserva.id);
+      return true;
+    });
+
+    const resultados = await Promise.all([intentarReserva(puestoId), intentarReserva(segundoPuesto.id)]);
+    expect(resultados.filter(Boolean)).toHaveLength(1);
+    expect(await prisma.reserva.count({
+      where: { vehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+    })).toBe(1);
+  });
+
+  it("conserva reservado un puesto cuando el ingreso termina pero existe una mensualidad futura", async () => {
+    const inicioFuturo = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    const finFuturo = new Date(inicioFuturo.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const mensualidad = await prisma.mensualidad.create({
+      data: { clienteId, vehiculoId, puestoId, fechaInicio: inicioFuturo, fechaFin: finFuturo, valor: 100000, estado: "ACTIVA" },
+    });
+    mensualidadesIds.push(mensualidad.id);
+    const ingreso = await prisma.ingreso.create({ data: { clienteId, vehiculoId, puestoId } });
+    await prisma.puesto.update({ where: { id: puestoId }, data: { estado: "OCUPADO" } });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+      await tx.ingreso.update({ where: { id: ingreso.id }, data: { estado: "FINALIZADO", fechaSalida: new Date() } });
+      const [otrosIngresos, asignacionesMensualesFuturas] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA", fechaFin: { gte: new Date() } } }),
+      ]);
+      const estadoPuesto = otrosIngresos > 0 ? "OCUPADO" : asignacionesMensualesFuturas > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: puestoId }, data: { estado: estadoPuesto } });
+    });
+
+    expect((await prisma.puesto.findUniqueOrThrow({ where: { id: puestoId } })).estado).toBe("RESERVADO");
+  });
+});
