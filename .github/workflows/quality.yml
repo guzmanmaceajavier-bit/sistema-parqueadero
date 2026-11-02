@@ -23,7 +23,7 @@ jobs:
         run: npm run typecheck
       - name: Unit tests without database
         if: always()
-        run: npx vitest run src/tests/helpers/caja.test.ts src/tests/schemas/usuario.test.ts src/tests/services/ticket.test.ts src/tests/services/calculadorCobros.test.ts src/tests/modules/ingresos.test.ts src/tests/schemas/caja-gasto.test.ts src/tests/services/gastos.test.ts src/tests/utils/fechas.test.ts src/tests/utils/saldos.test.ts src/tests/utils/periodoReporte.test.ts src/tests/utils/puestos.test.ts src/tests/modules/reportes.test.ts
+        run: npx vitest run src/tests/helpers/caja.test.ts src/tests/schemas/usuario.test.ts src/tests/services/ticket.test.ts src/tests/services/calculadorCobros.test.ts src/tests/modules/ingresos.test.ts src/tests/schemas/caja-gasto.test.ts src/tests/services/gastos.test.ts src/tests/utils/fechas.test.ts src/tests/utils/saldos.test.ts src/tests/utils/periodoReporte.test.ts src/tests/utils/puestos.test.ts src/tests/modules/reportes.test.ts src/tests/modules/dashboard.test.ts
 
   frontend:
     name: Frontend production build
