@@ -9,6 +9,7 @@ import "jspdf-autotable";
 
 const inputClass = "px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500";
 const $ = (v) => formatCurrency(v);
+const fechaLocalInput = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`;
 
 const PRESETS = [
   { key: "hoy", label: "Hoy" },
@@ -23,32 +24,42 @@ export default function Reportes() {
   const [preset, setPreset] = useState("mes");
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const now = new Date();
     let inicio, fin;
     if (preset === "hoy") {
-      inicio = now.toISOString().slice(0, 10);
+      inicio = fechaLocalInput(now);
       fin = inicio;
     } else if (preset === "semana") {
       const d = new Date(now);
       d.setDate(d.getDate() - d.getDay());
-      inicio = d.toISOString().slice(0, 10);
-      fin = now.toISOString().slice(0, 10);
+      inicio = fechaLocalInput(d);
+      fin = fechaLocalInput(now);
     } else if (preset === "mes") {
-      inicio = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-      fin = now.toISOString().slice(0, 10);
+      inicio = fechaLocalInput(new Date(now.getFullYear(), now.getMonth(), 1));
+      fin = fechaLocalInput(now);
     }
     if (inicio) { setFechaInicio(inicio); setFechaFin(fin); }
   }, [preset]);
 
   const cargar = useCallback(async () => {
     if (!fechaInicio || !fechaFin) return;
+    if (fechaInicio > fechaFin) {
+      setError("La fecha inicial no puede ser posterior a la fecha final.");
+      setData(null);
+      return;
+    }
     setLoading(true);
+    setError("");
     try {
       const res = await api.get("/reportes", { params: { fechaInicio, fechaFin } });
       setData(res.data);
-    } catch {} finally { setLoading(false); }
+    } catch (requestError) {
+      setData(null);
+      setError(requestError?.response?.data?.message || "No fue posible cargar el reporte. Intenta nuevamente.");
+    } finally { setLoading(false); }
   }, [fechaInicio, fechaFin]);
 
   useEffect(() => { cargar(); }, [cargar]);
@@ -139,6 +150,12 @@ export default function Reportes() {
           {loading ? "Cargando..." : "Consultar"}
         </button>
       </div>
+
+      {error && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
