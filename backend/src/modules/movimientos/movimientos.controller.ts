@@ -39,7 +39,7 @@ export const actualizarMovimiento = asyncHandler(async (req, res) => {
   const existe = await prisma.movimiento.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Movimiento no encontrado", 404);
   const { modulo, accion, descripcion } = req.body;
-  const data = {};
+  const data: any = {};
   if (modulo) data.modulo = modulo;
   if (accion) data.accion = accion;
   if (descripcion !== undefined) data.descripcion = descripcion;
