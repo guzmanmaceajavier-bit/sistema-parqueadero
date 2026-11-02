@@ -144,6 +144,10 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
     const existente = await tx.caja.findUnique({ where: { id: Number(id) } });
     if (!existente) throw new AppError("Caja no encontrada", 404);
 
+    if (existente.estado !== "ABIERTA") {
+      throw new AppError("No se puede modificar una caja cerrada. El historial financiero debe permanecer inalterable.", 409);
+    }
+
     const data: any = {};
     if (apertura !== undefined) {
       const aperturaNormalizada = Number(apertura);
@@ -225,9 +229,9 @@ export const obtenerMovimientosCaja = asyncHandler(async (req, res) => {
     total: totalMovs.reduce((s, m) => s + m.monto, 0),
     ingresos: ingresos.reduce((s, m) => s + m.monto, 0),
     egresos: egresos.reduce((s, m) => s + m.monto, 0),
-    ingresosEfectivo: ingresos.filter(m => (m.metodoPago || "efectivo") === "efectivo").reduce((s, m) => s + m.monto, 0),
-    ingresosTarjeta: ingresos.filter(m => m.metodoPago === "tarjeta").reduce((s, m) => s + m.monto, 0),
-    ingresosTransferencia: ingresos.filter(m => m.metodoPago === "transferencia").reduce((s, m) => s + m.monto, 0),
+    ingresosEfectivo: ingresos.filter(m => String(m.metodoPago || "efectivo").trim().toLowerCase() === "efectivo").reduce((s, m) => s + m.monto, 0),
+    ingresosTarjeta: ingresos.filter(m => String(m.metodoPago || "").trim().toLowerCase() === "tarjeta").reduce((s, m) => s + m.monto, 0),
+    ingresosTransferencia: ingresos.filter(m => String(m.metodoPago || "").trim().toLowerCase() === "transferencia").reduce((s, m) => s + m.monto, 0),
   };
 
   res.json({ ok: true, movimientos, resumen, pagination });
