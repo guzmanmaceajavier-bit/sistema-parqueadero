@@ -66,9 +66,26 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
 
   const ingreso = await prisma.$transaction(async (tx) => {
+    const vehiculoYaDentro = await tx.ingreso.findFirst({
+      where: { vehiculoId, estado: "ACTIVO" },
+      select: { id: true },
+    });
+    if (vehiculoYaDentro) {
+      throw new AppError(`El vehículo con placa ${placa} ya tiene un ingreso activo`, 409);
+    }
+
     const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId));
-    if (!disponible) throw new AppError("El puesto no está disponible para asignar", 400);
-    await tx.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "OCUPADO" } });
+    if (!disponible) throw new AppError("El puesto no está disponible para asignar", 409);
+
+    // La actualización condicional evita que dos solicitudes ocupen el mismo puesto.
+    const puestoReservado = await tx.puesto.updateMany({
+      where: { id: Number(puestoId), activo: true, estado: "LIBRE" },
+      data: { estado: "OCUPADO" },
+    });
+    if (puestoReservado.count !== 1) {
+      throw new AppError("El puesto acaba de ser asignado a otro vehículo. Actualiza la disponibilidad e inténtalo de nuevo.", 409);
+    }
+
     const data: any = { clienteId, vehiculoId, puestoId: Number(puestoId) };
     if (reservaVinculada) {
       data.reservaId = reservaVinculada.id;
