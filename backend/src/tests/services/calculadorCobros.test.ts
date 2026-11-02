@@ -164,4 +164,36 @@ describe("calcularCobro", () => {
     expect(result.total).toBe(0);
   });
 
+
+  it("no cobra un ticket extraviado con tarifa normal si falta el máximo diario", async () => {
+    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, tarifaMaximaDiaria: null });
+
+    const result = await calcularCobro({
+      ingreso: { id: 9, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      ticketExtraviado: true,
+      fechaSalida: new Date("2026-01-01T09:00:00"),
+    });
+
+    expect(result.error).toContain("No hay una tarifa máxima diaria");
+    expect(result.total).toBe(0);
+  });
+
+  it("aplica el máximo diario configurado cuando se pierde el ticket", async () => {
+    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, tarifaMaximaDiaria: 30000 });
+
+    const result = await calcularCobro({
+      ingreso: { id: 10, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      ticketExtraviado: true,
+      fechaSalida: new Date("2026-01-02T08:00:00"),
+    });
+
+    expect(result.total).toBe(30000);
+    expect(result.ticketExtraviado).toBe(true);
+    expect(result.desglose).toMatchObject({ unidad: "tarifa_maxima" });
+  });
+
 });
