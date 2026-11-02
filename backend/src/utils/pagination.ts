@@ -4,6 +4,7 @@ type PaginationOptions = {
   where?: any;
   orderBy?: any;
   include?: any;
+  select?: any;
 };
 
 type PaginationResult<T = any> = {
@@ -26,7 +27,7 @@ export async function setDefaultLimit(limit: number): Promise<void> {
 export async function paginate(
   prisma: any,
   model: string,
-  { page = 1, limit, where = {}, orderBy = { id: "desc" }, include }: PaginationOptions = {},
+  { page = 1, limit, where = {}, orderBy = { id: "desc" }, include, select }: PaginationOptions = {},
 ): Promise<PaginationResult> {
   let resolvedLimit = limit;
   if (!resolvedLimit) {
@@ -44,7 +45,7 @@ export async function paginate(
   const delegate = prisma[model];
 
   const [data, total] = await Promise.all([
-    delegate.findMany({ where, orderBy, skip, take: limitNum, include }),
+    delegate.findMany({ where, orderBy, skip, take: limitNum, include, select }),
     delegate.count({ where }),
   ]);
 
