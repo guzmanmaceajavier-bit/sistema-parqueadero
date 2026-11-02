@@ -82,24 +82,40 @@ export const crearReserva = asyncHandler(async (req, res) => {
     if (vid) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
     if (pid) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${pid}::integer)) AS advisory_lock`;
 
+    const finLimite = fin || new Date("9999-12-31T23:59:59.999Z");
     if (vid) {
-      const reservaVehiculo = await tx.reserva.findFirst({
-        where: { vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
-        select: { id: true },
-      });
-      if (reservaVehiculo) throw new AppError("El vehículo ya tiene una reserva activa", 409);
+      const [reservaVehiculo, mensualidadVehiculo, ingresoVehiculo] = await Promise.all([
+        tx.reserva.findFirst({
+          where: { vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+          select: { id: true },
+        }),
+        tx.mensualidad.findFirst({
+          where: { vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+          select: { id: true },
+        }),
+        tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true } }),
+      ]);
+      if (reservaVehiculo) throw new AppError("El vehículo ya tiene una reserva en ese periodo", 409);
+      if (mensualidadVehiculo) throw new AppError("El vehículo tiene una mensualidad que se cruza con ese periodo", 409);
+      if (ingresoVehiculo) throw new AppError("El vehículo ya tiene un ingreso activo", 409);
     }
     if (pid) {
-      const conflictoPuesto = await tx.reserva.findFirst({
-        where: {
-          puestoId: pid,
-          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-          fechaInicio: { lt: fin || new Date("9999-12-31T23:59:59.999Z") },
-          OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
-        },
-        select: { id: true },
-      });
-      if (conflictoPuesto) throw new AppError("El puesto acaba de ser reservado para ese rango. Actualiza la disponibilidad.", 409);
+      const [conflictoPuesto, mensualidadPuesto, ingresoPuesto] = await Promise.all([
+        tx.reserva.findFirst({
+          where: { puestoId: pid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+          select: { id: true },
+        }),
+        tx.mensualidad.findFirst({
+          where: { puestoId: pid, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+          select: { id: true },
+        }),
+        tx.ingreso.findFirst({ where: { puestoId: pid, estado: "ACTIVO" }, select: { id: true } }),
+      ]);
+      if (conflictoPuesto || mensualidadPuesto || ingresoPuesto) {
+        throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
+      }
     }
 
     return tx.reserva.create({
