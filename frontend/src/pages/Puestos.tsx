@@ -522,20 +522,21 @@ export default function Puestos() {
           if (v && tipos.length > 0 && !tipos.includes(v.tipo)) return mostrarToast(`Este puesto solo acepta: ${tipos.join(", ")}`, "error");
           try {
             const res = await api.get("/mensualidades", { params: { clienteId: Number(asignarForm.clienteId), estado: "ACTIVA", limit: 50 } });
-            const planes = res.data.mensualidades || [];
+            const ahora = new Date();
+            const planes = (res.data.mensualidades || []).filter(plan => new Date(plan.fechaInicio) <= ahora && new Date(plan.fechaFin) >= ahora);
             const ejecutar = () => guardarEntrada(asignarForm.clienteId, asignarForm.vehiculoId, asignarPuesto.id);
             const v = vehiculos.find(ve => ve.id === parseInt(asignarForm.vehiculoId));
             const planVehiculo = planes.find(p => p.vehiculoId === Number(asignarForm.vehiculoId));
             if (planVehiculo) {
               mostrarConfirm(
                 "Vehículo con plan activo",
-                `El vehículo ${v?.placa || ""} está amparado por ${planVehiculo.plan?.nombre || "su plan"} (vence ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}).\n\nLa entrada no genera cobro y el puesto queda ligado al plan. ¿Registrar la entrada?`,
+                `El vehículo ${v?.placa || ""} está amparado por ${planVehiculo.plan?.nombre || "su plan"} (vence ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}).\n\nLa tarifa mensual cubre esta entrada hasta el ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}. El puesto quedará asociado al plan. ¿Deseas registrar la entrada?`,
                 ejecutar
               );
             } else if (planes.length > 0) {
               mostrarConfirm(
                 "Vehículo sin plan",
-                `El cliente tiene plan(es) activo(s), pero este vehículo no está amparado por ninguno.\n\nLa entrada se cobrará normal al registrar la salida. ¿Continuar?`,
+                `El cliente tiene una mensualidad vigente, pero no corresponde a la placa seleccionada. Esta entrada se cobrará con la tarifa habitual al registrar la salida. ¿Continuar?`,
                 ejecutar
               );
             } else {
