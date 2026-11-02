@@ -4,6 +4,7 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { emitirEvento } from "../../services/socket.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 const ESTADOS = ["PENDIENTE", "CONFIRMADA", "ACTIVA", "FINALIZADA", "CANCELADA", "NO_SHOW"];
 
@@ -19,6 +20,7 @@ async function liberarPuesto(puestoId: number, usuario?: string, motivo = "liber
 
 export const crearReserva = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, fechaInicio, fechaFin, observaciones } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
 
   const cid = Number(clienteId);
   const vid = vehiculoId ? Number(vehiculoId) : null;
@@ -37,6 +39,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
   if (vid) {
     vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
     if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+    if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
     if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
     if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
     if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -46,6 +49,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
   if (pid) {
     puesto = await prisma.puesto.findUnique({ where: { id: pid } });
     if (!puesto) throw new AppError("Puesto no encontrado", 404);
+    if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
     if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
     if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
     if (puesto.estado === "OCUPADO") throw new AppError("El puesto está ocupado", 400);
@@ -119,7 +123,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
     }
 
     const creada = await tx.reserva.create({
-      data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones },
+      data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones, sucursalId: sucursalId ?? null },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
     if (pid) await tx.puesto.update({ where: { id: pid }, data: { estado: "RESERVADO" } });
@@ -133,7 +137,8 @@ export const crearReserva = asyncHandler(async (req, res) => {
 
 export const obtenerReservas = asyncHandler(async (req, res) => {
   const { page, limit, estado, clienteId, puestoId, desde, hasta, q } = req.query;
-  const where: Prisma.ReservaWhereInput = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: Prisma.ReservaWhereInput = sucursalId ? { sucursalId } : {};
   if (typeof estado === "string") where.estado = estado as string;
   if (typeof clienteId === "string") where.clienteId = Number(clienteId);
   if (typeof puestoId === "string") where.puestoId = Number(puestoId);
@@ -161,8 +166,9 @@ export const obtenerReservas = asyncHandler(async (req, res) => {
 
 export const obtenerReserva = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const reserva = await prisma.reserva.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const reserva = await prisma.reserva.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: { cliente: true, vehiculo: true, puesto: true },
   });
   if (!reserva) throw new AppError("Reserva no encontrada", 404);
@@ -172,7 +178,8 @@ export const obtenerReserva = asyncHandler(async (req, res) => {
 export const actualizarReserva = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const { estado, vehiculoId, puestoId, fechaInicio, fechaFin, observaciones } = req.body;
-  const existente = await prisma.reserva.findUnique({ where: { id } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const existente = await prisma.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Reserva no encontrada", 404);
   if (["FINALIZADA", "CANCELADA", "NO_SHOW", "ACTIVA"].includes(existente.estado)) {
     throw new AppError("Solo se pueden editar reservas pendientes o confirmadas", 409);
@@ -293,7 +300,8 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
   const { estado } = req.body;
   if (!ESTADOS.includes(estado)) throw new AppError(`Estado inválido. Válidos: ${ESTADOS.join(", ")}`, 400);
 
-  const reservaInicial = await prisma.reserva.findUnique({ where: { id } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const reservaInicial = await prisma.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
   if (!reservaInicial) throw new AppError("Reserva no encontrada", 404);
 
   const reserva = await prisma.$transaction(async (tx) => {
@@ -403,7 +411,8 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
 
 export const cancelarReserva = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existente = await prisma.reserva.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const existente = await prisma.reserva.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Reserva no encontrada", 404);
   if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(existente.estado)) {
     throw new AppError(`La reserva ya está ${existente.estado.toLowerCase()}`, 400);
@@ -449,7 +458,8 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
 
 export const eliminarReserva = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  const existente = await prisma.reserva.findUnique({ where: { id } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const existente = await prisma.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Reserva no encontrada", 404);
   if (existente.estado === "ACTIVA") throw new AppError("No se puede eliminar una reserva activa; registre primero la salida", 409);
 
