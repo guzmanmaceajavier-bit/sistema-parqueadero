@@ -24,7 +24,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   const [facturas, gastos, ingresosPeriodo, puestos, ocupacionPorHora] = await Promise.all([
     prisma.factura.findMany({
-      where: { createdAt: rango, metodoPago: { not: null }, ...sf },
+      where: { createdAt: rango, ...sf },
       include: {
         ingreso: {
           select: {
@@ -62,7 +62,8 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   const resumenPuestos = resumirEstadosPuestos(puestos);
 
-  const totalIngresos = facturas.reduce((s, f) => s + f.valor, 0);
+  const facturasPagadas = facturas.filter(f => f.metodoPago !== null);
+  const totalIngresos = facturasPagadas.reduce((s, f) => s + f.valor, 0);
   const totalGastos = gastos.reduce((s, g) => s + g.valor, 0);
   const utilidad = totalIngresos - totalGastos;
 
@@ -71,7 +72,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
   while (iter < finExclusivo) {
     const key = iter.toISOString().slice(0, 10);
     const label = iter.toLocaleDateString("es-CO", { weekday: "short", day: "numeric" });
-    const ing = facturas.filter(f => f.createdAt.toISOString().slice(0, 10) === key).reduce((s, f) => s + f.valor, 0);
+    const ing = facturasPagadas.filter(f => f.createdAt.toISOString().slice(0, 10) === key).reduce((s, f) => s + f.valor, 0);
     const gas = gastos.filter(g => new Date(g.fecha).toISOString().slice(0, 10) === key).reduce((s, g) => s + g.valor, 0);
     ingresosPorDia.push({ label, fecha: key, ingresos: ing, gastos: gas });
     iter.setDate(iter.getDate() + 1);
@@ -107,6 +108,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       numero: f.numero,
       valor: f.valor,
       metodoPago: f.metodoPago,
+      estadoPago: f.metodoPago !== null ? "PAGADA" : "PENDIENTE",
       createdAt: f.createdAt,
       cliente: f.ingreso?.cliente
         ? `${f.ingreso.cliente.nombres} ${f.ingreso.cliente.apellidos}`
