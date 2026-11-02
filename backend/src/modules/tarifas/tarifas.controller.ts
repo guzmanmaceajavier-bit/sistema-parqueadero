@@ -50,11 +50,13 @@ export const obtenerTarifas = asyncHandler(async (req, res) => {
 
   if (q) {
     const query = String(q);
-    where.OR = [
+    const filtroTexto = [
       { nombre: { contains: query, mode: "insensitive" } },
       { tipoVehiculo: { contains: query, mode: "insensitive" } },
       { modalidad: { contains: query, mode: "insensitive" } },
     ];
+    where.AND = [...(where.OR ? [{ OR: where.OR }] : []), { OR: filtroTexto }];
+    delete where.OR;
   }
 
   if (page) {
