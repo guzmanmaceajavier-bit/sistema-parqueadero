@@ -47,24 +47,28 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   const modalidadNormalizada = (modalidad || "hora").toLowerCase();
 
+  const sucursalId = ingreso.vehiculo?.sucursalId ?? null;
   let tarifa: Tarifa | null = null;
 
   if (tarifaId) {
-    tarifa = await prisma.tarifa.findUnique({ where: { id: tarifaId } });
+    tarifa = await prisma.tarifa.findFirst({ where: { id: tarifaId, OR: [{ sucursalId }, { sucursalId: null }] } });
     if (!tarifa || !tarifa.activa) {
       return { error: `La tarifa asignada al vehículo no está activa`, total: 0, detalle: [] };
     }
   } else {
-    tarifa = await prisma.tarifa.findFirst({
+    const tarifas = await prisma.tarifa.findMany({
       where: {
         OR: [
           { tipoVehiculo: { contains: tipoVehiculo } },
           { tipoVehiculo: "todos" },
         ],
+        AND: [{ OR: [{ sucursalId }, { sucursalId: null }] }],
         modalidad: modalidadNormalizada,
         activa: true,
       },
+      orderBy: { valor: "asc" },
     });
+    tarifa = tarifas.find(t => t.sucursalId === sucursalId) ?? tarifas.find(t => t.sucursalId === null) ?? null;
   }
 
   if (!tarifa) {
