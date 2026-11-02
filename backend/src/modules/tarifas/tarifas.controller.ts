@@ -2,12 +2,14 @@ import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const crearTarifa = asyncHandler(async (req, res) => {
   const {
     nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis,
     precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion,
   } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
 
   if (!nombre) throw new AppError("Nombre es requerido", 400);
   if (!tipoVehiculo) throw new AppError("Tipo de vehículo es requerido", 400);
@@ -33,6 +35,7 @@ export const crearTarifa = asyncHandler(async (req, res) => {
       precioHoraAdicional: precioHoraAdicional ?? null,
       tarifaMaximaDiaria: tarifaMaximaDiaria ?? null,
       descripcion,
+      sucursalId: sucursalId ?? null,
     },
   });
 
@@ -42,7 +45,8 @@ export const crearTarifa = asyncHandler(async (req, res) => {
 
 export const obtenerTarifas = asyncHandler(async (req, res) => {
   const { page, limit, q } = req.query;
-  const where: any = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { OR: [{ sucursalId }, { sucursalId: null }] } : {};
 
   if (q) {
     const query = String(q);
@@ -65,19 +69,21 @@ export const obtenerTarifas = asyncHandler(async (req, res) => {
 });
 
 export const obtenerTarifa = asyncHandler(async (req, res) => {
-  const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(req.params.id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const tarifa = await prisma.tarifa.findFirst({ where: { id: Number(req.params.id), ...(sucursalId ? { OR: [{ sucursalId }, { sucursalId: null }] } : {}) } });
   if (!tarifa) throw new AppError("Tarifa no encontrada", 404);
   res.json({ ok: true, tarifa });
 });
 
 export const actualizarTarifa = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const {
     nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis,
     precioPrimeraHora, precioHoraAdicional, tarifaMaximaDiaria, descripcion, activa,
   } = req.body;
 
-  const existe = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
+  const existe = await prisma.tarifa.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existe) throw new AppError("Tarifa no encontrada", 404);
 
   const primeraHoraFinal = precioPrimeraHora !== undefined ? precioPrimeraHora : existe.precioPrimeraHora;
@@ -114,7 +120,8 @@ export const actualizarTarifa = asyncHandler(async (req, res) => {
 
 export const eliminarTarifa = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const tarifa = await prisma.tarifa.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const tarifa = await prisma.tarifa.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!tarifa) throw new AppError("Tarifa no encontrada", 404);
 
   // Las facturas históricas no guardan tarifaId; por eso no se elimina físicamente
