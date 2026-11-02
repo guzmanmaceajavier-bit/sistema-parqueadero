@@ -103,8 +103,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
 
   const ingreso = await prisma.$transaction(async (tx) => {
     // Bloqueos transaccionales por vehículo y puesto: serializan intentos simultáneos.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${Number(puestoId)}::integer)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${Number(puestoId)}::integer)) AS advisory_lock`;
     const vehiculoYaDentro = await tx.ingreso.findFirst({
       where: { vehiculoId, estado: "ACTIVO" },
       select: { id: true },
@@ -263,8 +263,8 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
 
   await prisma.$transaction(async (tx) => {
     // Serializa la liberación con nuevas entradas, ediciones y salidas del mismo vehículo/puesto.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId}::integer)`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId}::integer)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)) AS advisory_lock`;
 
     const ingresoActual = await tx.ingreso.findFirst({
       where: { id: Number(id), estado: "ACTIVO" },
@@ -356,10 +356,10 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
     // Bloquea vehículo anterior/nuevo y puestos anterior/nuevo en orden estable.
     // Así se evitan entradas duplicadas y deadlocks al intercambiar asignaciones.
     for (const lockVehiculoId of [...new Set([ingreso.vehiculoId, vid])].sort((a, b) => a - b)) {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${lockVehiculoId}::integer)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${lockVehiculoId}::integer)) AS advisory_lock`;
     }
     for (const lockPuestoId of [...new Set([ingreso.puestoId, nuevoPuestoId])].sort((a, b) => a - b)) {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${lockPuestoId}::integer)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${lockPuestoId}::integer)) AS advisory_lock`;
     }
 
     const ingresoActual = await tx.ingreso.findUnique({
@@ -461,7 +461,7 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
 
   await prisma.$transaction(async (tx) => {
     if (ingreso.puestoId) {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)) AS advisory_lock`;
     }
     const actual = await tx.ingreso.findUnique({ where: { id: Number(id) } });
     if (!actual || actual.estado === "ACTIVO") {
@@ -604,10 +604,10 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   let facturaCreada: any = null;
   const [salida, factura] = await prisma.$transaction(async (tx) => {
     // Usa los mismos bloqueos que el registro de entrada para serializar la ocupación.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId}::integer)`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId}::integer)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)) AS advisory_lock`;
     // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     // La hora efectiva se fija después de obtener los bloqueos, no antes de esperar.
     fechaSalida = new Date();
     if (cubiertoPorPlan) {
