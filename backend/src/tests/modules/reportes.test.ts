@@ -101,8 +101,8 @@ describe("obtenerReporte", () => {
         },
       },
     }));
-    expect(resultado.ocupacionPorHora.find((item) => item.hora === "00:00").count).toBe(1);
-    expect(resultado.ocupacionPorHora.find((item) => item.hora === "13:00").count).toBe(1);
+    expect(resultado.ocupacionPorHora.find((item: { hora: string; count: number }) => item.hora === "00:00").count).toBe(1);
+    expect(resultado.ocupacionPorHora.find((item: { hora: string; count: number }) => item.hora === "13:00").count).toBe(1);
   });
 
   it("rechaza sucursales inválidas antes de consultar la base de datos", async () => {
