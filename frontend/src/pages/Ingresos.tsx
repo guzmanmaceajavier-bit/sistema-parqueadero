@@ -648,7 +648,7 @@ export default function Ingresos() {
       <ConfirmDialog
         abierto={!!eliminarId}
         titulo="Eliminar ingreso"
-        mensaje="Vas a eliminar este registro de ingreso y las facturas asociadas. Esta acción solo está disponible para ingresos finalizados y no se puede deshacer; el historial de caja también se verá afectado."
+        mensaje="Vas a eliminar este registro de ingreso y las facturas asociadas. Esta acción solo está disponible para ingresos finalizados y no se puede deshacer; el historial de caja también se verá afectado."\n        confirmLabel="Eliminar ingreso"
         onConfirm={eliminarIngreso}
         onCancel={() => setEliminarId(null)}
       />
