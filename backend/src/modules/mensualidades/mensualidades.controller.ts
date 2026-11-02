@@ -386,6 +386,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
         fechaInicio: inicio,
         fechaFin: fin,
         valor: montoFinal,
+        estado: fin < new Date() ? "VENCIDA" : "ACTIVA",
         ...(observacion !== undefined ? { observacion } : {}),
       },
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
@@ -393,6 +394,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
 
     const ahora = new Date();
     const vigente = inicio <= ahora && fin >= ahora;
+    const futura = inicio > ahora;
     if (nuevoPuestoId) {
       if (vigente) {
         if (ingresoVehiculo && ingresoVehiculo.puestoId !== nuevoPuestoId) {
@@ -400,8 +402,18 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
         } else if (!ingresoVehiculo) {
           await tx.ingreso.create({ data: { clienteId: actual.clienteId, vehiculoId: vid, puestoId: nuevoPuestoId } });
         }
+        await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: "OCUPADO" } });
+      } else if (futura) {
+        await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: "RESERVADO" } });
+      } else {
+        const [ingresos, mensualidades, reservas] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId: nuevoPuestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId: nuevoPuestoId, estado: "ACTIVA", id: { not: id }, fechaFin: { gte: ahora } } }),
+          tx.reserva.count({ where: { puestoId: nuevoPuestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        ]);
+        const estadoPuesto = ingresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
+        await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: estadoPuesto } });
       }
-      await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: vigente ? "OCUPADO" : "RESERVADO" } });
     }
 
     if (actual.puestoId && actual.puestoId !== nuevoPuestoId) {
