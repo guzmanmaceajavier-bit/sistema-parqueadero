@@ -264,11 +264,36 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       const puesto = await tx.puesto.findUnique({ where: { id: existente.puestoId } });
       if (!puesto) throw new AppError("Puesto no encontrado", 404);
       if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
-      const ingresoYaActivo = await tx.ingreso.findFirst({ where: { vehiculoId: existente.vehiculoId, estado: "ACTIVO" } });
+      const [ingresoYaActivo, ingresoEnPuesto, mensualidadEnPuesto, otraReserva] = await Promise.all([
+        tx.ingreso.findFirst({ where: { vehiculoId: existente.vehiculoId, estado: "ACTIVO" }, select: { id: true } }),
+        tx.ingreso.findFirst({ where: { puestoId: existente.puestoId, estado: "ACTIVO" }, select: { id: true } }),
+        tx.mensualidad.findFirst({
+          where: {
+            puestoId: existente.puestoId,
+            estado: "ACTIVA",
+            fechaInicio: { lte: ahora },
+            fechaFin: { gte: ahora },
+          },
+          select: { id: true },
+        }),
+        tx.reserva.findFirst({
+          where: {
+            id: { not: Number(id) },
+            puestoId: existente.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lte: ahora },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+          select: { id: true },
+        }),
+      ]);
       if (ingresoYaActivo) throw new AppError("El vehículo ya tiene un ingreso activo", 409);
+      if (ingresoEnPuesto || mensualidadEnPuesto || otraReserva) {
+        throw new AppError("El puesto tiene otra ocupación, mensualidad o reserva vigente", 409);
+      }
 
       const asignado = await tx.puesto.updateMany({
-        where: { id: existente.puestoId, activo: true, estado: "LIBRE" },
+        where: { id: existente.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO"] } },
         data: { estado: "OCUPADO" },
       });
       if (asignado.count !== 1) throw new AppError("El puesto ya fue asignado. Actualiza la disponibilidad.", 409);
