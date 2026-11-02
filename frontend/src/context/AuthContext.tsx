@@ -8,6 +8,7 @@ interface User {
   usuario: string;
   correo: string;
   rol: string;
+  sucursalId?: number | null;
 }
 
 interface AuthContextType {
