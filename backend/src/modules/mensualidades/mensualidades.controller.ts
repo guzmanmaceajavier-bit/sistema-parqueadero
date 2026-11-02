@@ -143,8 +143,8 @@ export const obtenerMensualidades = asyncHandler(async (req, res) => {
 
   const result = mensualidades.map((m) => {
     const pagadoPeriodo = m.facturas
-      .filter((f) => new Date(f.createdAt) >= new Date(m.fechaInicio))
-      .reduce((sum, f) => sum + f.valor, 0);
+      .filter((f: { createdAt: Date; valor: number }) => new Date(f.createdAt) >= new Date(m.fechaInicio))
+      .reduce((sum: number, f: { valor: number }) => sum + f.valor, 0);
     return { ...m, saldoPendiente: Math.max(0, m.valor - pagadoPeriodo), ausente: activasSet.has(m.vehiculoId) };
   });
 
