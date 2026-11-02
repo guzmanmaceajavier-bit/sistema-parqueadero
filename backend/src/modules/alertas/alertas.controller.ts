@@ -1,15 +1,25 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "../../config/prisma.js";
 import { asyncHandler } from "../../middlewares/error.middleware.js";
 
-export const obtenerAlertas = asyncHandler(async (req, res) => {
+type ClienteMoroso = Prisma.ClienteGetPayload<{ select: { id: true; nombres: true; apellidos: true; telefono: true } }>;
+type MensualidadAlerta = Prisma.MensualidadGetPayload<{ include: { cliente: { select: { nombres: true; apellidos: true } } } }>;
+type IngresoProlongado = Prisma.IngresoGetPayload<{ include: { vehiculo: { select: { placa: true } }; cliente: { select: { nombres: true; apellidos: true } } } }>;
+type ReservaAlerta = Prisma.ReservaGetPayload<{ include: { cliente: { select: { nombres: true; apellidos: true } }; puesto: { select: { codigo: true } } }>;
+
+export const obtenerAlertas = asyncHandler(async (_req, res) => {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const dentroDe7Dias = new Date(hoy.getTime() + 7 * 86400000);
   const hace8Horas = new Date(Date.now() - 8 * 3600000);
 
-  let morosos = [], mensualidadesProximas = [], mensualidadesVencidas = [];
-  let vehiculosProlongados = [], reservasProximas = [], ausenciasActivas = 0;
-  let cajaActiva = null;
+  let morosos: ClienteMoroso[] = [];
+  let mensualidadesProximas: MensualidadAlerta[] = [];
+  let mensualidadesVencidas: MensualidadAlerta[] = [];
+  let vehiculosProlongados: IngresoProlongado[] = [];
+  let reservasProximas: ReservaAlerta[] = [];
+  let ausenciasActivas = 0;
+  let cajaActiva: Awaited<ReturnType<typeof prisma.caja.findFirst>> = null;
 
   try {
     [morosos, mensualidadesProximas, mensualidadesVencidas, vehiculosProlongados, reservasProximas, cajaActiva, ausenciasActivas] = await Promise.all([
@@ -21,18 +31,18 @@ export const obtenerAlertas = asyncHandler(async (req, res) => {
       prisma.caja.findFirst({ where: { estado: "ABIERTA" } }),
       prisma.ausencia.count({ where: { estado: "ACTIVA" } }),
     ]);
-  } catch (e) {
-    console.error("Error consultando alertas:", e.message);
+  } catch (error) {
+    console.error("Error consultando alertas:", error instanceof Error ? error.message : String(error));
   }
 
-  const alertas = [];
+  const alertas: Array<{ tipo: string; icono: string; titulo: string; descripcion: string; enlace: string }> = [];
 
   if (morosos.length > 0) {
     alertas.push({
       tipo: "peligro",
       icono: "usuario",
       titulo: `${morosos.length} cliente(s) moroso(s)`,
-      descripcion: morosos.map(m => `${m.nombres} ${m.apellidos}`).join(", "),
+      descripcion: morosos.map((m) => `${m.nombres} ${m.apellidos}`).join(", "),
       enlace: "/clientes",
     });
   }
@@ -42,7 +52,7 @@ export const obtenerAlertas = asyncHandler(async (req, res) => {
       tipo: "peligro",
       icono: "calendario",
       titulo: `${mensualidadesVencidas.length} mensualidad(es) vencida(s)`,
-      descripcion: mensualidadesVencidas.slice(0, 3).map(m => `${m.cliente.nombres} ${m.cliente.apellidos} (venció ${new Date(m.fechaFin).toLocaleDateString()})`).join(", "),
+      descripcion: mensualidadesVencidas.slice(0, 3).map((m) => `${m.cliente.nombres} ${m.cliente.apellidos} (venció ${new Date(m.fechaFin).toLocaleDateString()})`).join(", "),
       enlace: "/mensualidades",
     });
   }
@@ -52,7 +62,7 @@ export const obtenerAlertas = asyncHandler(async (req, res) => {
       tipo: "advertencia",
       icono: "reloj",
       titulo: `${mensualidadesProximas.length} mensualidad(es) por vencer`,
-      descripcion: mensualidadesProximas.slice(0, 3).map(m => `${m.cliente.nombres} ${m.cliente.apellidos} (vence ${new Date(m.fechaFin).toLocaleDateString()})`).join(", "),
+      descripcion: mensualidadesProximas.slice(0, 3).map((m) => `${m.cliente.nombres} ${m.cliente.apellidos} (vence ${new Date(m.fechaFin).toLocaleDateString()})`).join(", "),
       enlace: "/mensualidades",
     });
   }
@@ -62,7 +72,7 @@ export const obtenerAlertas = asyncHandler(async (req, res) => {
       tipo: "advertencia",
       icono: "vehiculo",
       titulo: `${vehiculosProlongados.length} vehículo(s) con +8h estacionados`,
-      descripcion: vehiculosProlongados.slice(0, 3).map(v => `${v.vehiculo.placa} - ${v.cliente.nombres}`).join(", "),
+      descripcion: vehiculosProlongados.slice(0, 3).map((v) => `${v.vehiculo.placa} - ${v.cliente.nombres}`).join(", "),
       enlace: "/ingresos",
     });
   }
@@ -72,7 +82,7 @@ export const obtenerAlertas = asyncHandler(async (req, res) => {
       tipo: "info",
       icono: "reserva",
       titulo: `${reservasProximas.length} reserva(s) próxima(s)`,
-      descripcion: reservasProximas.slice(0, 3).map(r => `${r.cliente.nombres} → ${r.puesto?.codigo || "sin puesto"} (${new Date(r.fechaInicio).toLocaleString()})`).join(", "),
+      descripcion: reservasProximas.slice(0, 3).map((r) => `${r.cliente.nombres} → ${r.puesto?.codigo || "sin puesto"} (${new Date(r.fechaInicio).toLocaleString()})`).join(", "),
       enlace: "/reservas",
     });
   }
