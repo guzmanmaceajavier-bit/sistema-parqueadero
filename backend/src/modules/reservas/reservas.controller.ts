@@ -24,6 +24,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
   const pid = puestoId ? Number(puestoId) : null;
 
   const inicio = new Date(fechaInicio);
+  if (!Number.isFinite(inicio.getTime())) throw new AppError("La fecha de inicio no es válida", 400);
   const MARGEN_MS = 5 * 60 * 1000;
   if (inicio.getTime() < Date.now() - MARGEN_MS) throw new AppError("La fecha de inicio debe ser futura", 400);
 
@@ -60,6 +61,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
   }
 
   const fin = fechaFin ? new Date(fechaFin) : null;
+  if (fechaFin && (!fin || !Number.isFinite(fin.getTime()))) throw new AppError("La fecha fin no es válida", 400);
   if (fin && fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
 
   if (pid) {
@@ -74,9 +76,35 @@ export const crearReserva = asyncHandler(async (req, res) => {
     if (conflicto) throw new AppError("El puesto ya tiene una reserva en ese rango de fechas", 409);
   }
 
-  const reserva = await prisma.reserva.create({
-    data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones },
-    include: { cliente: true, vehiculo: true, puesto: true },
+  const reserva = await prisma.$transaction(async (tx) => {
+    // Serializa la reserva por vehículo y puesto para evitar solapamientos simultáneos.
+    if (vid) await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vid})`;
+    if (pid) await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${pid})`;
+
+    if (vid) {
+      const reservaVehiculo = await tx.reserva.findFirst({
+        where: { vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
+        select: { id: true },
+      });
+      if (reservaVehiculo) throw new AppError("El vehículo ya tiene una reserva activa", 409);
+    }
+    if (pid) {
+      const conflictoPuesto = await tx.reserva.findFirst({
+        where: {
+          puestoId: pid,
+          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lt: fin || new Date("9999-12-31T23:59:59.999Z") },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
+        },
+        select: { id: true },
+      });
+      if (conflictoPuesto) throw new AppError("El puesto acaba de ser reservado para ese rango. Actualiza la disponibilidad.", 409);
+    }
+
+    return tx.reserva.create({
+      data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones },
+      include: { cliente: true, vehiculo: true, puesto: true },
+    });
   });
   const codPuesto = puesto?.codigo || "sin asignar";
   await registrarMovimiento("RESERVAS", "CREAR", `Reserva #${reserva.id} — ${cliente.nombres} → puesto ${codPuesto}`, req.usuario?.usuario);
@@ -172,8 +200,31 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     }
     data.puestoId = nuevoPuesto;
   }
-  if (fechaInicio) data.fechaInicio = new Date(fechaInicio);
-  if (fechaFin !== undefined) data.fechaFin = fechaFin ? new Date(fechaFin) : null;
+  const inicioActualizado = fechaInicio !== undefined ? new Date(fechaInicio) : existente.fechaInicio;
+  const finActualizado = fechaFin !== undefined ? (fechaFin ? new Date(fechaFin) : null) : existente.fechaFin;
+  if (!Number.isFinite(inicioActualizado.getTime())) throw new AppError("La fecha de inicio no es válida", 400);
+  if (fechaFin && (!finActualizado || !Number.isFinite(finActualizado.getTime()))) throw new AppError("La fecha fin no es válida", 400);
+  if (finActualizado && finActualizado <= inicioActualizado) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
+
+  if (fechaInicio !== undefined || fechaFin !== undefined || puestoId !== undefined) {
+    const puestoFinal = puestoId !== undefined ? (puestoId ? Number(puestoId) : null) : existente.puestoId;
+    if (puestoFinal) {
+      const conflicto = await prisma.reserva.findFirst({
+        where: {
+          id: { not: Number(id) },
+          puestoId: puestoFinal,
+          estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lt: finActualizado || new Date("9999-12-31T23:59:59.999Z") },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: inicioActualizado } }],
+        },
+        select: { id: true },
+      });
+      if (conflicto) throw new AppError("El puesto ya tiene otra reserva en ese rango de fechas", 409);
+    }
+  }
+
+  if (fechaInicio !== undefined) data.fechaInicio = inicioActualizado;
+  if (fechaFin !== undefined) data.fechaFin = finActualizado;
   if (observaciones !== undefined) data.observaciones = observaciones;
 
   const reserva = await prisma.reserva.update({
