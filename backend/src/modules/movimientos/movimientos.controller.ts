@@ -3,10 +3,12 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { emitirEvento } from "../../services/socket.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const obtenerMovimientos = asyncHandler(async (req, res) => {
   const { page, limit, modulo, accion, q } = req.query;
-  const where = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { sucursalId } : {};
   if (modulo) where.modulo = modulo;
   if (accion) where.accion = accion;
   if (q) {
