@@ -216,7 +216,7 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     for (const vid of vehiculosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
     for (const pid of puestosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${pid}::integer)) AS advisory_lock`;
 
-    const actual = await tx.reserva.findUnique({ where: { id } });
+    const actual = await tx.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
     if (
       !actual ||
       !["PENDIENTE", "CONFIRMADA"].includes(actual.estado) ||
@@ -421,11 +421,11 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
   }
 
   const reserva = await prisma.$transaction(async (tx) => {
-    const actual = await tx.reserva.findUnique({ where: { id: Number(id) } });
+    const actual = await tx.reserva.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (!actual) throw new AppError("Reserva no encontrada", 404);
     if (actual.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${actual.vehiculoId}::integer)) AS advisory_lock`;
     if (actual.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${actual.puestoId}::integer)) AS advisory_lock`;
-    const bloqueada = await tx.reserva.findUnique({ where: { id: Number(id) } });
+    const bloqueada = await tx.reserva.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (!bloqueada || bloqueada.vehiculoId !== actual.vehiculoId || bloqueada.puestoId !== actual.puestoId) {
       throw new AppError("La reserva cambió mientras se cancelaba. Actualiza e inténtalo nuevamente.", 409);
     }
@@ -448,8 +448,8 @@ export const cancelarReserva = asyncHandler(async (req, res) => {
       const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
       await tx.puesto.update({ where: { id: bloqueada.puestoId }, data: { estado: estadoPuesto } });
     }
-    return tx.reserva.findUniqueOrThrow({
-      where: { id: Number(id) },
+    return tx.reserva.findFirstOrThrow({
+      where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
   });
@@ -493,9 +493,10 @@ export const eliminarReserva = asyncHandler(async (req, res) => {
 
 
 export const liberarReservasVencidas = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const ahora = new Date();
   const vencidas = await prisma.reserva.findMany({
-    where: { estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lt: ahora } },
+    where: { ...(sucursalId ? { sucursalId } : {}), estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lt: ahora } },
     include: { cliente: true },
   });
 
@@ -507,7 +508,7 @@ export const liberarReservasVencidas = asyncHandler(async (req, res) => {
     const cambio = await prisma.$transaction(async (tx) => {
       if (reserva.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${reserva.vehiculoId}::integer)) AS advisory_lock`;
       if (reserva.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${reserva.puestoId}::integer)) AS advisory_lock`;
-      const actual = await tx.reserva.findUnique({ where: { id: reserva.id } });
+      const actual = await tx.reserva.findFirst({ where: { id: reserva.id, ...(sucursalId ? { sucursalId } : {}) } });
       if (!actual || actual.vehiculoId !== reserva.vehiculoId || actual.puestoId !== reserva.puestoId) return false;
       if (!["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) return false;
       const limiteActual = actual.fechaFin ?? new Date(actual.fechaInicio.getTime() + 60 * 60 * 1000);
