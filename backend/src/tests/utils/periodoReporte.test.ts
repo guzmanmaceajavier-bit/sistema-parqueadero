@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { obtenerFechaClaveEnZona, obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
+import { desplazarDiasEnZona, inicioDiaActualEnZona, inicioMesEnZona, inicioSemanaEnZona, inicioAnioEnZona, obtenerFechaClaveEnZona, obtenerHoraEnZona, obtenerPeriodoReporte } from "../../utils/periodoReporte.js";
 
 describe("obtenerPeriodoReporte", () => {
   it("incluye todo el último día mediante un límite exclusivo", () => {
@@ -33,6 +33,17 @@ describe("obtenerPeriodoReporte", () => {
   it("agrupa las fechas usando la zona horaria configurada", () => {
     expect(obtenerFechaClaveEnZona(new Date("2026-01-14T23:00:00.000Z"), "Europe/Berlin")).toBe("2026-01-15");
     expect(obtenerFechaClaveEnZona(new Date("2026-01-15T23:00:00.000Z"), "Europe/Berlin")).toBe("2026-01-16");
+  });
+
+  it("calcula los períodos del dashboard en la zona horaria configurada", () => {
+    const ahora = new Date("2026-01-15T12:30:00.000Z");
+    const hoy = inicioDiaActualEnZona(ahora, "Europe/Berlin");
+    expect(hoy.toISOString()).toBe("2026-01-14T23:00:00.000Z");
+    expect(desplazarDiasEnZona(hoy, 1, "Europe/Berlin").toISOString()).toBe("2026-01-15T23:00:00.000Z");
+    expect(inicioSemanaEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2026-01-11T23:00:00.000Z");
+    expect(inicioMesEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2025-12-31T23:00:00.000Z");
+    expect(inicioAnioEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2025-12-31T23:00:00.000Z");
+    expect(obtenerHoraEnZona(ahora, "Europe/Berlin")).toBe(13);
   });
 
   it("rechaza fechas inexistentes y formatos ambiguos", () => {
