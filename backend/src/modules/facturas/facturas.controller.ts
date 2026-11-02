@@ -2,10 +2,12 @@ import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const obtenerFacturas = asyncHandler(async (req, res) => {
   const { page, limit, q, desde, hasta, origen } = req.query;
-  const where = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
   if (desde || hasta) {
     where.createdAt = {};
     if (desde) where.createdAt.gte = new Date(desde);
@@ -33,9 +35,10 @@ export const obtenerFacturas = asyncHandler(async (req, res) => {
 
 export const obtenerFactura = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
-    prisma.factura.findUnique({
-      where: { id: Number(id) },
+    prisma.factura.findFirst({
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true, puesto: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),
@@ -46,6 +49,7 @@ export const obtenerFactura = asyncHandler(async (req, res) => {
 
 export const descargarFacturaPDF = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
     prisma.factura.findUnique({
       where: { id: Number(id) },
@@ -106,6 +110,7 @@ export const descargarFacturaPDF = asyncHandler(async (req, res) => {
 
 export const enviarWhatsapp = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
     prisma.factura.findUnique({
       where: { id: Number(id) },
@@ -151,8 +156,9 @@ export const enviarWhatsapp = asyncHandler(async (req, res) => {
 
 export const reciboSalida = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const factura = await prisma.factura.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const factura = await prisma.factura.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
     include: { ingreso: { include: { vehiculo: { include: { cliente: true } }, puesto: true } } },
   });
   if (!factura) throw new AppError('Factura no encontrada', 404);
