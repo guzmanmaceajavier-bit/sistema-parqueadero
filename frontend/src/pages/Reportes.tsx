@@ -94,7 +94,7 @@ export default function Reportes() {
       doc.autoTable({
         startY: 70,
         head: [["#", "Cliente", "Placa", "Valor", "Método", "Fecha"]],
-        body: data.facturas.map(f => [f.numero, f.cliente || "—", f.placa || "—", $(f.valor), f.metodoPago || "—", formatDate(f.createdAt)]),
+        body: data.facturas.map(f => [f.numero, f.cliente || "—", f.placa || "—", $(f.valor), f.metodoPago || f.estadoPago || "Pendiente", formatDate(f.createdAt)]),
       });
     }
     if (data.gastos.length > 0) {
@@ -342,7 +342,7 @@ export default function Reportes() {
                           <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">
                             #{f.numero} — {f.cliente || "Inv."} {f.placa ? `(${f.placa})` : ""}
                           </p>
-                          <p className="text-xs text-slate-400">{f.metodoPago} · {formatDate(f.createdAt)}</p>
+                          <p className="text-xs text-slate-400">{f.metodoPago || f.estadoPago || "Pendiente"} · {formatDate(f.createdAt)}</p>
                         </div>
                         <span className="text-sm font-semibold text-slate-800 dark:text-white ml-3">{$(f.valor)}</span>
                       </div>
