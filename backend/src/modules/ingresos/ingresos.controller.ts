@@ -539,7 +539,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
     return res.json({ ok: true, cobro: { total: 0, totalMinutos, error: null, plan: planActivo.plan?.nombre || "Plan activo" }, ingreso });
   }
 
-  await getCajaOError(sucursalId ?? ingreso.vehiculo.sucursalId ?? undefined);
+  await getCajaOError(ingreso.vehiculo.sucursalId ?? sucursalId ?? null);
 
   const cobro = await calcularCobro({
     ingreso,
@@ -737,7 +737,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         data: { numero: String(numeroFactura), ingresoId: ingreso.id, origen: "INGRESO", valor: valorFinal, metodoPago: mp, sucursalId: ingreso.vehiculo.sucursalId ?? sucursalId ?? null },
       });
       facturaCreada = f;
-      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(ingreso.vehiculo.sucursalId ? { sucursalId: ingreso.vehiculo.sucursalId } : sucursalId ? { sucursalId } : {}) } });
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingreso.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
       const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";
       await tx.cajaMovimiento.create({
@@ -750,7 +750,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   if (!cubiertoPorPlan) {
     await registrarMovimiento("FACTURACION", "CREAR", `Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}${saldoUsado > 0 ? ` (saldo usado: $${saldoUsado})` : ""}`, req.usuario?.usuario || "admin");
-    const cajaResp = await getCajaAbierta(sucursalId ?? ingreso.vehiculo.sucursalId ?? undefined);
+    const cajaResp = await getCajaAbierta(ingreso.vehiculo.sucursalId ?? sucursalId ?? null);
     emitirEvento("ingreso:salida", {
       mensaje: `Vehículo ${ingreso.vehiculo.placa} salió — Factura ${numeroFactura} por $${valorFinal}${ticketExtraviado ? " (ticket extraviado)" : ""}`,
       factura: facturaCreada, ingreso: salida, valor: valorFinal,
