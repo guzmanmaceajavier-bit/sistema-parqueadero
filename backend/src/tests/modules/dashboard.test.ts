@@ -73,6 +73,16 @@ describe("obtenerDashboard", () => {
     }));
   });
 
+  it("rechaza una sucursal inválida antes de consultar los indicadores", async () => {
+    const error = await new Promise((resolve) => {
+      const req = { query: { filtro: "hoy", sucursalId: "0" } };
+      const res = { json: vi.fn() };
+      obtenerDashboard(req as any, res as any, resolve as any);
+    });
+    expect(error).toMatchObject({ statusCode: 400, message: "La sucursal seleccionada no es válida" });
+    expect(prismaMock.factura.aggregate).not.toHaveBeenCalled();
+  });
+
   it("rechaza períodos y sucursales inválidos sin consultar los indicadores", async () => {
     const error = await new Promise((resolve) => {
       const req = { query: { filtro: "trimestre", sucursalId: "0" } };
