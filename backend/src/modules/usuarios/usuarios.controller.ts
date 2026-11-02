@@ -88,6 +88,7 @@ export const crearUsuario = asyncHandler(async (req, res) => {
   const nuevo = await prisma.usuario.create({
     data: { nombre, usuario, correo, password: hash, rol: rol || "empleado", sucursalId: sucursalId ?? null },
   });
+  await registrarMovimiento("Usuarios", "USUARIO CREADO", `Se creó el usuario ${nuevo.usuario} con rol ${nuevo.rol}`, req.usuario?.usuario || "admin");
   res.status(201).json({ ok: true, message: "Usuario creado", usuario: { id: nuevo.id, nombre: nuevo.nombre, usuario: nuevo.usuario, rol: nuevo.rol, sucursalId: nuevo.sucursalId } });
 });
 
@@ -97,7 +98,7 @@ export const crearAdmin = asyncHandler(async (req, res) => {
 
   // Evita que dos solicitudes simultáneas creen administradores iniciales.
   const nuevo = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020)`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124022)`;
     const adminExiste = await tx.usuario.findFirst({ where: { rol: "admin" } });
     if (adminExiste) {
       throw new AppError("Ya existe un administrador. Use la autenticación normal.", 403);
@@ -159,15 +160,10 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
   if (!existe) throw new AppError("Usuario no encontrado", 404);
 
   const targetId = Number(id);
-  const cambiaPrivilegios = (rol !== undefined && rol !== existe.rol) || password !== undefined;
+  const cambiaPrivilegios = (rol !== undefined && rol !== existe.rol) || Boolean(password) || (sucursalId !== undefined && sucursalId !== existe.sucursalId);
   if (targetId === req.usuario?.id && rol !== undefined && rol !== "admin") {
     throw new AppError("No puedes quitarte el rol de administrador desde tu propia sesión", 400);
   }
-  if (existe.rol === "admin" && rol !== undefined && rol !== "admin") {
-    const adminsActivos = await prisma.usuario.count({ where: { rol: "admin", estado: true } });
-    if (adminsActivos <= 1) throw new AppError("No puedes degradar al último administrador activo", 409);
-  }
-
   const data: any = {};
   if (nombre !== undefined) data.nombre = nombre;
   if (correo !== undefined) data.correo = correo;
@@ -182,9 +178,16 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
   if (password) data.password = await bcrypt.hash(password, 12);
   if (cambiaPrivilegios) data.tokenVersion = { increment: 1 };
 
-  const usuario = await prisma.usuario.update({
-    where: { id: targetId }, data,
-    select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true },
+  const usuario = await prisma.$transaction(async (tx) => {
+    if (existe.rol === "admin" && rol !== undefined && rol !== "admin") {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124022)`;
+      const adminsActivos = await tx.usuario.count({ where: { rol: "admin", estado: true } });
+      if (adminsActivos <= 1) throw new AppError("No puedes degradar al último administrador activo", 409);
+    }
+    return tx.usuario.update({
+      where: { id: targetId }, data,
+      select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true },
+    });
   });
   await registrarMovimiento("Usuarios", "USUARIO ACTUALIZADO", `Se actualizaron datos o privilegios del usuario ${usuario.usuario}`, req.usuario?.usuario || "admin");
   res.json({ ok: true, usuario });
@@ -201,14 +204,16 @@ export const cambiarEstadoUsuario = asyncHandler(async (req, res) => {
   if (targetId === req.usuario?.id && estado === false) {
     throw new AppError("No puedes desactivar tu propia cuenta", 400);
   }
-  if (existe.rol === "admin" && estado === false && existe.estado) {
-    const adminsActivos = await prisma.usuario.count({ where: { rol: "admin", estado: true } });
-    if (adminsActivos <= 1) throw new AppError("No puedes desactivar al último administrador activo", 409);
-  }
-
-  const usuario = await prisma.usuario.update({
-    where: { id: targetId }, data: { estado, tokenVersion: { increment: 1 } },
-    select: { id: true, nombre: true, usuario: true, rol: true, estado: true },
+  const usuario = await prisma.$transaction(async (tx) => {
+    if (existe.rol === "admin" && estado === false && existe.estado) {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124022)`;
+      const adminsActivos = await tx.usuario.count({ where: { rol: "admin", estado: true } });
+      if (adminsActivos <= 1) throw new AppError("No puedes desactivar al último administrador activo", 409);
+    }
+    return tx.usuario.update({
+      where: { id: targetId }, data: { estado, tokenVersion: { increment: 1 } },
+      select: { id: true, nombre: true, usuario: true, rol: true, estado: true },
+    });
   });
   await registrarMovimiento("Usuarios", estado ? "USUARIO ACTIVADO" : "USUARIO DESACTIVADO", `Usuario ${usuario.usuario}`, req.usuario!.usuario);
   res.json({ ok: true, usuario });
@@ -217,15 +222,20 @@ export const cambiarEstadoUsuario = asyncHandler(async (req, res) => {
 export const eliminarUsuario = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const targetId = Number(id);
-  if (targetId === req.usuario.id) {
+  if (targetId === req.usuario!.id) {
     throw new AppError("No puedes eliminar tu propia cuenta", 400);
   }
-  const adminCount = await prisma.usuario.count({ where: { rol: "admin", estado: true } });
-  const target = await prisma.usuario.findUnique({ where: { id: targetId }, select: { rol: true } });
-  if (target?.rol === "admin" && adminCount <= 1) {
-    throw new AppError("No puedes eliminar el último administrador", 400);
-  }
-  await prisma.usuario.delete({ where: { id: targetId } });
+  const target = await prisma.usuario.findUnique({ where: { id: targetId }, select: { id: true, usuario: true, rol: true } });
+  if (!target) throw new AppError("Usuario no encontrado", 404);
+  await prisma.$transaction(async (tx) => {
+    if (target.rol === "admin") {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124022)`;
+      const adminsActivos = await tx.usuario.count({ where: { rol: "admin", estado: true } });
+      if (adminsActivos <= 1) throw new AppError("No puedes eliminar el último administrador", 409);
+    }
+    await tx.usuario.delete({ where: { id: targetId } });
+  });
+  await registrarMovimiento("Usuarios", "USUARIO ELIMINADO", `Se eliminó el usuario ${target.usuario}`, req.usuario?.usuario || "admin");
   res.json({ ok: true, message: "Usuario eliminado" });
 });
 
@@ -262,7 +272,7 @@ export const solicitarResetPassword = asyncHandler(async (req, res) => {
 
 export const verificarPassword = asyncHandler(async (req, res) => {
   const { password } = req.body;
-  const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario.id } });
+  const usuario = await prisma.usuario.findUnique({ where: { id: req.usuario!.id } });
   if (!usuario) throw new AppError("Usuario no encontrado", 404);
   const valida = await bcrypt.compare(password, usuario.password);
   if (!valida) throw new AppError("Contraseña incorrecta", 401);
@@ -274,7 +284,7 @@ export const invalidarSesiones = asyncHandler(async (req, res) => {
     where: { id: req.usuario.id },
     data: { tokenVersion: { increment: 1 } },
   });
-  await registrarMovimiento("Usuarios", "SESIONES INVALIDADAS", `Todas las sesiones de ${usuario.usuario} fueron invalidadas`, req.usuario.usuario);
+  await registrarMovimiento("Usuarios", "SESIONES INVALIDADAS", `Todas las sesiones de ${usuario.usuario} fueron invalidadas`, req.usuario!.usuario);
   res.json({ ok: true, message: "Todas las sesiones fueron invalidadas" });
 });
 
@@ -293,9 +303,13 @@ export const refreshToken = asyncHandler(async (req, res) => {
   if (!token) {
     throw new AppError("Token requerido", 401);
   }
-  let decoded;
+  let decoded: jwt.JwtPayload;
   try {
-    decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+    const payload = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+    if (typeof payload === "string" || typeof payload.id !== "number" || typeof payload.tokenVersion !== "number") {
+      throw new AppError("Token invalido", 401);
+    }
+    decoded = payload;
   } catch {
     throw new AppError("Token invalido", 401);
   }
