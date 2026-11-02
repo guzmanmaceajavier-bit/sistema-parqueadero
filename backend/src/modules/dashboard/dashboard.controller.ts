@@ -1,5 +1,6 @@
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
+import { resumirEstadosPuestos } from "../../utils/puestos.js";
 
 export const obtenerDashboard = asyncHandler(async (req, res) => {
   const hoy = new Date();
@@ -117,13 +118,14 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: principioAnio || new Date(hoy.getFullYear(), 0, 1) }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
   ]);
 
+  const resumenPuestos = resumirEstadosPuestos(puestos);
   const puestosMap = Object.fromEntries(puestos.map(p => [p.estado, p._count]));
-  const totalPuestos = puestos.reduce((s, p) => s + p._count, 0);
-  const puestosLibres = puestosMap["LIBRE"] || 0;
-  const puestosOcupados = puestosMap["OCUPADO"] || 0;
-  const puestosReservados = puestosMap["RESERVADO"] || 0;
-  const puestosMantenimiento = puestosMap["MANTENIMIENTO"] || 0;
-  const puestosAusencia = puestosMap["AUSENCIA"] || 0;
+  const totalPuestos = resumenPuestos.total;
+  const puestosLibres = resumenPuestos.libres;
+  const puestosOcupados = resumenPuestos.ocupados;
+  const puestosReservados = resumenPuestos.reservados;
+  const puestosMantenimiento = resumenPuestos.mantenimiento;
+  const puestosAusencia = resumenPuestos.ausencias;
   const ocupacion = totalPuestos > 0 ? Math.round((puestosOcupados / totalPuestos) * 100) : 0;
 
   const mensualidadActiva = mensualidades.find(m => m.estado === "ACTIVA");
