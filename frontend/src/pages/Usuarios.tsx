@@ -74,6 +74,7 @@ function RolBadge({ rol }) {
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -83,11 +84,15 @@ export default function Usuarios() {
   const [confirm, setConfirm] = useState({ abierto: false, titulo: "", mensaje: "", onConfirm: () => {} });
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
 
-  const formVacio = { nombre: "", usuario: "", correo: "", password: "", rol: "empleado" };
+  const formVacio = { nombre: "", usuario: "", correo: "", password: "", rol: "empleado", sucursalId: "" };
   const [form, setForm] = useState(formVacio);
 
   const cargarUsuarios = async () => {
-    try { const res = await api.get("/usuarios"); setUsuarios(res.data.usuarios || []); } catch { console.log("error"); }
+    try {
+      const [usuariosRes, sucursalesRes] = await Promise.all([api.get("/usuarios"), api.get("/sucursales")]);
+      setUsuarios(usuariosRes.data.usuarios || []);
+      setSucursales(sucursalesRes.data.sucursales || []);
+    } catch { console.log("error"); }
     finally { setInitialLoading(false); }
   };
 
@@ -101,7 +106,7 @@ export default function Usuarios() {
 
   const abrirEditar = (u) => {
     setEditarId(u.id); setCambiarPass(false);
-    setForm({ nombre: u.nombre, usuario: u.usuario, correo: u.correo, password: "", rol: u.rol });
+    setForm({ nombre: u.nombre, usuario: u.usuario, correo: u.correo, password: "", rol: u.rol, sucursalId: u.sucursalId ? String(u.sucursalId) : "" });
     setMostrarModal(true);
   };
 
@@ -114,7 +119,7 @@ export default function Usuarios() {
   const guardarUsuario = async () => {
     setCargando(true);
     try {
-      const payload = { ...form };
+      const payload = { ...form, sucursalId: form.sucursalId ? Number(form.sucursalId) : null };
       if (payload.password) payload.password = payload.password;
       else delete payload.password;
 
@@ -176,6 +181,7 @@ export default function Usuarios() {
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Usuario</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Correo</th>
                 <th className="px-4 py-3.5 text-center text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Rol</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Sucursal</th>
                 <th className="px-4 py-3.5 text-center text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Estado</th>
                 <th className="px-4 py-3.5 text-center text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Último Acceso</th>
                 <th className="px-4 py-3.5 text-center text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Acciones</th>
@@ -183,7 +189,7 @@ export default function Usuarios() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {usuarios.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-16 text-center"><p className="text-slate-400 dark:text-slate-500 text-sm">No hay usuarios</p></td></tr>
+                <tr><td colSpan={8} className="px-4 py-16 text-center"><p className="text-slate-400 dark:text-slate-500 text-sm">No hay usuarios</p></td></tr>
               ) : (
                 usuarios.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50">
@@ -191,6 +197,7 @@ export default function Usuarios() {
                     <td className="px-4 py-3.5 text-sm text-slate-600 dark:text-slate-300">{u.usuario}</td>
                     <td className="px-4 py-3.5 text-sm text-slate-600 dark:text-slate-300">{u.correo}</td>
                     <td className="px-4 py-3.5 text-center"><RolBadge rol={u.rol} /></td>
+                    <td className="px-4 py-3.5 text-center text-sm text-slate-600 dark:text-slate-300">{sucursales.find(s => s.id === u.sucursalId)?.nombre || "Sin asignar"}</td>
                     <td className="px-4 py-3.5 text-center">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${u.estado ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${u.estado ? "bg-emerald-500" : "bg-red-500"}`} />
@@ -252,6 +259,13 @@ export default function Usuarios() {
               <div>
                 <label className={labelClass}>Correo</label>
                 <input name="correo" type="email" value={form.correo} onChange={handleChange} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Sucursal asignada</label>
+                <select name="sucursalId" value={form.sucursalId} onChange={handleChange} className={inputClass}>
+                  <option value="">Sin asignar</option>
+                  {sucursales.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
               </div>
               <div>
                 <SelectWithOther
