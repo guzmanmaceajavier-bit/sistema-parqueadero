@@ -50,7 +50,7 @@ describe("obtenerDashboard", () => {
 
   async function consultar(filtro: string) {
     return new Promise((resolve, reject) => {
-      const req = { query: { filtro } };
+      const req = { usuario: { id: 1, rol: "admin" }, query: { filtro } };
       const res = { json: vi.fn(resolve) };
       obtenerDashboard(req as any, res as any, reject as any);
     });
@@ -78,7 +78,7 @@ describe("obtenerDashboard", () => {
 
   it("rechaza una sucursal inválida antes de consultar los indicadores", async () => {
     const error = await new Promise((resolve) => {
-      const req = { query: { filtro: "hoy", sucursalId: "0" } };
+      const req = { usuario: { id: 1, rol: "admin" }, query: { filtro: "hoy", sucursalId: "0" } };
       const res = { json: vi.fn() };
       obtenerDashboard(req as any, res as any, resolve as any);
     });
@@ -88,7 +88,7 @@ describe("obtenerDashboard", () => {
 
   it("rechaza períodos y sucursales inválidos sin consultar los indicadores", async () => {
     const error = await new Promise((resolve) => {
-      const req = { query: { filtro: "trimestre", sucursalId: "0" } };
+      const req = { usuario: { id: 1, rol: "admin" }, query: { filtro: "trimestre", sucursalId: "0" } };
       const res = { json: vi.fn() };
       obtenerDashboard(req as any, res as any, resolve as any);
     });
