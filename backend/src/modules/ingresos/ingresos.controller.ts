@@ -9,23 +9,47 @@ import { getCajaAbierta, getCajaOError } from "../../helpers/caja.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import * as service from "./ingresos.service.js";
 
-async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number) {
+async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asignacion: { vehiculoId?: number; reservaId?: number } = {}) {
   const puesto = await tx.puesto.findUnique({ where: { id: puestoId } });
-  if (!puesto || !puesto.activo || puesto.estado !== "LIBRE") return false;
+  if (!puesto || !puesto.activo) return false;
+
   const ahora = new Date();
-  const [ingresos, mensualidades, reservas] = await Promise.all([
+  const [ingresos, otrasMensualidades, otrasReservas, mensualidadPropia, reservaPropia] = await Promise.all([
     tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
-    tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+    tx.mensualidad.count({
+      where: {
+        puestoId,
+        estado: "ACTIVA",
+        fechaInicio: { lte: ahora },
+        fechaFin: { gte: ahora },
+        ...(asignacion.vehiculoId ? { vehiculoId: { not: asignacion.vehiculoId } } : {}),
+      },
+    }),
     tx.reserva.count({
       where: {
         puestoId,
         estado: { in: ["PENDIENTE", "CONFIRMADA"] },
         fechaInicio: { lte: ahora },
         OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+        ...(asignacion.reservaId ? { id: { not: asignacion.reservaId } } : {}),
       },
     }),
+    asignacion.vehiculoId
+      ? tx.mensualidad.count({
+          where: { puestoId, vehiculoId: asignacion.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } },
+        })
+      : 0,
+    asignacion.reservaId
+      ? tx.reserva.count({
+          where: { id: asignacion.reservaId, puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] },
+        })
+      : 0,
   ]);
-  return ingresos === 0 && mensualidades === 0 && reservas === 0;
+
+  const sinConflictos = ingresos === 0 && otrasMensualidades === 0 && otrasReservas === 0;
+  const estadoCompatible = puesto.estado === "LIBRE"
+    || (puesto.estado === "RESERVADO" && (mensualidadPropia > 0 || reservaPropia > 0));
+  return sinConflictos && estadoCompatible;
 }
 
 export const registrarIngreso = asyncHandler(async (req, res) => {
@@ -43,21 +67,21 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado y no puede ingresar", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
 
-  let reservaVinculada = null;
+  let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId);
   let planDetectado = null;
-  if (!puestoId) {
-    reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId);
-    if (reservaVinculada) {
-      puestoId = reservaVinculada.puestoId;
-    } else {
-      const mensualidadVigente = await prisma.mensualidad.findFirst({
-        where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
-        include: { plan: true, puesto: true },
-      });
-      if (mensualidadVigente?.puestoId) {
-        puestoId = mensualidadVigente.puestoId;
-        planDetectado = mensualidadVigente;
-      }
+  if (reservaVinculada) {
+    if (puestoId && Number(puestoId) !== reservaVinculada.puestoId) {
+      throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Utiliza el puesto reservado.", 409);
+    }
+    puestoId = reservaVinculada.puestoId;
+  } else if (!puestoId) {
+    const mensualidadVigente = await prisma.mensualidad.findFirst({
+      where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
+      include: { plan: true, puesto: true },
+    });
+    if (mensualidadVigente?.puestoId) {
+      puestoId = mensualidadVigente.puestoId;
+      planDetectado = mensualidadVigente;
     }
   }
 
@@ -85,12 +109,12 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       throw new AppError(`El vehículo con placa ${placa} ya tiene un ingreso activo`, 409);
     }
 
-    const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId));
+    const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId), { vehiculoId, reservaId: reservaVinculada?.id });
     if (!disponible) throw new AppError("El puesto no está disponible para asignar", 409);
 
     // La actualización condicional evita que dos solicitudes ocupen el mismo puesto.
     const puestoReservado = await tx.puesto.updateMany({
-      where: { id: Number(puestoId), activo: true, estado: "LIBRE" },
+      where: { id: Number(puestoId), activo: true, estado: { in: ["LIBRE", "RESERVADO"] } },
       data: { estado: "OCUPADO" },
     });
     if (puestoReservado.count !== 1) {
@@ -242,10 +266,10 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
     if (duplicado) throw new AppError("El vehículo ya tiene otro ingreso activo", 409);
 
     if (nuevoPuestoId !== ingreso.puestoId) {
-      const disponible = await puestoEstaDisponibleParaAsignar(tx, nuevoPuestoId);
+      const disponible = await puestoEstaDisponibleParaAsignar(tx, nuevoPuestoId, { vehiculoId: vid });
       if (!disponible) throw new AppError("El nuevo puesto ya no está disponible", 409);
       const reservado = await tx.puesto.updateMany({
-        where: { id: nuevoPuestoId, activo: true, estado: "LIBRE" },
+        where: { id: nuevoPuestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO"] } },
         data: { estado: "OCUPADO" },
       });
       if (reservado.count !== 1) throw new AppError("El nuevo puesto acaba de ser asignado. Actualiza e inténtalo de nuevo.", 409);
@@ -414,8 +438,13 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       include: { cliente: true, vehiculo: true, puesto: true },
     });
 
-    const otroIngresoActivo = await tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } });
-    const nuevoEstadoPuesto = otroIngresoActivo > 0 ? "OCUPADO" : "LIBRE";
+    const [otroIngresoActivo, mensualidadEnPuesto] = await Promise.all([
+      tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
+      tx.mensualidad.count({
+        where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: fechaSalida }, fechaFin: { gte: fechaSalida } },
+      }),
+    ]);
+    const nuevoEstadoPuesto = otroIngresoActivo > 0 ? "OCUPADO" : mensualidadEnPuesto > 0 ? "RESERVADO" : "LIBRE";
     await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: nuevoEstadoPuesto } });
 
     if (ingreso.reservaId) {
