@@ -6,10 +6,7 @@ Lo hice pensando en el computador del parqueadero, corriendo todo en local.
 
 **Demo:** https://sistema-parqueadero-mu.vercel.app
 
-```
-usuario: admin
-clave:   Admin123
-```
+Por seguridad, las credenciales de acceso no se publican en este repositorio. En instalaciones nuevas, define `ADMIN_PASSWORD` en el archivo de entorno del backend y utiliza esa clave para el primer acceso.
 
 ## Qué hace
 
@@ -43,6 +40,7 @@ npm install
 # DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_db"
 # JWT_SECRET=un-secreto-largo-generado-con-crypto
 # ADMIN_PASSWORD=clave-inicial-del-admin
+# CORS_ORIGINS=https://tu-dominio.com
 npx prisma db push
 npm run dev
 ```
@@ -57,7 +55,7 @@ npm run dev
 Entra con `admin` y la clave que pusiste en `ADMIN_PASSWORD`. Si la base
 estaba vacía, el backend crea ese admin solo en el primer arranque.
 
-En desarrollo no hace falta `frontend/.env`: Vite ya manda `/api` al backend.
+En desarrollo no hace falta `frontend/.env`: Vite ya manda `/api` al backend. En producción configura `CORS_ORIGINS` con los dominios exactos desde los que se servirá el frontend.
 
 ## Estructura
 
