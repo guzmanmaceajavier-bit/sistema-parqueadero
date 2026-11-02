@@ -169,8 +169,8 @@ export const actualizarPuesto = asyncHandler(async (req, res) => {
   if (activo === false && puesto.activo !== false) {
     const [ingresos, mensualidades, reservas] = await Promise.all([
       prisma.ingreso.count({ where: { puestoId: Number(id), estado: "ACTIVO" } }),
-      prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA" } }),
-      prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }),
+      prisma.mensualidad.count({ where: { puestoId: Number(id), estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } } }),
+      prisma.reserva.count({ where: { puestoId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }] } }),
     ]);
     if (ingresos + mensualidades + reservas > 0) {
       throw new AppError("No se puede desactivar: el puesto tiene ingresos, mensualidades o reservas activas", 400);
