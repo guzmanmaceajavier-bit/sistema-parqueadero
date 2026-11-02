@@ -573,7 +573,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
       throw new AppError(`El monto excede el saldo pendiente ($${saldoPendiente.toLocaleString()})`, 400);
     }
 
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(mensualidad.sucursalId ? { sucursalId: mensualidad.sucursalId } : sucursalId ? { sucursalId } : {}) } });
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: mensualidad.sucursalId ?? sucursalId ?? null } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el pago. Abre una caja e inténtalo de nuevo.", 409);
 
     const numeroFactura = await generarNumeroFactura("FACT-MEN");
