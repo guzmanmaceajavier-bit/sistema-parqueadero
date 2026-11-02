@@ -1,6 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { resumirEstadosPuestos } from "../../utils/puestos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { desplazarDiasEnZona, inicioDiaActualEnZona, inicioMesEnZona, inicioSemanaEnZona, inicioAnioEnZona, obtenerFechaClaveEnZona, obtenerHoraEnZona } from "../../utils/periodoReporte.js";
 
 export const obtenerDashboard = asyncHandler(async (req, res) => {
@@ -8,10 +9,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   if (!["hoy", "semana", "mes"].includes(String(filtro))) {
     throw new AppError("El período del dashboard no es válido", 400);
   }
-  const sucursalId = req.query.sucursalId === undefined ? undefined : Number(req.query.sucursalId);
-  if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId <= 0)) {
-    throw new AppError("La sucursal seleccionada no es válida", 400);
-  }
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
 
   const ahora = new Date();
   const configuracion = await prisma.configuracion.findFirst({ select: { zonaHoraria: true } });
