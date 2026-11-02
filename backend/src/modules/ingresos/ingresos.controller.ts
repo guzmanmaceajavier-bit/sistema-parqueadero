@@ -573,17 +573,17 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
     // La cobertura del plan puede cambiar entre la simulación y la confirmación.
     // Si cambió, no se cobra ni se libera el vehículo con una regla desactualizada.
-    const mensualidadEnConfirmacion = await tx.mensualidad.findFirst({
-      where: {
-        vehiculoId: ingreso.vehiculoId,
-        estado: "ACTIVA",
-        fechaInicio: { lte: fechaSalida },
-        fechaFin: { gte: fechaSalida },
-        OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
-      },
-      select: { id: true },
-    });
-    if (Boolean(mensualidadEnConfirmacion) !== cubiertoPorPlan) {
+    const mensualidadesBloqueadas = await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT "id"
+      FROM "Mensualidad"
+      WHERE "vehiculoId" = ${ingreso.vehiculoId}
+        AND "estado" = 'ACTIVA'
+        AND "fechaInicio" <= ${fechaSalida}
+        AND "fechaFin" >= ${fechaSalida}
+        AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
+      FOR UPDATE
+    `;
+    if ((mensualidadesBloqueadas.length > 0) !== cubiertoPorPlan) {
       throw new AppError("La cobertura de la mensualidad cambió durante la operación. Vuelve a simular el cobro.", 409);
     }
 
