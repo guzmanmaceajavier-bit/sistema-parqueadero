@@ -151,7 +151,7 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
               left: Math.max(4, sectionRef.current?.getBoundingClientRect().left || 0),
             }}>
             <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest ${color} border-b ${borderSub} mb-1`}>{label}</div>
-            {children.props?.children?.map?.((child, i) => {
+            {submenuItems.map((child, i) => {
               if (!child) return null;
               const c = child.props;
               const act = isActive(c.to);
