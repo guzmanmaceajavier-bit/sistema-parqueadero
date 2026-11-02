@@ -4,16 +4,8 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
+import { sumarMesesConTope } from "../../utils/fechas.js";
 
-function sumarMesesConTope(fecha: Date, meses: number): Date {
-  const resultado = new Date(fecha);
-  const diaOriginal = resultado.getDate();
-  resultado.setDate(1);
-  resultado.setMonth(resultado.getMonth() + meses);
-  const ultimoDia = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
-  resultado.setDate(Math.min(diaOriginal, ultimoDia));
-  return resultado;
-}
 
 export const crearMensualidad = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, planId, fechaInicio, fechaFin, valor, observacion } = req.body;
