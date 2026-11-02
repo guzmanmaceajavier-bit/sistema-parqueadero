@@ -192,8 +192,9 @@ export const obtenerVencidas = asyncHandler(async (req, res) => {
 });
 
 export const renovarMensualidad = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const id = Number(req.params.id);
-  const existente = await prisma.mensualidad.findUnique({ where: { id } });
+  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
 
@@ -205,7 +206,7 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
   const renovada = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.mensualidad.findUnique({ where: { id } });
+    const actual = await tx.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
     if (
       !actual ||
       actual.estado === "CANCELADA" ||
@@ -287,9 +288,10 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
 
 
 export const actualizarMensualidad = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const id = Number(req.params.id);
   const { vehiculoId, planId, puestoId, fechaInicio, fechaFin, valor, observacion } = req.body;
-  const existente = await prisma.mensualidad.findUnique({ where: { id }, include: { facturas: { select: { id: true } } } });
+  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { facturas: { select: { id: true } } } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "CANCELADA") throw new AppError("No se puede editar una mensualidad cancelada", 409);
 
@@ -440,8 +442,9 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
 
 
 export const cancelarMensualidad = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const existente = await prisma.mensualidad.findUnique({ where: { id: Number(id) } });
+  const existente = await prisma.mensualidad.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado !== "ACTIVA") throw new AppError("Solo se puede cancelar una mensualidad activa", 400);
 
@@ -449,7 +452,7 @@ export const cancelarMensualidad = asyncHandler(async (req, res) => {
     // Sincroniza la cancelación con entradas, reservas y otras asignaciones del mismo recurso.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.mensualidad.findUnique({ where: { id: Number(id) } });
+    const actual = await tx.mensualidad.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (
       !actual ||
       actual.estado !== "ACTIVA" ||
@@ -485,9 +488,10 @@ export const cancelarMensualidad = asyncHandler(async (req, res) => {
 });
 
 export const eliminarMensualidad = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const existente = await prisma.mensualidad.findUnique({
-    where: { id: Number(id) },
+  const existente = await prisma.mensualidad.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: { facturas: { select: { id: true, numero: true } } },
   });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
@@ -499,7 +503,7 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.mensualidad.findUnique({ where: { id: Number(id) }, include: { facturas: { select: { id: true } } } });
+    const actual = await tx.mensualidad.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) }, include: { facturas: { select: { id: true } } } });
     if (!actual) throw new AppError("Mensualidad no encontrada", 404);
     if (actual.vehiculoId !== existente.vehiculoId || actual.puestoId !== existente.puestoId) {
       throw new AppError("La mensualidad cambió mientras se eliminaba. Actualiza e inténtalo nuevamente.", 409);
@@ -529,6 +533,7 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
 });
 
 export const cobrarMensualidad = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
   const { metodoPago, monto } = req.body;
   const mp = metodoPago || "efectivo";
@@ -544,8 +549,8 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
     // El mismo bloqueo global de caja se usa al abrir, cerrar y registrar otros movimientos.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
 
-    const mensualidad = await tx.mensualidad.findUnique({
-      where: { id: Number(id) },
+    const mensualidad = await tx.mensualidad.findFirst({
+      where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
       include: { plan: true },
     });
     if (!mensualidad) throw new AppError("Mensualidad no encontrada", 404);
@@ -563,7 +568,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
       throw new AppError(`El monto excede el saldo pendiente ($${saldoPendiente.toLocaleString()})`, 400);
     }
 
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(mensualidad.sucursalId ? { sucursalId: mensualidad.sucursalId } : sucursalId ? { sucursalId } : {}) } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el pago. Abre una caja e inténtalo de nuevo.", 409);
 
     const numeroFactura = await generarNumeroFactura("FACT-MEN");
@@ -610,7 +615,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
   });
 
   await registrarMovimiento("FACTURACION", "CREAR", `Factura ${resultado.numeroFactura} por mensualidad #${id} — $${resultado.montoPagado}`, req.usuario?.usuario || "admin");
-  const cajaActualizada = await prisma.caja.findUnique({ where: { id: resultado.cajaId } });
+  const cajaActualizada = await prisma.caja.findFirst({ where: { id: resultado.cajaId, ...(sucursalId ? { sucursalId } : {}) } });
 
   res.json({
     ok: true,
@@ -625,9 +630,10 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
 });
 
 export const generarFacturasPendientes = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const hoy = new Date();
   const activas = await prisma.mensualidad.findMany({
-    where: { estado: "ACTIVA", fechaFin: { gte: hoy } },
+    where: { estado: "ACTIVA", fechaFin: { gte: hoy }, ...(sucursalId ? { sucursalId } : {}) },
     include: { cliente: true, vehiculo: true, facturas: true },
   });
 
@@ -650,6 +656,7 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
           origen: "MENSUALIDAD_AUTO",
           valor: m.valor,
           metodoPago: null,
+          sucursalId: m.sucursalId,
         },
       });
     });
