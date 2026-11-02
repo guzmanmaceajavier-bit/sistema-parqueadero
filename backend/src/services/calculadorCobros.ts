@@ -102,12 +102,19 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   const minutosFacturables = Math.max(0, totalMinutos - minutosNoFacturables);
   const fechaInicioFacturable = new Date(entrada.getTime() + minutosNoFacturables * 60000);
 
-  // Ticket extraviado: cobrar tarifa máxima del día
-  if (ticketExtraviado && tarifa.tarifaMaximaDiaria) {
+  // Ticket extraviado: no se debe cobrar con una regla alternativa silenciosa.
+  if (ticketExtraviado) {
+    if (tarifa.tarifaMaximaDiaria == null || tarifa.tarifaMaximaDiaria <= 0) {
+      return {
+        error: "No hay una tarifa máxima diaria configurada para este vehículo. Configúrala antes de cobrar un ticket extraviado.",
+        total: 0,
+        detalle: [],
+      };
+    }
     const total = tarifa.tarifaMaximaDiaria;
-    const detalle = [{ concepto: `Ticket extraviado — Tarifa máxima del día`, valor: total }];
+    const detalle = [{ concepto: "Ticket extraviado — Tarifa máxima del día", valor: total }];
     return {
-      tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: tarifa.modalidad, valorUnitario: tarifa.valor },
+      tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: modalidadTarifa, valorUnitario: tarifa.valor },
       totalMinutos,
       minutosCortesia: cortesia,
       minutosGratis,
