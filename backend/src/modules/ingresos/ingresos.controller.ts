@@ -205,7 +205,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (!planActivo) throw new AppError("El vehículo no tiene plan activo. Registre la salida con cobro desde Ingresos.", 400);
 
   const fechaSalida = new Date();
-  const tiempoMinutos = Math.ceil((fechaSalida - ingreso.fechaEntrada) / (1000 * 60));
+  const tiempoMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingreso.fechaEntrada).getTime()) / (1000 * 60));
 
   await prisma.$transaction(async (tx) => {
     const finalizado = await tx.ingreso.updateMany({
@@ -369,9 +369,9 @@ export const simularCobro = asyncHandler(async (req, res) => {
 
   const cobro = await calcularCobro({
     ingreso,
-    tipoVehiculo: ingreso.vehiculo.tipo,
+    tipoVehiculo: ingreso.vehiculo.tipo || undefined,
     ticketExtraviado,
-    tarifaId: ingreso.vehiculo.tarifaId,
+    tarifaId: ingreso.vehiculo.tarifaId ?? undefined,
   });
 
   if (cobro.error) throw new AppError(cobro.error, 400);
@@ -428,8 +428,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   let valorFinal = cobroTotal;
   let saldoUsado = 0;
-  if (!cubiertoPorPlan && ingreso.cliente?.saldo > 0 && valorFinal > 0) {
-    saldoUsado = Math.min(ingreso.cliente.saldo, valorFinal);
+  const saldoCliente = ingreso.cliente?.saldo ?? 0;
+  if (!cubiertoPorPlan && saldoCliente > 0 && valorFinal > 0) {
+    saldoUsado = Math.min(saldoCliente, valorFinal);
     valorFinal -= saldoUsado;
   }
 
