@@ -3,12 +3,12 @@ export function sumarMesesConTope(fecha: Date, meses: number): Date {
     throw new RangeError("La fecha y la cantidad de meses deben ser válidas");
   }
   const resultado = new Date(fecha);
-  const diaOriginal = resultado.getDate();
-  const ultimoDiaOrigen = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
+  const diaOriginal = resultado.getUTCDate();
+  const ultimoDiaOrigen = new Date(Date.UTC(resultado.getUTCFullYear(), resultado.getUTCMonth() + 1, 0)).getUTCDate();
   const esFinDeMes = diaOriginal === ultimoDiaOrigen;
-  resultado.setDate(1);
-  resultado.setMonth(resultado.getMonth() + meses);
-  const ultimoDiaDestino = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
-  resultado.setDate(esFinDeMes ? ultimoDiaDestino : Math.min(diaOriginal, ultimoDiaDestino));
+  resultado.setUTCDate(1);
+  resultado.setUTCMonth(resultado.getUTCMonth() + meses);
+  const ultimoDiaDestino = new Date(Date.UTC(resultado.getUTCFullYear(), resultado.getUTCMonth() + 1, 0)).getUTCDate();
+  resultado.setUTCDate(esFinDeMes ? ultimoDiaDestino : Math.min(diaOriginal, ultimoDiaDestino));
   return resultado;
 }
