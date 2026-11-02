@@ -25,7 +25,23 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
   const [facturas, gastos, ingresosPeriodo, puestos, ocupacionPorHora] = await Promise.all([
     prisma.factura.findMany({
       where: { createdAt: rango, metodoPago: { not: null }, ...sf },
-      include: { ingreso: { select: { fechaEntrada: true, fechaSalida: true, tiempoMinutos: true, cliente: { select: { nombres: true, apellidos: true } }, vehiculo: { select: { placa: true, tipo: true } } } } },
+      include: {
+        ingreso: {
+          select: {
+            fechaEntrada: true,
+            fechaSalida: true,
+            tiempoMinutos: true,
+            cliente: { select: { nombres: true, apellidos: true } },
+            vehiculo: { select: { placa: true, tipo: true } },
+          },
+        },
+        mensualidad: {
+          select: {
+            cliente: { select: { nombres: true, apellidos: true } },
+            vehiculo: { select: { placa: true, tipo: true } },
+          },
+        },
+      },
       orderBy: { createdAt: "asc" },
     }),
     prisma.gasto.findMany({
@@ -92,9 +108,13 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       valor: f.valor,
       metodoPago: f.metodoPago,
       createdAt: f.createdAt,
-      cliente: f.ingreso?.cliente ? `${f.ingreso.cliente.nombres} ${f.ingreso.cliente.apellidos}` : null,
-      placa: f.ingreso?.vehiculo?.placa,
-      tipoVehiculo: f.ingreso?.vehiculo?.tipo,
+      cliente: f.ingreso?.cliente
+        ? `${f.ingreso.cliente.nombres} ${f.ingreso.cliente.apellidos}`
+        : f.mensualidad?.cliente
+          ? `${f.mensualidad.cliente.nombres} ${f.mensualidad.cliente.apellidos}`
+          : null,
+      placa: f.ingreso?.vehiculo?.placa || f.mensualidad?.vehiculo?.placa,
+      tipoVehiculo: f.ingreso?.vehiculo?.tipo || f.mensualidad?.vehiculo?.tipo,
     })),
     gastos: gastos.map(g => ({
       id: g.id,
