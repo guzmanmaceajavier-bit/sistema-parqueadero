@@ -249,79 +249,129 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
 
 
 export const actualizarMensualidad = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
   const { vehiculoId, planId, puestoId, fechaInicio, fechaFin, valor, observacion } = req.body;
-  const existente = await prisma.mensualidad.findUnique({ where: { id: Number(id) } });
+  const existente = await prisma.mensualidad.findUnique({ where: { id } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
+  if (existente.estado === "CANCELADA") throw new AppError("No se puede editar una mensualidad cancelada", 409);
 
-  const data: any = { observacion, valor: valor !== undefined ? Number(valor) : existente.valor };
-  if (fechaInicio) data.fechaInicio = new Date(fechaInicio);
-  if (fechaFin) data.fechaFin = new Date(fechaFin);
-  if (vehiculoId !== undefined) data.vehiculoId = vehiculoId ? Number(vehiculoId) : existente.vehiculoId;
-  if (planId !== undefined) data.planId = planId ? Number(planId) : null;
+  const vid = vehiculoId !== undefined ? (vehiculoId ? Number(vehiculoId) : existente.vehiculoId) : existente.vehiculoId;
+  const nuevoPuestoId = puestoId !== undefined ? (puestoId ? Number(puestoId) : null) : existente.puestoId;
+  const inicio = fechaInicio !== undefined ? new Date(fechaInicio) : existente.fechaInicio;
+  const fin = fechaFin !== undefined ? new Date(fechaFin) : existente.fechaFin;
+  const monto = valor !== undefined ? Number(valor) : existente.valor;
+  if (!Number.isFinite(inicio.getTime()) || !Number.isFinite(fin.getTime()) || fin <= inicio) {
+    throw new AppError("El periodo de la mensualidad no es válido", 400);
+  }
+  if (!Number.isFinite(monto) || monto <= 0) throw new AppError("El valor debe ser mayor que cero", 400);
 
-  const vid = data.vehiculoId ?? existente.vehiculoId;
-  const cid = existente.clienteId;
+  const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
+  if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (vehiculo.clienteId !== existente.clienteId) throw new AppError("El vehículo no pertenece al cliente de esta mensualidad", 400);
+  if (vehiculo.bloqueado || !vehiculo.estado) throw new AppError("El vehículo está bloqueado o inactivo", 400);
 
-  if (vehiculoId !== undefined) {
-    const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
-    if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-    if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente de esta mensualidad", 400);
-    if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
+  let montoFinal = monto;
+  let nuevoPlanId: number | null = planId !== undefined ? (planId ? Number(planId) : null) : existente.planId;
+  if (planId) {
+    const plan = await prisma.plan.findUnique({ where: { id: Number(planId) } });
+    if (!plan?.activo) throw new AppError("El plan no existe o está inactivo", 400);
+    montoFinal = plan.valor;
   }
 
-  const inicio = data.fechaInicio ? new Date(data.fechaInicio) : existente.fechaInicio;
-  const fin = data.fechaFin ? new Date(data.fechaFin) : existente.fechaFin;
-  if (fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
-
   const actualizada = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
-    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    if (puestoId !== undefined) {
-      const nuevoPuestoId = puestoId ? Number(puestoId) : null;
-      if (nuevoPuestoId !== existente.puestoId) {
-        if (nuevoPuestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${nuevoPuestoId}::integer)) AS advisory_lock`;
-        const ingresosActivosPuesto = existente.puestoId ? await tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } }) : 0;
-        if (existente.puestoId && ingresosActivosPuesto === 0) {
-          const ahora = new Date();
-          const [mensualidadActivaPuesto, reservaActivaPuesto] = await Promise.all([
-            tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA", id: { not: Number(id) }, fechaFin: { gte: ahora } } }),
-            tx.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
-          ]);
-          if (mensualidadActivaPuesto === 0 && reservaActivaPuesto === 0) {
-            await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
-          }
-        }
-        if (nuevoPuestoId) {
-          const nuevoPuesto = await tx.puesto.findUnique({ where: { id: nuevoPuestoId } });
-          if (!nuevoPuesto) throw new AppError("Puesto no encontrado", 404);
-          if (!nuevoPuesto.activo) throw new AppError("El puesto está inactivo", 400);
-          if (nuevoPuesto.estado !== "LIBRE") throw new AppError("El puesto no está disponible (estado: " + nuevoPuesto.estado + ")", 400);
-          const ahora = new Date();
-          const [ingresoEnPuesto, mensualidadEnPuesto, reservaEnPuesto] = await Promise.all([
-            tx.ingreso.findFirst({ where: { puestoId: nuevoPuestoId, estado: "ACTIVO" }, select: { id: true } }),
-            tx.mensualidad.findFirst({ where: { puestoId: nuevoPuestoId, estado: "ACTIVA", fechaInicio: { lte: fin }, fechaFin: { gte: inicio }, id: { not: Number(id) } }, select: { id: true } }),
-            tx.reserva.findFirst({ where: { puestoId: nuevoPuestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] }, select: { id: true } }),
-          ]);
-          if (ingresoEnPuesto || mensualidadEnPuesto || reservaEnPuesto) throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
-          await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: "OCUPADO" } });
-          const ingresoExistente = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
-          if (!ingresoExistente) {
-            await tx.ingreso.create({ data: { clienteId: cid, vehiculoId: vid, puestoId: nuevoPuestoId } });
-          }
-        }
-      }
-      data.puestoId = nuevoPuestoId;
+    const vehiculosLocks = [...new Set([existente.vehiculoId, vid])].sort((a, b) => a - b);
+    const puestosLocks = [...new Set([existente.puestoId, nuevoPuestoId].filter((v): v is number => v !== null))].sort((a, b) => a - b);
+    for (const lockId of vehiculosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${lockId}::integer)) AS advisory_lock`;
+    for (const lockId of puestosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${lockId}::integer)) AS advisory_lock`;
+
+    const actual = await tx.mensualidad.findUnique({ where: { id } });
+    if (!actual || actual.vehiculoId !== existente.vehiculoId || actual.puestoId !== existente.puestoId) {
+      throw new AppError("La mensualidad cambió mientras se editaba. Actualiza e inténtalo nuevamente.", 409);
     }
-    return tx.mensualidad.update({
-      where: { id: Number(id) },
-      data,
+    const finLimite = fin;
+    const [otraMensualidad, reservaVehiculo] = await Promise.all([
+      tx.mensualidad.findFirst({
+        where: { id: { not: id }, vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+        select: { id: true },
+      }),
+      tx.reserva.findFirst({
+        where: { vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+        select: { id: true },
+      }),
+    ]);
+    if (otraMensualidad || reservaVehiculo) throw new AppError("El vehículo tiene otra mensualidad o reserva en ese periodo", 409);
+
+    const ingresoVehiculo = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true, puestoId: true } });
+    if (ingresoVehiculo && (!nuevoPuestoId || ingresoVehiculo.puestoId !== nuevoPuestoId || inicio > new Date() || fin < new Date())) {
+      throw new AppError("El vehículo tiene un ingreso activo incompatible con la nueva asignación", 409);
+    }
+
+    if (nuevoPuestoId) {
+      const [puesto, otraMensualidadPuesto, reservaPuesto, ingresoPuesto] = await Promise.all([
+        tx.puesto.findUnique({ where: { id: nuevoPuestoId } }),
+        tx.mensualidad.findFirst({
+          where: { id: { not: id }, puestoId: nuevoPuestoId, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+          select: { id: true },
+        }),
+        tx.reserva.findFirst({
+          where: { puestoId: nuevoPuestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+          select: { id: true },
+        }),
+        tx.ingreso.findFirst({ where: { puestoId: nuevoPuestoId, estado: "ACTIVO", ...(ingresoVehiculo ? { id: { not: ingresoVehiculo.id } } : {}) }, select: { id: true } }),
+      ]);
+      if (!puesto?.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible", 409);
+      if (otraMensualidadPuesto || reservaPuesto || ingresoPuesto) throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
+      if (puesto.estado === "OCUPADO" && !(ingresoVehiculo && ingresoVehiculo.puestoId === nuevoPuestoId)) {
+        throw new AppError("El puesto está ocupado", 409);
+      }
+    }
+
+    const actualizada = await tx.mensualidad.update({
+      where: { id },
+      data: {
+        vehiculoId: vid,
+        puestoId: nuevoPuestoId,
+        planId: nuevoPlanId,
+        fechaInicio: inicio,
+        fechaFin: fin,
+        valor: montoFinal,
+        ...(observacion !== undefined ? { observacion } : {}),
+      },
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
     });
+
+    const ahora = new Date();
+    const vigente = inicio <= ahora && fin >= ahora;
+    if (nuevoPuestoId && nuevoPuestoId !== actual.puestoId) {
+      if (vigente) {
+        if (ingresoVehiculo) {
+          await tx.ingreso.update({ where: { id: ingresoVehiculo.id }, data: { puestoId: nuevoPuestoId } });
+        } else {
+          await tx.ingreso.create({ data: { clienteId: actual.clienteId, vehiculoId: vid, puestoId: nuevoPuestoId } });
+        }
+      }
+      await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: vigente ? "OCUPADO" : "RESERVADO" } });
+    } else if (nuevoPuestoId) {
+      await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: vigente ? "OCUPADO" : "RESERVADO" } });
+    }
+
+    if (actual.puestoId && actual.puestoId !== nuevoPuestoId) {
+      const [ingresos, mensualidades, reservas] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", id: { not: id }, fechaFin: { gte: ahora } } }),
+        tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+      ]);
+      const estadoPuesto = ingresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
+    }
+    return actualizada;
   });
   await registrarMovimiento("MENSUALIDADES", "EDITAR", `Mensualidad #${id} editada`, req.usuario?.usuario);
   res.json({ ok: true, mensualidad: actualizada });
 });
+
 
 export const cancelarMensualidad = asyncHandler(async (req, res) => {
   const { id } = req.params;
