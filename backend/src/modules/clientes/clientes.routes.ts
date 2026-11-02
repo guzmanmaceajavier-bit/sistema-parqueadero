@@ -1,5 +1,6 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
+import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { crearCliente, obtenerClientes, obtenerCliente, actualizarCliente, eliminarCliente, perfilCliente, importarClientes, recargarSaldo } from "./clientes.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
@@ -91,7 +92,7 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarClienteSc
  *       404:
  *         description: Cliente no encontrado
  */
-router.delete("/:id", verificarToken, validateIdParam, eliminarCliente);
+router.delete("/:id", verificarToken, verificarRol("admin"), validateIdParam, eliminarCliente);
 
 /**
  * @swagger
@@ -111,7 +112,7 @@ router.delete("/:id", verificarToken, validateIdParam, eliminarCliente);
  *         description: Perfil del cliente
  */
 router.get("/:id/perfil", verificarToken, validateIdParam, perfilCliente);
-router.post("/importar", verificarToken, importarClientes);
-router.post("/:id/recargar-saldo", verificarToken, validateIdParam, recargarSaldo);
+router.post("/importar", verificarToken, verificarRol("admin", "supervisor"), importarClientes);
+router.post("/:id/recargar-saldo", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, recargarSaldo);
 
 export default router;
