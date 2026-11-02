@@ -45,7 +45,6 @@ export default function Caja() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [cargando, setCargando] = useState(false);
-  const [eliminarId, setEliminarId] = useState(null);
   const [movimientoAnular, setMovimientoAnular] = useState(null);
 
   const [mostrarCerrar, setMostrarCerrar] = useState(false);
@@ -248,7 +247,7 @@ export default function Caja() {
     setCargando(true);
     try {
       await api.put(`/caja/${cajaSel.id}`, {
-        apertura: parseFloat(formEditar.apertura) || 0,
+        apertura: cajaSel.estado === "ABIERTA" ? (parseFloat(formEditar.apertura) || 0) : undefined,
         observacion: formEditar.observacion,
       });
       setMostrarEditar(false);
@@ -258,18 +257,8 @@ export default function Caja() {
     } catch (err) { mostrarToast(err.response?.data?.message || "Error al editar", "error"); } finally { setCargando(false); }
   };
 
-  const eliminarCaja = async () => {
-    if (!eliminarId) return;
-    try {
-      await api.delete(`/caja/${eliminarId}`);
-      setEliminarId(null);
-      mostrarToast("Caja eliminada");
-      cargarCajas(page);
-    } catch (err) { mostrarToast(err.response?.data?.message || "Error al eliminar", "error"); }
-  };
-
   const totalEsperado = cajaAbierta ? (cajaAbierta.apertura || 0) + (cajaAbierta.ingresos || 0) - (cajaAbierta.egresos || 0) : 0;
-  const efectivoReal = cajaAbierta ? (cajaAbierta.apertura || 0) + (cajaAbierta.ingresosEfectivo || 0) - (cajaAbierta.egresos || 0) : 0;
+  const efectivoReal = cajaAbierta ? (cajaAbierta.apertura || 0) + (cajaAbierta.ingresosEfectivo || 0) - (cajaAbierta.egresosEfectivo || 0) : 0;
   const puedeAnular = cajaAbierta?.estado === "ABIERTA";
 
   return (
@@ -451,7 +440,7 @@ export default function Caja() {
                                   <button disabled={m.anulado} onClick={() => abrirEditMov(m)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Movimiento anulado" : "Editar"}>
                                     <PenSquare className="w-3.5 h-3.5" />
                                   </button>
-                                  <button disabled={m.anulado} onClick={() => setMovimientoAnular(m)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Ya está anulado" : "Anular"}>
+                                  <button disabled={m.anulado || !!m.facturaId || !!m.gastoId} onClick={() => setMovimientoAnular(m)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Ya está anulado" : m.facturaId || m.gastoId ? "Anula la factura o gasto desde su módulo de origen" : "Anular"}>
                                     <X className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
@@ -543,11 +532,6 @@ export default function Caja() {
                                   <button onClick={() => { setCajaSel(caja); setFormEditar({ apertura: (caja.apertura || 0).toString(), observacion: caja.observacion || "" }); setMostrarEditar(true); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400" title="Editar">
                                     <PenSquare className="w-3.5 h-3.5" />
                                   </button>
-                                  {caja.estado === "CERRADA" && (
-                                    <button onClick={() => setEliminarId(caja.id)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400" title="Eliminar">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -611,8 +595,8 @@ export default function Caja() {
                     <div className="flex items-center gap-3">
                       <p className="text-lg font-bold text-teal-600 dark:text-teal-400">{formatValor(totalConteoCalculado)}</p>
                       {totalConteoCalculado > 0 && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${Math.abs(totalConteoCalculado - totalEsperado) < 100 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
-                          {totalConteoCalculado >= totalEsperado ? "+" : ""}${(totalConteoCalculado - totalEsperado).toLocaleString()}
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${Math.abs(totalConteoCalculado - efectivoReal) < 100 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
+                          {totalConteoCalculado >= efectivoReal ? "+" : ""}${(totalConteoCalculado - efectivoReal).toLocaleString()}
                         </span>
                       )}
                     </div>
@@ -645,7 +629,11 @@ export default function Caja() {
               <button onClick={() => setMostrarEditar(false)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-400 dark:text-slate-500"><IconX /></button>
             </div>
             <div className="p-6 space-y-4">
-              <div><label className={labelClass}>Monto de apertura ($)</label><input type="number" min="0" value={formEditar.apertura} onChange={(e) => setFormEditar(p => ({ ...p, apertura: e.target.value }))} className={inputClass} /></div>
+              <div>
+                <label className={labelClass}>Monto de apertura ($)</label>
+                <input type="number" min="0" value={formEditar.apertura} disabled={cajaSel?.estado !== "ABIERTA"} onChange={(e) => setFormEditar(p => ({ ...p, apertura: e.target.value }))} className={inputClass + " disabled:opacity-60 disabled:cursor-not-allowed"} />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">El fondo inicial solo puede ajustarse en una caja abierta antes del primer movimiento. El historial de cajas cerradas se conserva.</p>
+              </div>
               <div><label className={labelClass}>Observación</label><textarea value={formEditar.observacion} onChange={(e) => setFormEditar(p => ({ ...p, observacion: e.target.value }))} className={inputClass + " resize-none"} rows={2} /></div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700">
@@ -813,7 +801,6 @@ export default function Caja() {
         </div>
       )}
 
-      <ConfirmDialog abierto={!!eliminarId} titulo="Eliminar registro de caja" mensaje="Vas a eliminar este registro y sus movimientos asociados. Esta operación afecta el historial financiero y no se puede deshacer. Antes de continuar, verifica que no corresponda a un turno que deba conservarse para auditoría." confirmLabel="Eliminar registro" onConfirm={eliminarCaja} onCancel={() => setEliminarId(null)} />
       <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se marcará como anulado el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. Se excluirá de los totales, pero el registro permanecerá visible para auditoría.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ScrollLock cuando={mostrarCerrar || mostrarEditar || !!mostrarDetalle || !!editMovimiento} />
