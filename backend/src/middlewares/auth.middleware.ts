@@ -20,8 +20,6 @@ export const verificarToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.usuario = { ...decoded, rol: user.rol, sucursalId: user.sucursalId };
-
     const user = await prisma.usuario.findUnique({
       where: { id: decoded.id },
       select: { tokenVersion: true, estado: true, rol: true, sucursalId: true },
@@ -39,6 +37,7 @@ export const verificarToken = async (req, res, next) => {
       return res.status(401).json({ ok: false, message: "Sesión expirada, inicie sesión nuevamente" });
     }
 
+    req.usuario = { ...decoded, rol: user.rol, sucursalId: user.sucursalId };
     next();
   } catch {
     return res.status(401).json({
@@ -55,11 +54,11 @@ export const verificarTokenOpcional = async (req, res, next) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await prisma.usuario.findUnique({
       where: { id: decoded.id },
-      select: { tokenVersion: true, estado: true },
+      select: { tokenVersion: true, estado: true, rol: true, sucursalId: true },
     });
 
     if (user && user.estado && user.tokenVersion === decoded.tokenVersion) {
-      req.usuario = decoded;
+      req.usuario = { ...decoded, rol: user.rol, sucursalId: user.sucursalId };
     }
   } catch {
     // Token inválido o expirado, continuar como anónimo
