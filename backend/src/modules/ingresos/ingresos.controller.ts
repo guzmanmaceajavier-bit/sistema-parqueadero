@@ -417,14 +417,14 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     await getCajaOError();
     const cobro = await calcularCobro({
       ingreso,
-      tipoVehiculo: ingreso.vehiculo.tipo,
+      tipoVehiculo: ingreso.vehiculo.tipo || undefined,
       fechaSalida,
       ticketExtraviado,
-      tarifaId: ingreso.vehiculo.tarifaId,
+      tarifaId: ingreso.vehiculo.tarifaId ?? undefined,
     });
     if (cobro.error) throw new AppError(cobro.error, 400);
     cobroTotal = cobro.total;
-    cobroTotalMinutos = cobro.totalMinutos;
+    cobroTotalMinutos = cobro.totalMinutos ?? 0;
   }
 
   let valorFinal = cobroTotal;
