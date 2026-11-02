@@ -111,7 +111,7 @@ function MainLayout() {
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="text" placeholder="Buscar placa o cliente..." value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && busqueda.trim()) { navigate(`/ingresos`); setBusqueda(""); } }}
+                onKeyDown={e => { if (e.key === "Enter" && busqueda.trim()) { navigate(`/ingresos?q=${encodeURIComponent(busqueda.trim())}`); setBusqueda(""); } }}
                 className="w-44 xl:w-56 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 placeholder:text-slate-400 outline-none focus:border-teal-400 dark:focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-colors"
               />
             </div>
