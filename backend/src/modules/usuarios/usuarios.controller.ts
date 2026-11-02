@@ -88,7 +88,7 @@ export const crearUsuario = asyncHandler(async (req, res) => {
   const nuevo = await prisma.usuario.create({
     data: { nombre, usuario, correo, password: hash, rol: rol || "empleado", sucursalId: sucursalId ?? null },
   });
-  res.status(201).json({ ok: true, message: "Usuario creado", usuario: { id: nuevo.id, nombre: nuevo.nombre, usuario: nuevo.usuario, rol: nuevo.rol } });
+  res.status(201).json({ ok: true, message: "Usuario creado", usuario: { id: nuevo.id, nombre: nuevo.nombre, usuario: nuevo.usuario, rol: nuevo.rol, sucursalId: nuevo.sucursalId } });
 });
 
 export const crearAdmin = asyncHandler(async (req, res) => {
@@ -119,7 +119,7 @@ export const crearAdmin = asyncHandler(async (req, res) => {
 
 export const obtenerUsuarios = asyncHandler(async (req, res) => {
   const { page, limit } = req.query;
-  const select = { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, ultimoAcceso: true, createdAt: true };
+  const select = { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true };
   if (page) {
     const { data: usuarios, pagination } = await paginate(prisma, "usuario", {
       page, limit, select, orderBy: { id: "desc" },
