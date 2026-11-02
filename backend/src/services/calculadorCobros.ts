@@ -133,7 +133,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "diario": {
-      const dias = Math.max(1, diffDias(ingreso.fechaEntrada, salida));
+      const dias = minutosFacturables <= 0 ? 0 : Math.max(1, diffDias(ingreso.fechaEntrada, salida));
       const valor = dias * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${dias} día(s) × $${tarifa.valor}`, valor });
       total = valor;
@@ -141,7 +141,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "semanal": {
-      const semanas = Math.max(1, diffSemanas(ingreso.fechaEntrada, salida));
+      const semanas = minutosFacturables <= 0 ? 0 : Math.max(1, diffSemanas(ingreso.fechaEntrada, salida));
       const valor = semanas * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${semanas} semana(s) × $${tarifa.valor}`, valor });
       total = valor;
@@ -149,7 +149,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "quincenal": {
-      const quincenas = Math.max(1, Math.ceil(diffDias(ingreso.fechaEntrada, salida) / 15));
+      const quincenas = minutosFacturables <= 0 ? 0 : Math.max(1, Math.ceil(diffDias(ingreso.fechaEntrada, salida) / 15));
       const valor = quincenas * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${quincenas} quincena(s) × $${tarifa.valor}`, valor });
       total = valor;
@@ -157,7 +157,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     case "mensual": {
-      const meses = diffMeses(ingreso.fechaEntrada, salida);
+      const meses = minutosFacturables <= 0 ? 0 : diffMeses(ingreso.fechaEntrada, salida);
       const valor = meses * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${meses} mes(es) × $${tarifa.valor}`, valor });
       total = valor;
@@ -165,7 +165,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
       break;
     }
     default: {
-      const horas = Math.max(1, Math.ceil(minutosFacturables / 60));
+      const horas = minutosFacturables <= 0 ? 0 : Math.max(1, Math.ceil(minutosFacturables / 60));
       const valor = horas * tarifa.valor;
       detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) (tarifa por defecto) × $${tarifa.valor}`, valor });
       total = valor;
