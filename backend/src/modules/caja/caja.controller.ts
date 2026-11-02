@@ -181,7 +181,7 @@ export const obtenerMovimientosCaja = asyncHandler(async (req, res) => {
     },
   });
 
-  const totalMovs = await prisma.cajaMovimiento.findMany({ where, select: { monto: true, tipo: true, metodoPago: true } });
+  const totalMovs = await prisma.cajaMovimiento.findMany({ where: { ...where, anulado: false }, select: { monto: true, tipo: true, metodoPago: true } });
   const ingresos = totalMovs.filter(m => m.tipo === "INGRESO");
   const egresos = totalMovs.filter(m => m.tipo === "EGRESO");
   const resumen = {
@@ -210,12 +210,22 @@ export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
   if (!movimiento) throw new AppError("Movimiento no encontrado", 404);
 
   const caja = await prisma.caja.findUnique({ where: { id: movimiento.cajaId } });
-  if (caja && caja.estado === "CERRADA") throw new AppError("No se puede modificar una caja cerrada", 400);
+  if (caja && caja.estado === "CERRADA") throw new AppError("No se puede anular un movimiento de una caja cerrada", 400);
+  if (movimiento.anulado) throw new AppError("Este movimiento ya fue anulado", 409);
 
-  await prisma.cajaMovimiento.delete({ where: { id: Number(id) } });
-  await registrarMovimiento("CAJA", "ANULAR", `Movimiento #${id} anulado: ${movimiento.concepto} - $${movimiento.monto}`, req.usuario?.usuario);
-  emitirEvento("caja:movimiento-eliminado", { mensaje: `Movimiento #${id} anulado` });
-  res.json({ ok: true, message: "Movimiento anulado" });
+  const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim().slice(0, 500) : "";
+  const anulado = await prisma.cajaMovimiento.update({
+    where: { id: Number(id) },
+    data: {
+      anulado: true,
+      anuladoEn: new Date(),
+      anuladoPor: req.usuario?.usuario || "usuario",
+      motivoAnulacion: motivo || "Anulación solicitada desde el módulo de caja",
+    },
+  });
+  await registrarMovimiento("CAJA", "ANULAR", `Movimiento #${id} anulado: ${movimiento.concepto} - ${movimiento.monto}. Motivo: ${anulado.motivoAnulacion}`, req.usuario?.usuario);
+  emitirEvento("caja:movimiento-actualizado", { mensaje: `Movimiento #${id} anulado` });
+  res.json({ ok: true, message: "Movimiento anulado; el registro se conserva para auditoría", movimiento: anulado });
 });
 
 export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
@@ -224,13 +234,18 @@ export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
 
   const movimiento = await prisma.cajaMovimiento.findUnique({ where: { id: Number(id) } });
   if (!movimiento) throw new AppError("Movimiento no encontrado", 404);
+  if (movimiento.anulado) throw new AppError("No se puede editar un movimiento anulado", 409);
 
   const caja = await prisma.caja.findUnique({ where: { id: movimiento.cajaId } });
   if (caja && caja.estado === "CERRADA") throw new AppError("No se puede modificar una caja cerrada", 400);
 
   const data = {};
   if (concepto !== undefined) data.concepto = concepto;
-  if (monto !== undefined) data.monto = Number(monto);
+  if (monto !== undefined) {
+    const montoNormalizado = Number(monto);
+    if (!Number.isFinite(montoNormalizado) || montoNormalizado <= 0) throw new AppError("El monto debe ser un número mayor que cero", 400);
+    data.monto = montoNormalizado;
+  }
   if (metodoPago !== undefined) data.metodoPago = metodoPago;
 
   const actualizado = await prisma.cajaMovimiento.update({ where: { id: Number(id) }, data });
