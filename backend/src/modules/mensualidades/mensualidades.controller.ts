@@ -302,6 +302,10 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
     ]);
     if (otraMensualidad || reservaVehiculo) throw new AppError("El vehículo tiene otra mensualidad o reserva en ese periodo", 409);
 
+    const ingresoAnterior = vid !== actual.vehiculoId
+      ? await tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVO" }, select: { id: true } })
+      : null;
+    if (ingresoAnterior) throw new AppError("No se puede cambiar el vehículo mientras tenga un ingreso activo", 409);
     const ingresoVehiculo = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true, puestoId: true } });
     if (ingresoVehiculo && (!nuevoPuestoId || ingresoVehiculo.puestoId !== nuevoPuestoId || inicio > new Date() || fin < new Date())) {
       throw new AppError("El vehículo tiene un ingreso activo incompatible con la nueva asignación", 409);
