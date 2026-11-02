@@ -278,7 +278,7 @@ export const cancelarMensualidad = asyncHandler(async (req, res) => {
         tx.reserva.count({
           where: {
             puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
           },
         }),
       ]);
@@ -309,7 +309,7 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
       const ahora = new Date();
       const [ingresos, mensualidades, reservas] = await Promise.all([
         tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } }),
-        tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+        tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
         tx.reserva.count({
           where: {
             puestoId: existente.puestoId,
