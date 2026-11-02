@@ -3,16 +3,17 @@ import { calcularTotalesHelper } from "../../modules/caja/caja.helpers.js";
 
 import { afterEach, beforeEach } from "vitest";
 
-const { findReservaFirst, findTarifaUnique, findConfigFirst } = vi.hoisted(() => ({
+const { findReservaFirst, findTarifaFirst, findTarifaMany, findConfigFirst } = vi.hoisted(() => ({
   findReservaFirst: vi.fn(),
-  findTarifaUnique: vi.fn(),
+  findTarifaFirst: vi.fn(),
+  findTarifaMany: vi.fn(),
   findConfigFirst: vi.fn(),
 }));
 
 vi.mock("../../config/prisma.js", () => ({
   default: {
     reserva: { findFirst: findReservaFirst },
-    tarifa: { findUnique: findTarifaUnique },
+    tarifa: { findFirst: findTarifaFirst, findMany: findTarifaMany },
     configuracion: { findFirst: findConfigFirst },
   },
 }));
@@ -99,13 +100,14 @@ describe("Cálculo de tarifas por tiempo facturable", () => {
   };
 
   beforeEach(() => {
-    findTarifaUnique.mockReset();
+    findTarifaFirst.mockReset();
+    findTarifaMany.mockReset();
     findConfigFirst.mockReset();
     findConfigFirst.mockResolvedValue({ minutosGracia: 0 });
   });
 
   async function calcular(modalidad: string, entrada: string, salida: string, cambios: Record<string, unknown> = {}) {
-    findTarifaUnique.mockResolvedValue({ ...tarifaBase, modalidad, ...cambios });
+    findTarifaFirst.mockResolvedValue({ ...tarifaBase, modalidad, ...cambios });
     return calcularCobro({
       ingreso: { id: 1, vehiculoId: 2, fechaEntrada: new Date(entrada) },
       tipoVehiculo: "carro",
