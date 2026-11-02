@@ -21,11 +21,11 @@ async function calcularTotales(cajaId) {
   const [ingresos, egresos] = await Promise.all([
     prisma.cajaMovimiento.aggregate({
       _sum: { monto: true },
-      where: { cajaId, tipo: "INGRESO" },
+      where: { cajaId, tipo: "INGRESO", anulado: false },
     }),
     prisma.cajaMovimiento.aggregate({
       _sum: { monto: true },
-      where: { cajaId, tipo: "EGRESO" },
+      where: { cajaId, tipo: "EGRESO", anulado: false },
     }),
   ]);
   return {
