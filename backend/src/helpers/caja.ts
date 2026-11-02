@@ -17,7 +17,7 @@ export async function getCajaOError() {
   return caja;
 }
 
-async function calcularTotales(cajaId) {
+async function calcularTotales(cajaId: number) {
   const [ingresos, egresos] = await Promise.all([
     prisma.cajaMovimiento.aggregate({
       _sum: { monto: true },
