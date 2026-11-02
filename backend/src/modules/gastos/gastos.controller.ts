@@ -16,7 +16,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
 
   const [gasto] = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) } });
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalId ?? null } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el gasto", 409);
     const data: any = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor), sucursalId: sucursalId ?? null };
     if (recurrente) {
@@ -186,7 +186,7 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
       // En una ejecución administrativa global, cada ocurrencia se carga a la caja
       // de su propia sucursal y nunca a la primera caja abierta que devuelva la BD.
       const cajaAbierta = await tx.caja.findFirst({
-        where: { estado: "ABIERTA", ...(plantilla.sucursalId ? { sucursalId: plantilla.sucursalId } : {}) },
+        where: { estado: "ABIERTA", sucursalId: plantilla.sucursalId },
       });
       if (!cajaAbierta) return false;
 
