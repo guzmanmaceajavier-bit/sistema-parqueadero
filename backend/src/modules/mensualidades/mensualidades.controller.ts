@@ -267,6 +267,9 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { metodoPago, monto } = req.body;
   const mp = metodoPago || "efectivo";
+  if (typeof mp !== "string" || !mp.trim() || mp.trim().length > 60) {
+    throw new AppError("El método de pago no es válido", 400);
+  }
 
   const resultado = await prisma.$transaction(async (tx) => {
     // Bloquea la mensualidad para que dos abonos simultáneos no excedan su saldo.
@@ -351,7 +354,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
     saldoPendiente: resultado.saldoPendiente,
     renovada: resultado.renovada,
     mensaje: resultado.renovada
-      ? `Pago completo — Factura ${resultado.numeroFactura}. Mensualidad renovada por ${resultado.renovada ? "el periodo contratado" : "el periodo vigente"}.`
+      ? `Pago completo — Factura ${resultado.numeroFactura}. Mensualidad renovada según la duración del plan.`
       : `Abono registrado — Factura ${resultado.numeroFactura}. Saldo pendiente: $${resultado.saldoPendiente.toLocaleString()}`,
   });
 });
