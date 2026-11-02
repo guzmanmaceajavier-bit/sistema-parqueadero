@@ -76,6 +76,12 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   const minutosGratis = tarifa.minutosGratis || 0;
   const cortesia = tarifa.minutosCortesia || 0;
 
+  const modalidadTarifa = String(tarifa.modalidad || modalidadNormalizada).trim().toLowerCase();
+  const modalidadesSoportadas = ["minuto", "hora", "diario", "semanal", "quincenal", "mensual"];
+  if (!modalidadesSoportadas.includes(modalidadTarifa)) {
+    return { error: `La modalidad de tarifa "${tarifa.modalidad}" no está soportada. Usa minuto, hora, diario, semanal, quincenal o mensual.`, total: 0, detalle: [] };
+  }
+
   const minutosNoFacturables = cortesia + minutosGratis + minutosGracia;
   const minutosFacturables = Math.max(0, totalMinutos - minutosNoFacturables);
   const fechaInicioFacturable = new Date(entrada.getTime() + minutosNoFacturables * 60000);
@@ -118,7 +124,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   const usarProgresiva = tarifa.precioPrimeraHora != null && tarifa.precioHoraAdicional != null;
 
-  switch (tarifa.modalidad) {
+  switch (modalidadTarifa) {
     case "minuto": {
       const base = Math.ceil(minutosFacturables * tarifa.valor);
       const valor = aplicarTopeDiario(minCargo(base));
