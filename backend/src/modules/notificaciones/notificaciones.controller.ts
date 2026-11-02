@@ -23,7 +23,7 @@ export const enviarNotificacion = asyncHandler(async (req, res) => {
   const webpush = await import("web-push");
   webpush.setVapidDetails("mailto:admin@parqueadero.com", process.env.VAPID_PUBLIC_KEY || "", process.env.VAPID_PRIVATE_KEY || "");
   const results = await Promise.allSettled(
-    subs.map((s) => webpush.sendNotification(s.subscription as webpush.PushSubscription, JSON.stringify({ title, body, url })).catch(() => undefined))
+    subs.map((s) => webpush.sendNotification(s.subscription as import("web-push").PushSubscription, JSON.stringify({ title, body, url })).catch(() => undefined))
   );
   res.json({ ok: true, enviadas: results.filter((r) => r.status === "fulfilled").length });
 });
