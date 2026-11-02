@@ -9,12 +9,21 @@ interface FechaCalendario {
   day: number;
 }
 
-function partesFechaEnZona(fecha: Date, timeZone: string): FechaCalendario {
+interface FechaHoraCalendario extends FechaCalendario {
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+function partesFechaHoraEnZona(fecha: Date, timeZone: string): FechaHoraCalendario {
   const partes = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
     hourCycle: "h23",
   }).formatToParts(fecha);
   const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
@@ -22,7 +31,15 @@ function partesFechaEnZona(fecha: Date, timeZone: string): FechaCalendario {
     year: Number(valores.year),
     month: Number(valores.month),
     day: Number(valores.day),
+    hour: Number(valores.hour),
+    minute: Number(valores.minute),
+    second: Number(valores.second),
   };
+}
+
+function partesFechaEnZona(fecha: Date, timeZone: string): FechaCalendario {
+  const { year, month, day } = partesFechaHoraEnZona(fecha, timeZone);
+  return { year, month, day };
 }
 
 function parseFechaCalendario(value: unknown, campo: string): FechaCalendario {
@@ -47,28 +64,20 @@ function inicioDiaEnZona(fecha: FechaCalendario, timeZone: string): Date {
   const objetivo = Date.UTC(fecha.year, fecha.month - 1, fecha.day);
   let instante = objetivo;
 
-  // Ajusta la diferencia entre la hora UTC candidata y la medianoche local.
+  // Corrige la diferencia entre la hora UTC candidata y la medianoche de la zona configurada.
   for (let intento = 0; intento < 4; intento++) {
-    const representada = partesFechaEnZona(new Date(instante), timeZone);
-    const medianocheRepresentada = Date.UTC(
+    const representada = partesFechaHoraEnZona(new Date(instante), timeZone);
+    const instanteRepresentado = Date.UTC(
       representada.year,
       representada.month - 1,
       representada.day,
+      representada.hour,
+      representada.minute,
+      representada.second,
     );
-    const diferencia = objetivo - medianocheRepresentada;
+    const diferencia = objetivo - instanteRepresentado;
     if (diferencia === 0) break;
-
-    const horaPartes = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date(instante));
-    const hora = Object.fromEntries(horaPartes.map((parte) => [parte.type, parte.value]));
-    const segundosDesdeMedianoche =
-      Number(hora.hour) * 3600 + Number(hora.minute) * 60 + Number(hora.second);
-    instante += diferencia - segundosDesdeMedianoche * 1000;
+    instante += diferencia;
   }
 
   return new Date(instante);
