@@ -22,7 +22,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
   await getCajaOError();
 
   const [gasto] = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el gasto", 409);
     const data = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor) };
@@ -88,7 +88,7 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   if (recurrente && periodicidad) data.proximaGeneracion = calcularProximaGeneracion(periodicidad);
 
   const gasto = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const existe = await tx.gasto.findUnique({ where: { id: Number(id) } });
     if (!existe) throw new AppError("Gasto no encontrado", 404);
     const movimientos = await tx.cajaMovimiento.findMany({
@@ -118,7 +118,7 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
 export const eliminarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const gasto = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const existente = await tx.gasto.findUnique({ where: { id: Number(id) } });
     if (!existente) throw new AppError("Gasto no encontrado", 404);
     const movimientos = await tx.cajaMovimiento.findMany({
@@ -159,7 +159,7 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
   let generados = 0;
   for (const g of pendientes) {
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
       await tx.gasto.create({
         data: {
