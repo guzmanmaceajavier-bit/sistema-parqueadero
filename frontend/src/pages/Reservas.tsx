@@ -450,7 +450,7 @@ export default function Reservas() {
         </form>
       </FormModal>
 
-      <ConfirmDialog abierto={!!confirmDeleteReserva} titulo="Eliminar reserva" mensaje="Vas a eliminar esta reserva del historial. Si solo necesitas liberar el puesto, es preferible cancelarla para conservar el registro de la solicitud." onConfirm={() => handleEliminar(confirmDeleteReserva)} onCancel={() => setConfirmDeleteReserva(null)} />
+      <ConfirmDialog abierto={!!confirmDeleteReserva} titulo="Eliminar reserva" mensaje="Vas a eliminar esta reserva del historial. Si solo necesitas liberar el puesto, es preferible cancelarla para conservar el registro de la solicitud." confirmLabel="Eliminar reserva" onConfirm={() => handleEliminar(confirmDeleteReserva)} onCancel={() => setConfirmDeleteReserva(null)} />
       {showNewVec && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]" onClick={() => setShowNewVec(false)}>
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-5" onClick={e => e.stopPropagation()}>
