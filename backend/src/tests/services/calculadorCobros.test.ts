@@ -95,4 +95,54 @@ describe("calcularCobro", () => {
     expect(result.error).toContain("anterior");
     expect(prismaMock.tarifa.findUnique).not.toHaveBeenCalled();
   });
+
+  it("normaliza modalidades guardadas en mayúsculas y calcula la unidad correcta", async () => {
+    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, modalidad: "DIARIO", valor: 12000 });
+
+    const result = await calcularCobro({
+      ingreso: { id: 5, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      fechaSalida: new Date("2026-01-02T08:00:00"),
+    });
+
+    expect(result.total).toBe(12000);
+    expect(result.desglose).toMatchObject({ dias: 1, unidad: "dia" });
+  });
+
+  it("calcula tarifa progresiva y respeta el tope diario por bloques de 24 horas", async () => {
+    prismaMock.tarifa.findUnique.mockResolvedValue({
+      ...tarifaBase,
+      modalidad: "HORA",
+      precioPrimeraHora: 7000,
+      precioHoraAdicional: 3000,
+      tarifaMaximaDiaria: 12000,
+    });
+
+    const result = await calcularCobro({
+      ingreso: { id: 6, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      fechaSalida: new Date("2026-01-02T09:00:00"),
+    });
+
+    expect(result.totalMinutos).toBe(1500);
+    expect(result.desglose).toMatchObject({ horas: 25, unidad: "hora_progresiva" });
+    expect(result.total).toBe(24000);
+  });
+
+  it("rechaza modalidades desconocidas en lugar de cobrarlas como hora", async () => {
+    prismaMock.tarifa.findUnique.mockResolvedValue({ ...tarifaBase, modalidad: "festivo" });
+
+    const result = await calcularCobro({
+      ingreso: { id: 7, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      fechaSalida: new Date("2026-01-01T09:00:00"),
+    });
+
+    expect(result.error).toContain("no está soportada");
+    expect(result.total).toBe(0);
+  });
+
 });
