@@ -154,7 +154,7 @@ export const obtenerMensualidades = asyncHandler(async (req, res) => {
 
   const result = mensualidades.map((m) => {
     const pagadoPeriodo = m.facturas
-      .filter((f: { createdAt: Date; valor: number }) => new Date(f.createdAt) >= new Date(m.fechaInicio))
+      .filter((f: { createdAt: Date; valor: number; metodoPago: string | null }) => f.metodoPago !== null && new Date(f.createdAt) >= new Date(m.fechaInicio))
       .reduce((sum: number, f: { valor: number }) => sum + f.valor, 0);
     return { ...m, saldoPendiente: Math.max(0, m.valor - pagadoPeriodo), ausente: activasSet.has(m.vehiculoId) };
   });
@@ -173,7 +173,7 @@ export const obtenerMensualidad = asyncHandler(async (req, res) => {
     where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVA" },
   }) : null;
   const pagadoPeriodo = mensualidad.facturas
-    .filter((f) => new Date(f.createdAt) >= new Date(mensualidad.fechaInicio))
+    .filter((f) => f.metodoPago !== null && new Date(f.createdAt) >= new Date(mensualidad.fechaInicio))
     .reduce((sum, f) => sum + f.valor, 0);
   res.json({ ok: true, mensualidad: { ...mensualidad, saldoPendiente: Math.max(0, mensualidad.valor - pagadoPeriodo), ausente: !!ausenciaActiva, ausencia: ausenciaActiva } });
 });
@@ -537,7 +537,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
 
     const pagos = await tx.factura.aggregate({
       _sum: { valor: true },
-      where: { mensualidadId: mensualidad.id, createdAt: { gte: mensualidad.fechaInicio } },
+      where: { mensualidadId: mensualidad.id, createdAt: { gte: mensualidad.fechaInicio }, metodoPago: { not: null } },
     });
     const saldoPendiente = Math.max(0, mensualidad.valor - (pagos._sum.valor || 0));
     const montoPagado = monto !== undefined ? Number(monto) : saldoPendiente;
