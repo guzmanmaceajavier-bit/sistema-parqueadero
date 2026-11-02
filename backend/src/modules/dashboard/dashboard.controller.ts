@@ -113,7 +113,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
     prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.gasto.findMany({ where: { fecha: { gte: sieteDiasAtras }, ...sucursalFilter }, select: { valor: true, fecha: true }, orderBy: { fecha: "asc" } }),
-    prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: sucursalFilter }),
+    prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: { metodoPago: { not: null }, ...sucursalFilter } }),
     prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: principioAnio || new Date(hoy.getFullYear(), 0, 1) }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
   ]);
 
