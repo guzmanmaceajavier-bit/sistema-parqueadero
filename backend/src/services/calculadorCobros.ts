@@ -1,18 +1,18 @@
 import prisma from "../config/prisma.js";
 
-function diffMinutos(fechaEntrada, fechaSalida) {
+function diffMinutos(fechaEntrada: Date, fechaSalida: Date): number {
   return Math.ceil((fechaSalida - fechaEntrada) / (1000 * 60));
 }
 
-function diffDias(fechaEntrada, fechaSalida) {
+function diffDias(fechaEntrada: Date, fechaSalida: Date): number {
   return Math.ceil((fechaSalida - fechaEntrada) / (1000 * 60 * 60 * 24));
 }
 
-function diffSemanas(fechaEntrada, fechaSalida) {
+function diffSemanas(fechaEntrada: Date, fechaSalida: Date): number {
   return Math.ceil((fechaSalida - fechaEntrada) / (1000 * 60 * 60 * 24 * 7));
 }
 
-function diffMeses(fechaEntrada, fechaSalida) {
+function diffMeses(fechaEntrada: Date, fechaSalida: Date): number {
   // Cada periodo vence en el aniversario mensual; si el mes no tiene ese día,
   // se utiliza su último día (por ejemplo, 31 de enero -> 28/29 de febrero).
   let meses = (fechaSalida.getFullYear() - fechaEntrada.getFullYear()) * 12;
@@ -46,7 +46,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   if (!tipoVehiculo) {
     const primerVehiculo = await prisma.vehiculo.findFirst({ where: { id: ingreso.vehiculoId } });
-    tipoVehiculo = primerVehiculo?.tipo;
+    tipoVehiculo = primerVehiculo?.tipo || undefined;
   }
   if (!tipoVehiculo) {
     return { error: "El vehículo no tiene un tipo asignado. Configúrelo antes de registrar la salida.", total: 0, detalle: [] };
@@ -105,7 +105,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     };
   }
 
-  function minCargo(valor) {
+  function minCargo(valor: number): number {
     return minutosFacturables <= 0 ? 0 : valor;
   }
 
@@ -129,9 +129,9 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
         const horas = Math.ceil(minutosFacturables / 60);
         let valor = 0;
         if (horas >= 1) {
-          valor += tarifa.precioPrimeraHora;
+          valor += tarifa.precioPrimeraHora ?? 0;
           if (horas > 1) {
-            valor += (horas - 1) * tarifa.precioHoraAdicional;
+            valor += (horas - 1) * (tarifa.precioHoraAdicional ?? 0);
           }
         }
         if (tarifa.tarifaMaximaDiaria && valor > tarifa.tarifaMaximaDiaria) {
