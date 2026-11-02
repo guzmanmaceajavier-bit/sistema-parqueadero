@@ -45,7 +45,8 @@ export default function Caja() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [cargando, setCargando] = useState(false);
-  const [eliminarId, setEliminarId] = useState(null);\n  const [movimientoAnular, setMovimientoAnular] = useState(null);
+  const [eliminarId, setEliminarId] = useState(null);
+  const [movimientoAnular, setMovimientoAnular] = useState(null);
 
   const [mostrarCerrar, setMostrarCerrar] = useState(false);
   const [mostrarEditar, setMostrarEditar] = useState(false);
@@ -136,10 +137,12 @@ export default function Caja() {
     } catch (err) { mostrarToast(err.response?.data?.message || "Error al actualizar", "error"); }
   };
 
-  const anularMovimiento = async (movId) => {
-    if (!window.confirm("¿Anular este movimiento?")) return;
+  const anularMovimiento = async () => {
+    if (!movimientoAnular) return;
+    const movId = movimientoAnular.id;
     try {
       await api.delete(`/caja/movimiento/${movId}`);
+      setMovimientoAnular(null);
       mostrarToast("Movimiento anulado");
       if (mostrarDetalle) aplicarFiltros();
       cargarMovsHoy(pageHoy);
@@ -806,7 +809,8 @@ export default function Caja() {
         </div>
       )}
 
-      <ConfirmDialog abierto={!!eliminarId} titulo="Eliminar registro de caja" mensaje="Vas a eliminar este registro y sus movimientos asociados. Esta operación afecta el historial financiero y no se puede deshacer. Antes de continuar, verifica que no corresponda a un turno que deba conservarse para auditoría." confirmLabel="Eliminar registro" onConfirm={eliminarCaja} onCancel={() => setEliminarId(null)} />\n      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se anulará el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. El importe dejará de formar parte del resumen de esta caja.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
+      <ConfirmDialog abierto={!!eliminarId} titulo="Eliminar registro de caja" mensaje="Vas a eliminar este registro y sus movimientos asociados. Esta operación afecta el historial financiero y no se puede deshacer. Antes de continuar, verifica que no corresponda a un turno que deba conservarse para auditoría." confirmLabel="Eliminar registro" onConfirm={eliminarCaja} onCancel={() => setEliminarId(null)} />
+      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se anulará el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. El importe dejará de formar parte del resumen de esta caja.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ScrollLock cuando={mostrarCerrar || mostrarEditar || !!mostrarDetalle || !!editMovimiento} />
     </div>
