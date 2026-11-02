@@ -766,7 +766,7 @@ export const ticketEntrada = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
   const factura = await prisma.factura.findFirst({
-    where: { ingresoId: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
+    where: { ingresoId: Number(id), ...(sucursalId ? { ingreso: { vehiculo: { sucursalId } } } : {}) },
     include: { ingreso: { include: { vehiculo: { include: { cliente: true } }, puesto: true } } },
     orderBy: { createdAt: 'desc' },
   });
