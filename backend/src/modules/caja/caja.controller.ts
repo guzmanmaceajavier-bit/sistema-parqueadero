@@ -44,7 +44,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
     if (caja.estado !== "ABIERTA") throw new AppError("La caja ya está cerrada", 409);
 
     const totales = await calcularTotalesHelper(caja.id, tx);
-    const esperado = caja.apertura + totales.ingresosEfectivo - totales.egresos;
+    const esperado = caja.apertura + totales.ingresosEfectivo - totales.egresosEfectivo;
     let obsFinal = observacion || "";
     let totalConteo = 0;
     let diferencia = 0;
@@ -91,7 +91,7 @@ export const obtenerCajaActiva = asyncHandler(async (req, res) => {
       ...caja,
       ...totales,
       saldo: caja.apertura + totales.ingresos - totales.egresos,
-      efectivoEnCaja: caja.apertura + totales.ingresosEfectivo - totales.egresos,
+      efectivoEnCaja: caja.apertura + totales.ingresosEfectivo - totales.egresosEfectivo,
     },
   });
 });
