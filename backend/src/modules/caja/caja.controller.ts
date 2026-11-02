@@ -10,6 +10,8 @@ export const abrirCaja = asyncHandler(async (req, res) => {
   const { apertura, password, observacion } = req.body;
 
   const caja = await prisma.$transaction(async (tx) => {
+    // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124019)`;
     const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
     if (abierta) throw new AppError("Ya hay una caja abierta", 400);
 
