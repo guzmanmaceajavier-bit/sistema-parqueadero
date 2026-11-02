@@ -308,6 +308,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
 
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== existente.clienteId) throw new AppError("El vehículo no pertenece al cliente de esta mensualidad", 400);
   if (vehiculo.bloqueado || !vehiculo.estado) throw new AppError("El vehículo está bloqueado o inactivo", 400);
 
@@ -582,6 +583,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
         origen: "MENSUALIDAD",
         valor: montoPagado,
         metodoPago: mp,
+        sucursalId: mensualidad.sucursalId ?? sucursalId ?? null,
       },
     });
     await tx.cajaMovimiento.create({
