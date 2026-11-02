@@ -39,6 +39,13 @@ describe("obtenerReporte", () => {
     };
     expect(prismaMock.factura.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { createdAt: rango, metodoPago: { not: null }, sucursalId: 7 },
+      include: expect.objectContaining({
+        ingreso: expect.any(Object),
+        mensualidad: expect.objectContaining({
+          cliente: { select: { nombres: true, apellidos: true } },
+          vehiculo: { select: { placa: true, tipo: true } },
+        }),
+      }),
     }));
     expect(prismaMock.gasto.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { fecha: rango, sucursalId: 7 },
