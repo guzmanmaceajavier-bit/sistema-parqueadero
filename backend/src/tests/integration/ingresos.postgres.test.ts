@@ -63,8 +63,8 @@ describe("Concurrencia de ingresos y salidas (PostgreSQL real)", () => {
     vehiculosIds.push(segundoVehiculo.id);
 
     const intentarEntrada = (idVehiculo: number) => prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${idVehiculo}::integer)`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${idVehiculo}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
 
       const existente = await tx.ingreso.findFirst({
         where: { vehiculoId: idVehiculo, estado: "ACTIVO" },
@@ -95,9 +95,9 @@ describe("Concurrencia de ingresos y salidas (PostgreSQL real)", () => {
     });
 
     const intentarSalida = () => prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
 
       const actualizado = await tx.ingreso.updateMany({
         where: { id: ingreso.id, estado: "ACTIVO" },
