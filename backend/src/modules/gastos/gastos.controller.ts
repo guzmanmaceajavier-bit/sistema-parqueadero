@@ -16,7 +16,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el gasto", 409);
-    const data = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor) };
+    const data: any = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor) };
     if (recurrente) {
       data.recurrente = true;
       data.periodicidad = periodicidad || "mensual";
@@ -36,7 +36,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
 
 export const obtenerGastos = asyncHandler(async (req, res) => {
   const { page, limit, q, fechaInicio, fechaFin } = req.query;
-  const where = {};
+  const where: any = {};
   if (q) {
     where.OR = [
       { concepto: { contains: q, mode: "insensitive" } },
@@ -46,8 +46,8 @@ export const obtenerGastos = asyncHandler(async (req, res) => {
   }
   if (fechaInicio || fechaFin) {
     where.fecha = {};
-    if (fechaInicio) where.fecha.gte = new Date(fechaInicio);
-    if (fechaFin) where.fecha.lte = new Date(fechaFin + "T23:59:59.999Z");
+    if (fechaInicio) where.fecha.gte = new Date(String(fechaInicio));
+    if (fechaFin) where.fecha.lte = new Date(String(fechaFin) + "T23:59:59.999Z");
   }
   const { data: gastos, pagination } = await paginate(prisma, "gasto", {
     page, limit, where, orderBy: { id: "desc" },
