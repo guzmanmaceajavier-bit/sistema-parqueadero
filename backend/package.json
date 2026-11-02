@@ -9,7 +9,8 @@
     "start": "npx prisma db push --skip-generate && tsx src/app.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:integration": "vitest run src/tests/integration/ingresos.postgres.test.ts"
   },
   "keywords": [],
   "author": "",
