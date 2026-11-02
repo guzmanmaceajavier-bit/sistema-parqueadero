@@ -281,7 +281,7 @@ export const verificarPassword = asyncHandler(async (req, res) => {
 
 export const invalidarSesiones = asyncHandler(async (req, res) => {
   const usuario = await prisma.usuario.update({
-    where: { id: req.usuario.id },
+    where: { id: req.usuario!.id },
     data: { tokenVersion: { increment: 1 } },
   });
   await registrarMovimiento("Usuarios", "SESIONES INVALIDADAS", `Todas las sesiones de ${usuario.usuario} fueron invalidadas`, req.usuario!.usuario);
@@ -291,7 +291,7 @@ export const invalidarSesiones = asyncHandler(async (req, res) => {
 export const logout = asyncHandler(async (req, res) => {
   const NODE_ENV = process.env.NODE_ENV || "development";
   await prisma.usuario.update({
-    where: { id: req.usuario.id },
+    where: { id: req.usuario!.id },
     data: { tokenVersion: { increment: 1 } },
   });
   res.clearCookie("token", { httpOnly: true, secure: NODE_ENV === "production", sameSite: NODE_ENV === "production" ? "none" : "lax", path: "/" });
