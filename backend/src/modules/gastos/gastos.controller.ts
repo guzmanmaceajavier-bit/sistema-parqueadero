@@ -132,7 +132,7 @@ export const eliminarGasto = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const gasto = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const existente = await tx.gasto.findUnique({ where: { id: Number(id) } });
+    const existente = await tx.gasto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (!existente) throw new AppError("Gasto no encontrado", 404);
     const movimientos = await tx.cajaMovimiento.findMany({
       where: { gastoId: Number(id) },
@@ -165,8 +165,9 @@ export const eliminarGasto = asyncHandler(async (req, res) => {
 
 export const generarRecurrentes = asyncHandler(async (req, res) => {
   const ahora = new Date();
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const pendientes = await prisma.gasto.findMany({
-    where: { recurrente: true, proximaGeneracion: { lte: ahora } },
+    where: { recurrente: true, proximaGeneracion: { lte: ahora }, ...(sucursalId ? { sucursalId } : {}) },
     orderBy: { proximaGeneracion: "asc" },
     select: { id: true },
   });
@@ -177,11 +178,11 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
     const generado = await prisma.$transaction(async (tx) => {
       // Comparte el bloqueo de caja con cobros, gastos y cierres.
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) } });
       if (!cajaAbierta) return false;
 
       // Releer después del lock evita que dos solicitudes generen el mismo período.
-      const plantilla = await tx.gasto.findUnique({ where: { id: pendiente.id } });
+      const plantilla = await tx.gasto.findFirst({ where: { id: pendiente.id, ...(sucursalId ? { sucursalId } : {}) } });
       if (!plantilla || !plantilla.recurrente || !plantilla.proximaGeneracion || plantilla.proximaGeneracion > ahora) {
         return false;
       }
@@ -207,6 +208,7 @@ export const generarRecurrentes = asyncHandler(async (req, res) => {
           valor: plantilla.valor,
           fecha: ahora,
           recurrente: false,
+          sucursalId: plantilla.sucursalId,
         },
       });
       await tx.cajaMovimiento.create({
