@@ -113,6 +113,6 @@ router.delete("/:id", verificarToken, verificarRol("admin"), validateIdParam, el
  */
 router.get("/:id/perfil", verificarToken, validateIdParam, perfilCliente);
 router.post("/importar", verificarToken, verificarRol("admin", "supervisor"), importarClientes);
-router.post("/:id/recargar-saldo", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, recargarSaldo);
+router.post("/:id/recargar-saldo", verificarToken, verificarRol("admin"), validateIdParam, recargarSaldo);
 
 export default router;
