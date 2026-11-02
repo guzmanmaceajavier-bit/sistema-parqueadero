@@ -5,29 +5,43 @@ import { emitirEvento } from "./socket.js";
 
 async function liberarReservas() {
   const ahora = new Date();
-  const vencidas = await prisma.reserva.findMany({
+  const candidatas = await prisma.reserva.findMany({
     where: { estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lt: ahora } },
-    include: { cliente: true, puesto: true, vehiculo: true },
+    include: { cliente: true },
   });
 
-  for (const r of vencidas) {
-    const nuevoEstado = r.estado === "CONFIRMADA" ? "NO_SHOW" : "CANCELADA";
-    await prisma.reserva.update({ where: { id: r.id }, data: { estado: nuevoEstado } });
-    if (r.puestoId) {
-      const ingresoActivo = await prisma.ingreso.count({ where: { puestoId: r.puestoId, estado: "ACTIVO" } });
-      const otraMensualidad = await prisma.mensualidad.count({ where: { puestoId: r.puestoId, estado: "ACTIVA" } });
-      const otraReserva = await prisma.reserva.count({ where: { puestoId: r.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: r.id } } });
-      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
-        await prisma.puesto.update({ where: { id: r.puestoId }, data: { estado: "LIBRE" } });
+  let liberadas = 0;
+  for (const reserva of candidatas) {
+    const limiteLlegada = reserva.fechaFin ?? new Date(reserva.fechaInicio.getTime() + 60 * 60 * 1000);
+    if (limiteLlegada > ahora) continue;
+
+    const cambio = await prisma.$transaction(async (tx) => {
+      if (reserva.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${reserva.vehiculoId}::integer)) AS advisory_lock`;
+      if (reserva.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${reserva.puestoId}::integer)) AS advisory_lock`;
+      const actualizado = await tx.reserva.updateMany({
+        where: { id: reserva.id, estado: { in: ["PENDIENTE", "CONFIRMADA"] } },
+        data: { estado: reserva.estado === "CONFIRMADA" ? "NO_SHOW" : "CANCELADA" },
+      });
+      if (actualizado.count !== 1) return false;
+      if (reserva.puestoId) {
+        const [ingresoActivo, mensualidadVigente, reservaVigente] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId: reserva.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+          tx.reserva.count({ where: { puestoId: reserva.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            id: { not: reserva.id }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        ]);
+        const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
+        await tx.puesto.update({ where: { id: reserva.puestoId }, data: { estado: estadoPuesto } });
       }
-    }
-    await registrarMovimiento("RESERVAS", "VENCER", `Reserva #${r.id} vencida — ${r.cliente?.nombres}`, "sistema");
-    emitirEvento("reserva:vencida", { mensaje: `Reserva #${r.id} vencida — ${r.cliente?.nombres}`, reserva: r });
+      return true;
+    });
+    if (!cambio) continue;
+    await registrarMovimiento("RESERVAS", "VENCER", `Reserva #${reserva.id} vencida — ${reserva.cliente?.nombres}`, "sistema");
+    emitirEvento("reserva:vencida", { mensaje: `Reserva #${reserva.id} vencida — ${reserva.cliente?.nombres}`, reserva });
+    liberadas++;
   }
 
-  if (vencidas.length > 0) {
-    console.log(`[Scheduler] ${vencidas.length} reserva(s) vencida(s) liberada(s)`);
-  }
+  if (liberadas > 0) console.log(`[Scheduler] ${liberadas} reserva(s) vencida(s) liberada(s)`);
 }
 
 async function enviarRecordatorios() {
@@ -61,27 +75,37 @@ export async function vencerMensualidades() {
   const ahora = new Date();
   const vencidas = await prisma.mensualidad.findMany({
     where: { estado: "ACTIVA", fechaFin: { lt: ahora } },
-    select: { id: true, puestoId: true, cliente: { select: { nombres: true } } },
+    select: { id: true, vehiculoId: true, puestoId: true, cliente: { select: { nombres: true } } },
   });
 
-  for (const m of vencidas) {
-    await prisma.$transaction(async (tx) => {
-      await tx.mensualidad.update({ where: { id: m.id }, data: { estado: "VENCIDA" } });
-      if (m.puestoId) {
-        const ingresoActivo = await tx.ingreso.count({ where: { puestoId: m.puestoId, estado: "ACTIVO" } });
-        const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: m.puestoId, estado: "ACTIVA", id: { not: m.id } } });
-        const otraReserva = await tx.reserva.count({ where: { puestoId: m.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
-        if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
-          await tx.puesto.update({ where: { id: m.puestoId }, data: { estado: "LIBRE" } });
-        }
+  let procesadas = 0;
+  for (const mensualidad of vencidas) {
+    const cambio = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${mensualidad.vehiculoId}::integer)) AS advisory_lock`;
+      if (mensualidad.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${mensualidad.puestoId}::integer)) AS advisory_lock`;
+      const actualizada = await tx.mensualidad.updateMany({
+        where: { id: mensualidad.id, estado: "ACTIVA", fechaFin: { lt: ahora } },
+        data: { estado: "VENCIDA" },
+      });
+      if (actualizada.count !== 1) return false;
+      if (mensualidad.puestoId) {
+        const [ingresoActivo, otraMensualidad, otraReserva] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId: mensualidad.puestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId: mensualidad.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+          tx.reserva.count({ where: { puestoId: mensualidad.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        ]);
+        const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : otraMensualidad + otraReserva > 0 ? "RESERVADO" : "LIBRE";
+        await tx.puesto.update({ where: { id: mensualidad.puestoId }, data: { estado: estadoPuesto } });
       }
+      return true;
     });
-    await registrarMovimiento("MENSUALIDADES", "VENCER", `Mensualidad #${m.id} vencida — ${m.cliente?.nombres || ""}`, "sistema");
+    if (!cambio) continue;
+    await registrarMovimiento("MENSUALIDADES", "VENCER", `Mensualidad #${mensualidad.id} vencida — ${mensualidad.cliente?.nombres || ""}`, "sistema");
+    procesadas++;
   }
 
-  if (vencidas.length > 0) {
-    console.log(`[Scheduler] ${vencidas.length} mensualidad(es) vencida(s)`);
-  }
+  if (procesadas > 0) console.log(`[Scheduler] ${procesadas} mensualidad(es) vencida(s)`);
 }
 
 export function iniciarScheduler() {
