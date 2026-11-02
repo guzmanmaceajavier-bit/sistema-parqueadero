@@ -80,7 +80,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
            LEFT JOIN "Cliente" c ON c.id = v."clienteId"
            LEFT JOIN "Puesto" p ON p.id = i."puestoId"
            WHERE i.estado = 'FINALIZADO' AND p."sucursalId" = $1
-           GROUP BY v.id ORDER BY total DESC LIMIT 8`,
+           GROUP BY v.id, c.nombres ORDER BY total DESC LIMIT 8`,
           sucursalId
         ).catch(() => [])
       : prisma.$queryRawUnsafe(
@@ -89,7 +89,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
            JOIN "Vehiculo" v ON v.id = i."vehiculoId"
            LEFT JOIN "Cliente" c ON c.id = v."clienteId"
            WHERE i.estado = 'FINALIZADO'
-           GROUP BY v.id ORDER BY total DESC LIMIT 8`
+           GROUP BY v.id, c.nombres ORDER BY total DESC LIMIT 8`
         ).catch(() => []),
     prisma.caja.findFirst({ where: { estado: "ABIERTA", ...sucursalFilter }, select: { id: true, apertura: true, createdAt: true } }),
 
