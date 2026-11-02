@@ -9,7 +9,7 @@ import { sendResetPasswordEmail } from "../../services/mail.service.js";
 
 const RESET_EXPIRES_MIN = 60;
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "";
 
 export const login = asyncHandler(async (req, res) => {
   const { usuario, correo, password } = req.body;
@@ -135,7 +135,7 @@ export const obtenerPerfil = asyncHandler(async (req, res) => {
     return res.json({ ok: false, usuario: null });
   }
   const usuario = await prisma.usuario.findUnique({
-    where: { id: req.usuario.id },
+    where: { id: req.usuario!.id },
     select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true },
   });
   res.json({ ok: true, usuario });
@@ -210,7 +210,7 @@ export const cambiarEstadoUsuario = asyncHandler(async (req, res) => {
     where: { id: targetId }, data: { estado, tokenVersion: { increment: 1 } },
     select: { id: true, nombre: true, usuario: true, rol: true, estado: true },
   });
-  await registrarMovimiento("Usuarios", estado ? "USUARIO ACTIVADO" : "USUARIO DESACTIVADO", `Usuario ${usuario.usuario}`, req.usuario.usuario);
+  await registrarMovimiento("Usuarios", estado ? "USUARIO ACTIVADO" : "USUARIO DESACTIVADO", `Usuario ${usuario.usuario}`, req.usuario!.usuario);
   res.json({ ok: true, usuario });
 });
 
@@ -251,7 +251,7 @@ export const solicitarResetPassword = asyncHandler(async (req, res) => {
   try {
     await sendResetPasswordEmail(user.correo, user.nombre, token);
   } catch (emailError) {
-    console.error("Error enviando email:", emailError.message);
+    console.error("Error enviando email:", emailError instanceof Error ? emailError.message : String(emailError));
   }
 
   res.json({
