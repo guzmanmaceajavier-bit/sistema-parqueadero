@@ -2,13 +2,11 @@ import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { obtenerPeriodoReporte, obtenerFechaClaveEnZona, obtenerHoraEnZona } from "../../utils/periodoReporte.js";
 import { resumirEstadosPuestos } from "../../utils/puestos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const obtenerReporte = asyncHandler(async (req, res) => {
   const { fechaInicio, fechaFin } = req.query;
-  const sucursalId = req.query.sucursalId === undefined ? undefined : Number(req.query.sucursalId);
-  if (sucursalId !== undefined && (!Number.isSafeInteger(sucursalId) || sucursalId <= 0)) {
-    throw new AppError("La sucursal seleccionada no es válida", 400);
-  }
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
 
   let inicio: Date;
   let finExclusivo: Date;
