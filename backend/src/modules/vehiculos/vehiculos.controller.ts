@@ -2,6 +2,7 @@ import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const crearVehiculo = asyncHandler(async (req, res) => {
   let { placa, marca, modelo, color, tipo, clase, observaciones, clienteId, tipoCobro, planId, tarifaId } = req.body;
@@ -21,9 +22,11 @@ export const crearVehiculo = asyncHandler(async (req, res) => {
   const cliente = await prisma.cliente.findUnique({ where: { id: Number(clienteId) } });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
 
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   const data: any = {
     placa, marca, modelo, color, tipo, clase, observaciones,
     clienteId: Number(clienteId),
+    sucursalId: sucursalId ?? null,
     tipoCobro: tipoCobro || "NINGUNO",
     creadoPorPlan: tipoCobro === "PLAN",
   };
@@ -50,7 +53,8 @@ export const crearVehiculo = asyncHandler(async (req, res) => {
 
 export const obtenerVehiculos = asyncHandler(async (req, res) => {
   const { page, limit, clienteId, q } = req.query;
-  const where = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { sucursalId } : {};
   if (clienteId) where.clienteId = Number(clienteId);
   if (q) {
     where.OR = [
@@ -67,8 +71,9 @@ export const obtenerVehiculos = asyncHandler(async (req, res) => {
 
 export const obtenerVehiculo = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const vehiculo = await prisma.vehiculo.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const vehiculo = await prisma.vehiculo.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: { cliente: true },
   });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
@@ -77,7 +82,8 @@ export const obtenerVehiculo = asyncHandler(async (req, res) => {
 
 export const actualizarVehiculo = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existe = await prisma.vehiculo.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const existe = await prisma.vehiculo.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existe) throw new AppError("Vehículo no encontrado", 404);
 
   const { placa, marca, modelo, color, tipo, clase, observaciones, clienteId, bloqueado, tipoCobro, planId, tarifaId } = req.body;
@@ -133,7 +139,8 @@ export const actualizarVehiculo = asyncHandler(async (req, res) => {
 
 export const eliminarVehiculo = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const vehiculo = await prisma.vehiculo.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const vehiculo = await prisma.vehiculo.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
 
   const ingresos = await prisma.ingreso.count({ where: { vehiculoId: Number(id) } });
