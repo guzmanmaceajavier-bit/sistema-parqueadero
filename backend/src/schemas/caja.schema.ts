@@ -10,7 +10,7 @@ export const cerrarCajaSchema = z.object({
   cierre: z.coerce.number().min(0, "Cierre no puede ser negativo").optional(),
   observacion: z.string().trim().max(500).optional().nullable(),
   conteo: z.object({
-    billetes: z.record(z.coerce.number()).optional(),
+    billetes: z.record(z.coerce.number().int().min(0)).optional(),
     monedas: z.record(z.coerce.number()).optional(),
   }).optional().nullable(),
 });
