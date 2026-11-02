@@ -68,7 +68,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
         puestoId: pid,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
         fechaInicio: { lt: fin || new Date(inicio.getTime() + 86400000) },
-        ...(fin ? { fechaFin: { gte: inicio } } : { fechaFin: { gte: inicio } }),
+        OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
       },
     });
     if (conflicto) throw new AppError("El puesto ya tiene una reserva en ese rango de fechas", 409);
