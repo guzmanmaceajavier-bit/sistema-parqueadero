@@ -179,7 +179,7 @@ export const obtenerMensualidad = asyncHandler(async (req, res) => {
 export const obtenerVencidas = asyncHandler(async (req, res) => {
   const hoy = new Date();
   const vencidas = await prisma.mensualidad.findMany({
-    where: { fechaFin: { lt: hoy }, estado: "ACTIVA" },
+    where: { fechaFin: { lt: hoy }, estado: { in: ["ACTIVA", "VENCIDA"] } },
     include: { cliente: true, vehiculo: true, plan: true, puesto: true },
   });
   res.json({ ok: true, vencidas });
