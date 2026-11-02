@@ -100,7 +100,7 @@ describe("Planes y cobro", () => {
     await prisma.mensualidad.delete({ where: { id: m.id } });
   });
 
-  it("salida con plan no cobra y el puesto sigue ocupado (HTTP)", async () => {
+  it("salida con plan no cobra y conserva el puesto reservado (HTTP)", async () => {
     if (!serverUp) {
       console.warn("Sin backend en 3001, se omite prueba HTTP de salida con plan");
       return;
@@ -116,7 +116,7 @@ describe("Planes y cobro", () => {
     const body = await r!.json();
     expect(body.cobro.total).toBe(0);
     const puesto = await prisma.puesto.findUnique({ where: { id: puestoPlanId } });
-    expect(puesto?.estado).toBe("OCUPADO");
+    expect(puesto?.estado).toBe("RESERVADO");
     await prisma.ingreso.delete({ where: { id: ingreso.id } });
   });
 
