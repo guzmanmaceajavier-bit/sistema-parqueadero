@@ -4,12 +4,19 @@ import api from "../services/api";
 import Card from "../components/ui/Card";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import ExportButton from "../components/ExportButton";
+import { useConfig } from "../context/ConfigContext";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 
 const inputClass = "px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500";
 const $ = (v) => formatCurrency(v);
-const fechaLocalInput = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`;
+const fechaLocalInput = (fecha, zonaHoraria) => {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: zonaHoraria, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(fecha);
+  const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+  return `${valores.year}-${valores.month}-${valores.day}`;
+};
 
 const PRESETS = [
   { key: "hoy", label: "Hoy" },
@@ -19,6 +26,8 @@ const PRESETS = [
 ];
 
 export default function Reportes() {
+  const { config } = useConfig();
+  const zonaHoraria = config?.zonaHoraria || "America/Bogota";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [preset, setPreset] = useState("mes");
@@ -42,21 +51,23 @@ export default function Reportes() {
 
   useEffect(() => {
     const now = new Date();
+    const hoy = fechaLocalInput(now, zonaHoraria);
+    const [year, month, day] = hoy.split("-").map(Number);
     let inicio, fin;
     if (preset === "hoy") {
-      inicio = fechaLocalInput(now);
-      fin = inicio;
+      inicio = hoy;
+      fin = hoy;
     } else if (preset === "semana") {
-      const d = new Date(now);
-      d.setDate(d.getDate() - d.getDay());
-      inicio = fechaLocalInput(d);
-      fin = fechaLocalInput(now);
+      const domingo = new Date(Date.UTC(year, month - 1, day));
+      domingo.setUTCDate(domingo.getUTCDate() - domingo.getUTCDay());
+      inicio = domingo.toISOString().slice(0, 10);
+      fin = hoy;
     } else if (preset === "mes") {
-      inicio = fechaLocalInput(new Date(now.getFullYear(), now.getMonth(), 1));
-      fin = fechaLocalInput(now);
+      inicio = `${year}-${String(month).padStart(2, "0")}-01`;
+      fin = hoy;
     }
     if (inicio) { setFechaInicio(inicio); setFechaFin(fin); }
-  }, [preset]);
+  }, [preset, zonaHoraria]);
 
   const cargar = useCallback(async () => {
     if (!sucursalesReady || !fechaInicio || !fechaFin) return;
