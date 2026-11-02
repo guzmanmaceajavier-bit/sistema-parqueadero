@@ -66,7 +66,10 @@ const CORS_ORIGINS = CORS_ORIGINS_RAW.split(",").map(o => o.trim()).filter(Boole
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const allowed = CORS_ORIGINS.length === 0 || CORS_ORIGINS.includes(origin || "");
+  // En producción solo se aceptan los orígenes declarados en CORS_ORIGINS.
+  // En desarrollo se permite el origen local cuando no hay lista configurada.
+  const allowed = !origin || CORS_ORIGINS.includes(origin) || (NODE_ENV !== "production" && CORS_ORIGINS.length === 0);
+  if (origin) res.header("Vary", "Origin");
   if (allowed && origin) {
     res.header("Access-Control-Allow-Origin", origin);
   }
