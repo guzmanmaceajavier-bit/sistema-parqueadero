@@ -73,34 +73,42 @@ export const obtenerGasto = asyncHandler(async (req, res) => {
 
 export const actualizarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existe = await prisma.gasto.findUnique({ where: { id: Number(id) } });
-  if (!existe) throw new AppError("Gasto no encontrado", 404);
-
-  const movimientos = await prisma.cajaMovimiento.findMany({ where: { gastoId: Number(id) }, include: { caja: true } });
-  if (movimientos.some(m => m.anulado)) throw new AppError("No se puede modificar un gasto con movimientos anulados", 409);
-  if (movimientos.some(m => m.caja?.estado === "CERRADA")) {
-    throw new AppError("No se puede modificar un gasto que pertenece a una caja cerrada", 400);
-  }
-
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
-  const data = {};
-  if (concepto) data.concepto = concepto;
+  const data: any = {};
+  if (concepto !== undefined) data.concepto = concepto;
   if (descripcion !== undefined) data.descripcion = descripcion;
-  if (categoria) data.categoria = categoria;
-  if (valor !== undefined) data.valor = Number(valor);
+  if (categoria !== undefined) data.categoria = categoria;
+  if (valor !== undefined) {
+    const valorNormalizado = Number(valor);
+    if (!Number.isFinite(valorNormalizado) || valorNormalizado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
+    data.valor = valorNormalizado;
+  }
   if (recurrente !== undefined) data.recurrente = recurrente;
   if (periodicidad !== undefined) data.periodicidad = periodicidad;
-  if (recurrente && periodicidad) {
-    data.proximaGeneracion = calcularProximaGeneracion(periodicidad);
-  }
-  const gasto = await prisma.gasto.update({ where: { id: Number(id) }, data });
+  if (recurrente && periodicidad) data.proximaGeneracion = calcularProximaGeneracion(periodicidad);
 
-  const movimientoData = {};
-  if (concepto) movimientoData.concepto = `Gasto: ${gasto.concepto}`;
-  if (valor !== undefined) movimientoData.monto = Number(valor);
-  if (movimientos.length > 0 && Object.keys(movimientoData).length) {
-    await prisma.cajaMovimiento.updateMany({ where: { gastoId: Number(id), anulado: false }, data: movimientoData });
-  }
+  const gasto = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    const existe = await tx.gasto.findUnique({ where: { id: Number(id) } });
+    if (!existe) throw new AppError("Gasto no encontrado", 404);
+    const movimientos = await tx.cajaMovimiento.findMany({
+      where: { gastoId: Number(id) },
+      include: { caja: true },
+    });
+    if (movimientos.some(m => m.anulado)) throw new AppError("No se puede modificar un gasto con movimientos anulados", 409);
+    if (movimientos.some(m => m.caja?.estado === "CERRADA")) {
+      throw new AppError("No se puede modificar un gasto que pertenece a una caja cerrada", 400);
+    }
+
+    const actualizado = await tx.gasto.update({ where: { id: Number(id) }, data });
+    const movimientoData: any = {};
+    if (concepto !== undefined) movimientoData.concepto = `Gasto: ${actualizado.concepto}`;
+    if (valor !== undefined) movimientoData.monto = Number(valor);
+    if (movimientos.length > 0 && Object.keys(movimientoData).length) {
+      await tx.cajaMovimiento.updateMany({ where: { gastoId: Number(id), anulado: false }, data: movimientoData });
+    }
+    return actualizado;
+  });
 
   await registrarMovimiento("GASTOS", "ACTUALIZAR", `Gasto #${id}: ${gasto.concepto} - $${gasto.valor}`, req.usuario?.usuario || "admin");
   emitirEvento("gasto:actualizado", { mensaje: `Gasto #${id} actualizado`, gasto });
