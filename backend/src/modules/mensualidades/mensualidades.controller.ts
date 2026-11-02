@@ -364,22 +364,28 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
   }
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
+    const actual = await tx.mensualidad.findUnique({ where: { id: Number(id) }, include: { facturas: { select: { id: true } } } });
+    if (!actual) throw new AppError("Mensualidad no encontrada", 404);
+    if (actual.estado === "ACTIVA") throw new AppError("No se puede eliminar una mensualidad activa. Cáncela primero.", 409);
+    if (actual.facturas.length > 0) throw new AppError("Esta mensualidad tiene facturas emitidas y no se puede eliminar", 409);
     await tx.mensualidad.delete({ where: { id: Number(id) } });
-    if (existente.puestoId) {
+    if (actual.puestoId) {
       const ahora = new Date();
       const [ingresos, mensualidades, reservas] = await Promise.all([
-        tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } }),
-        tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+        tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
         tx.reserva.count({
           where: {
-            puestoId: existente.puestoId,
-            estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+            puestoId: actual.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
           },
         }),
       ]);
       const estadoPuesto = ingresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
-      await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: estadoPuesto } });
+      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
     }
   });
   await registrarMovimiento("MENSUALIDADES", "ELIMINAR", `Mensualidad #${id} eliminada`, req.usuario?.usuario);
