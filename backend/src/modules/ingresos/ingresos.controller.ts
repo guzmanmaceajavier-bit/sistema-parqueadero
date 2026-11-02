@@ -70,11 +70,12 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId);
   let planDetectado = null;
   if (reservaVinculada) {
-    if (puestoId && Number(puestoId) !== reservaVinculada.puestoId) {
+    if (reservaVinculada.puestoId && puestoId && Number(puestoId) !== reservaVinculada.puestoId) {
       throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Utiliza el puesto reservado.", 409);
     }
-    puestoId = reservaVinculada.puestoId;
-  } else if (!puestoId) {
+    if (reservaVinculada.puestoId) puestoId = reservaVinculada.puestoId;
+  }
+  if (!reservaVinculada && !puestoId) {
     const mensualidadVigente = await prisma.mensualidad.findFirst({
       where: { vehiculoId: vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
       include: { plan: true, puesto: true },
