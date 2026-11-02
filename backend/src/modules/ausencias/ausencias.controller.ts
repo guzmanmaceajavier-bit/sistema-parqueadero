@@ -3,9 +3,11 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, fechaSalida, fechaRegreso, motivo, opcion } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!clienteId || !vehiculoId) throw new AppError("Cliente y vehículo son requeridos", 400);
 
   const cid = Number(clienteId);
@@ -17,6 +19,7 @@ export const crearAusencia = asyncHandler(async (req, res) => {
   ]);
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
 
   const ingresoActivo = await prisma.ingreso.findFirst({
@@ -27,7 +30,7 @@ export const crearAusencia = asyncHandler(async (req, res) => {
   const ausencia = await prisma.$transaction(async (tx) => {
     const a = await tx.ausencia.create({
       data: {
-        clienteId: cid, vehiculoId: vid,
+        clienteId: cid, vehiculoId: vid, sucursalId: vehiculo.sucursalId ?? sucursalId ?? null,
         fechaSalida: fechaSalida ? new Date(fechaSalida) : new Date(), fechaRegreso: fechaRegreso ? new Date(fechaRegreso) : null, motivo, opcion: opcion || "HISTORIAL",
       },
       include: { cliente: true, vehiculo: true },
@@ -36,12 +39,12 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     if (ingresoActivo) {
       const ahora = new Date();
       const tiempoMinutos = Math.ceil((ahora - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
-      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
 
       const numeroFactura = await generarNumeroFactura("FACT");
       const tarifa = await tx.tarifa.findFirst({
-        where: { tipoVehiculo: ingresoActivo.vehiculo.tipo, activa: true },
+        where: { tipoVehiculo: ingresoActivo.vehiculo.tipo, activa: true, sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null },
         orderBy: { valor: "asc" },
       });
       let valorPagado = 0;
@@ -52,7 +55,7 @@ export const crearAusencia = asyncHandler(async (req, res) => {
         valorPagado = horas * tarifa.valor;
       }
       await tx.factura.create({
-        data: { numero: numeroFactura, ingresoId: ingresoActivo.id, origen: "INGRESO", valor: valorPagado, metodoPago: "efectivo" },
+        data: { numero: numeroFactura, ingresoId: ingresoActivo.id, origen: "INGRESO", valor: valorPagado, metodoPago: "efectivo", sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null },
       });
       await tx.ingreso.update({
         where: { id: ingresoActivo.id },
@@ -72,7 +75,8 @@ export const crearAusencia = asyncHandler(async (req, res) => {
 
 export const obtenerAusencias = asyncHandler(async (req, res) => {
   const { page, limit, estado, clienteId, q } = req.query;
-  const where = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { sucursalId } : {};
   if (estado) where.estado = estado;
   if (clienteId) where.clienteId = Number(clienteId);
   if (q) {
@@ -93,9 +97,10 @@ export const obtenerAusencias = asyncHandler(async (req, res) => {
 });
 
 export const obtenerAusencia = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const ausencia = await prisma.ausencia.findUnique({
-    where: { id: Number(id) },
+  const ausencia = await prisma.ausencia.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: { cliente: true, vehiculo: true },
   });
   if (!ausencia) throw new AppError("Ausencia no encontrada", 404);
@@ -103,10 +108,11 @@ export const obtenerAusencia = asyncHandler(async (req, res) => {
 });
 
 export const actualizarAusencia = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
   const { fechaSalida, fechaRegreso, motivo, opcion, estado } = req.body;
 
-  const existente = await prisma.ausencia.findUnique({ where: { id: Number(id) } });
+  const existente = await prisma.ausencia.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
 
   const data = {};
@@ -124,9 +130,10 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
 });
 
 export const finalizarAusencia = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const existente = await prisma.ausencia.findUnique({
-    where: { id: Number(id) },
+  const existente = await prisma.ausencia.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
     include: { cliente: true, vehiculo: true },
   });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
@@ -145,14 +152,14 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     });
 
     const otrasAusenciasActivas = await tx.ausencia.count({
-      where: { clienteId: a.clienteId, estado: "ACTIVA", id: { not: Number(id) } },
+      where: { clienteId: a.clienteId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA", id: { not: Number(id) } },
     });
     if (otrasAusenciasActivas === 0) {
       await tx.cliente.update({ where: { id: a.clienteId }, data: { estado: "ACTIVO" } });
     }
 
     const ingresoAusencia = await tx.ingreso.findFirst({
-      where: { vehiculoId: a.vehiculoId, estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
+      where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
       orderBy: { fechaSalida: "desc" },
     });
     if (ingresoAusencia?.puestoId) {
@@ -164,7 +171,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     }
 
     if (existente.opcion === "CONGELAR") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, estado: "ACTIVA" } });
+      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
       for (const m of mensualidades) {
         const nuevaFechaFin = new Date(m.fechaFin.getTime() + diasAusente * 86400000);
         await tx.mensualidad.update({ where: { id: m.id }, data: { fechaFin: nuevaFechaFin } });
@@ -198,6 +205,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
 });
 
 export const eliminarAusencia = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
   const existente = await prisma.ausencia.findUnique({ where: { id: Number(id) } });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
