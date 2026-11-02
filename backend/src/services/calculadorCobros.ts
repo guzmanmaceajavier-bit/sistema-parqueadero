@@ -71,6 +71,22 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     return { error: `No hay tarifa activa para ${tipoVehiculo} con modalidad ${modalidadNormalizada}`, total: 0, detalle: [] };
   }
 
+  if (!Number.isFinite(Number(tarifa.valor)) || Number(tarifa.valor) <= 0) {
+    return { error: "La tarifa tiene un valor base inválido. Corrige su configuración antes de cobrar.", total: 0, detalle: [] };
+  }
+  if ((tarifa.precioPrimeraHora == null) !== (tarifa.precioHoraAdicional == null)) {
+    return { error: "La tarifa progresiva está incompleta. Configura el precio de la primera hora y el de las horas adicionales.", total: 0, detalle: [] };
+  }
+  for (const [campo, valor] of [
+    ["precioPrimeraHora", tarifa.precioPrimeraHora],
+    ["precioHoraAdicional", tarifa.precioHoraAdicional],
+    ["tarifaMaximaDiaria", tarifa.tarifaMaximaDiaria],
+  ] as const) {
+    if (valor != null && (!Number.isFinite(Number(valor)) || Number(valor) < 0)) {
+      return { error: `El campo ${campo} de la tarifa tiene un valor inválido.`, total: 0, detalle: [] };
+    }
+  }
+
   const config = await prisma.configuracion.findFirst();
   const minutosGracia = config?.minutosGracia || 0;
   const minutosGratis = tarifa.minutosGratis || 0;
