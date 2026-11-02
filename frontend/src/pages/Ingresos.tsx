@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { LogIn, LogOut, Search, X, Clock, PenSquare, Trash2, CheckCircle, Ticket, Car } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCaja } from "../context/CajaContext";
 import { useConfig } from "../context/ConfigContext";
 import api from "../services/api";
@@ -55,14 +55,14 @@ function EstadoIngresoBadge({ estado }) {
 }
 
 export default function Ingresos() {
-  const navigate = useNavigate();
+  const navigate = useNavigate();\n  const [searchParams] = useSearchParams();
   const { config } = useConfig();
   const { requestAbrirCaja } = useCaja();
   const [ingresos, setIngresos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculosDelCliente, setVehiculosDelCliente] = useState([]);
   const [puestos, setPuestos] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
+  const [busqueda, setBusqueda] = useState(() => searchParams.get("q") || "");
   const [mostrarModalEntrada, setMostrarModalEntrada] = useState(false);
   const [mostrarModalSalida, setMostrarModalSalida] = useState(false);
   const [editandoIngreso, setEditandoIngreso] = useState(null);
@@ -119,7 +119,7 @@ export default function Ingresos() {
     try { const res = await api.get("/puestos"); setPuestos(res.data.puestos || []); } catch (error) { console.log(error); }
   };
 
-  useEffect(() => { setPage(1); }, [filtroEstado]);
+  useEffect(() => {\n    const query = searchParams.get("q") || "";\n    setBusqueda(query);\n  }, [searchParams]);\n  useEffect(() => { setPage(1); }, [filtroEstado]);
   useEffect(() => { cargarIngresos(page); }, [page, filtroEstado]);
   useEffect(() => { cargarIngresos(1); }, [busquedaDebounced]);
   useEffect(() => { cargarClientes(); cargarPuestos(); }, []);
