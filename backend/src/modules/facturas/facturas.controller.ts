@@ -15,7 +15,7 @@ export const obtenerFacturas = asyncHandler(async (req, res) => {
   }
   if (origen) where.origen = origen;
   if (q) {
-    where.OR = [
+    const filtroTexto = [
       { numero: { contains: q, mode: "insensitive" } },
       { ingreso: { cliente: { nombres: { contains: q, mode: "insensitive" } } } },
       { ingreso: { cliente: { apellidos: { contains: q, mode: "insensitive" } } } },
@@ -24,6 +24,8 @@ export const obtenerFacturas = asyncHandler(async (req, res) => {
       { mensualidad: { cliente: { apellidos: { contains: q, mode: "insensitive" } } } },
       { mensualidad: { vehiculo: { placa: { contains: q, mode: "insensitive" } } } },
     ];
+    where.AND = [...(where.OR ? [{ OR: where.OR }] : []), { OR: filtroTexto }];
+    delete where.OR;
   }
   const { data: facturas, pagination } = await paginate(prisma, "factura", {
     page, limit, where,
@@ -112,8 +114,8 @@ export const enviarWhatsapp = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
-    prisma.factura.findUnique({
-      where: { id: Number(id) },
+    prisma.factura.findFirst({
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),
