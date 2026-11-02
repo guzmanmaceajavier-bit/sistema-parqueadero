@@ -461,6 +461,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     // Usa los mismos bloqueos que el registro de entrada para serializar la ocupación.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId})`;
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
+    // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
 
     const salidaActualizada = await tx.ingreso.updateMany({
       where: { id: Number(id), estado: "ACTIVO" },
