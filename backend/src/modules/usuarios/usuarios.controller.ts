@@ -29,7 +29,7 @@ export const login = asyncHandler(async (req, res) => {
 
   if (!valid) {
     const nuevosIntentos = usuarioDb.intentosFallidos + 1;
-    const data = { intentosFallidos: nuevosIntentos };
+    const data: any = { intentosFallidos: nuevosIntentos };
     await prisma.acceso.create({
       data: { usuarioId: usuarioDb.id, usuario: usuarioDb.usuario, actividad: "INICIO SESIÓN FALLIDO", ip, dispositivo },
     });
