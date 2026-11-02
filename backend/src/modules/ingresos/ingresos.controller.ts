@@ -199,7 +199,13 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } },
+    where: {
+      vehiculoId: ingreso.vehiculoId,
+      estado: "ACTIVA",
+      fechaInicio: { lte: new Date() },
+      fechaFin: { gte: new Date() },
+      OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
+    },
   });
   if (!planActivo) throw new AppError("El vehículo no tiene plan activo. Registre la salida con cobro desde Ingresos.", 400);
 
@@ -358,7 +364,13 @@ export const simularCobro = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } },
+    where: {
+      vehiculoId: ingreso.vehiculoId,
+      estado: "ACTIVA",
+      fechaInicio: { lte: new Date() },
+      fechaFin: { gte: new Date() },
+      OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
+    },
     include: { plan: true },
   });
   if (planActivo) {
