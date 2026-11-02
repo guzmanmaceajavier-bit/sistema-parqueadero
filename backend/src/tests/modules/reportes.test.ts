@@ -55,10 +55,12 @@ describe("obtenerReporte", () => {
       where: { createdAt: rango, sucursalId: 7 },
       include: expect.objectContaining({
         ingreso: expect.any(Object),
-        mensualidad: expect.objectContaining({
-          cliente: { select: { nombres: true, apellidos: true } },
-          vehiculo: { select: { placa: true, tipo: true } },
-        }),
+        mensualidad: {
+          select: {
+            cliente: { select: { nombres: true, apellidos: true } },
+            vehiculo: { select: { placa: true, tipo: true } },
+          },
+        },
       }),
     }));
     expect(prismaMock.gasto.findMany).toHaveBeenCalledWith(expect.objectContaining({
