@@ -59,6 +59,9 @@ describe("obtenerDashboard", () => {
   it.each(["hoy", "semana", "mes"])("mantiene los KPIs semanal y mensual correctos con filtro %s", async (filtro) => {
     await consultar(filtro);
 
+    expect(prismaMock.ingreso.count).toHaveBeenNthCalledWith(2, {
+      where: { fechaEntrada: { gte: new Date("2026-10-15T00:00:00.000Z"), lt: new Date("2026-10-16T00:00:00.000Z") } },
+    });
     expect(prismaMock.factura.aggregate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: {
         metodoPago: { not: null },
