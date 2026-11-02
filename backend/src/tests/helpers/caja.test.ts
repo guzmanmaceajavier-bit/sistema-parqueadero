@@ -116,6 +116,24 @@ describe("Cálculo de tarifas por tiempo facturable", () => {
     });
   }
 
+  it("prefiere la tarifa de la sucursal y solo usa la global como respaldo", async () => {
+    findTarifaMany.mockResolvedValue([
+      { ...tarifaBase, id: 1, sucursalId: null, valor: 5000 },
+      { ...tarifaBase, id: 2, sucursalId: 7, valor: 12000 },
+    ]);
+    const cobro = await calcularCobro({
+      ingreso: {
+        id: 1,
+        vehiculoId: 2,
+        vehiculo: { sucursalId: 7 },
+        fechaEntrada: new Date("2026-01-01T08:00:00.000Z"),
+      },
+      tipoVehiculo: "carro",
+      fechaSalida: new Date("2026-01-01T09:00:00.000Z"),
+    });
+    expect(cobro.tarifa?.id).toBe(2);
+  });
+
   it("descuenta cortesía antes de redondear días", async () => {
     const cobro = await calcular("diario", "2026-01-01T08:00:00.000Z", "2026-01-02T09:00:00.000Z");
     expect(cobro.total).toBe(10000);
