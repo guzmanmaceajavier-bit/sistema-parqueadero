@@ -68,7 +68,7 @@ export const login = asyncHandler(async (req, res) => {
 
   res.json({
     ok: true,
-    usuario: { id: usuarioDb.id, nombre: usuarioDb.nombre, usuario: usuarioDb.usuario, correo: usuarioDb.correo, rol: usuarioDb.rol },
+    usuario: { id: usuarioDb.id, nombre: usuarioDb.nombre, usuario: usuarioDb.usuario, correo: usuarioDb.correo, rol: usuarioDb.rol, sucursalId: usuarioDb.sucursalId },
   });
 });
 
@@ -132,7 +132,7 @@ export const obtenerPerfil = asyncHandler(async (req, res) => {
   }
   const usuario = await prisma.usuario.findUnique({
     where: { id: req.usuario.id },
-    select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, ultimoAcceso: true, createdAt: true },
+    select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true },
   });
   res.json({ ok: true, usuario });
 });
