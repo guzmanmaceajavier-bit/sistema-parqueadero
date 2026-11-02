@@ -216,36 +216,67 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
   if (ingreso.estado !== "ACTIVO") throw new AppError("Solo se puede editar un ingreso activo", 400);
 
-  const data: any = {};
-  if (vehiculoId !== undefined) {
-    const vid = Number(vehiculoId);
-    const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
-    if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-    if (vehiculo.clienteId !== ingreso.clienteId) throw new AppError("El vehículo no pertenece al cliente de este ingreso", 400);
-    if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
-    if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
-    data.vehiculoId = vid;
-  }
-  const vid = data.vehiculoId ?? ingreso.vehiculoId;
+  const vid = vehiculoId !== undefined ? Number(vehiculoId) : ingreso.vehiculoId;
+  const nuevoPuestoId = puestoId !== undefined ? Number(puestoId) : ingreso.puestoId;
+  if (!Number.isInteger(vid) || vid <= 0) throw new AppError("Vehículo no válido", 400);
+  if (!Number.isInteger(nuevoPuestoId) || nuevoPuestoId <= 0) throw new AppError("Puesto no válido", 400);
 
-  if (puestoId && Number(puestoId) !== ingreso.puestoId) {
-    const nuevoPuesto = await prisma.puesto.findUnique({ where: { id: Number(puestoId) } });
-    if (!nuevoPuesto) throw new AppError("Puesto no encontrado", 404);
-    if (!nuevoPuesto.activo) throw new AppError("El puesto está inactivo", 400);
-    if (nuevoPuesto.estado !== "LIBRE") throw new AppError("El nuevo puesto no está disponible (estado: " + nuevoPuesto.estado + ")", 400);
-    data.puestoId = Number(puestoId);
-  }
+  const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
+  if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  if (vehiculo.clienteId !== ingreso.clienteId) throw new AppError("El vehículo no pertenece al cliente de este ingreso", 400);
+  if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
+  if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
 
   const actualizado = await prisma.$transaction(async (tx) => {
-    if (data.puestoId && data.puestoId !== ingreso.puestoId) {
-      await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: "LIBRE" } });
-      await tx.puesto.update({ where: { id: data.puestoId }, data: { estado: "OCUPADO" } });
+    // Bloquear vehículo y ambos puestos evita colisiones al editar un ingreso activo.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124021, ${vid})`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
+    if (nuevoPuestoId !== ingreso.puestoId) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(78124020, ${nuevoPuestoId})`;
     }
-    return tx.ingreso.update({
+
+    const duplicado = await tx.ingreso.findFirst({
+      where: { vehiculoId: vid, estado: "ACTIVO", id: { not: Number(id) } },
+      select: { id: true },
+    });
+    if (duplicado) throw new AppError("El vehículo ya tiene otro ingreso activo", 409);
+
+    if (nuevoPuestoId !== ingreso.puestoId) {
+      const disponible = await puestoEstaDisponibleParaAsignar(tx, nuevoPuestoId);
+      if (!disponible) throw new AppError("El nuevo puesto ya no está disponible", 409);
+      const reservado = await tx.puesto.updateMany({
+        where: { id: nuevoPuestoId, activo: true, estado: "LIBRE" },
+        data: { estado: "OCUPADO" },
+      });
+      if (reservado.count !== 1) throw new AppError("El nuevo puesto acaba de ser asignado. Actualiza e inténtalo de nuevo.", 409);
+    }
+
+    const result = await tx.ingreso.update({
       where: { id: Number(id) },
-      data,
+      data: { vehiculoId: vid, puestoId: nuevoPuestoId },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
+
+    if (nuevoPuestoId !== ingreso.puestoId) {
+      const [otrosIngresos, mensualidades, reservas] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
+        tx.mensualidad.count({
+          where: { puestoId: ingreso.puestoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() } },
+        }),
+        tx.reserva.count({
+          where: {
+            puestoId: ingreso.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+            fechaInicio: { lte: new Date() },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: new Date() } }],
+          },
+        }),
+      ]);
+      const estadoAnterior = otrosIngresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: ingreso.puestoId }, data: { estado: estadoAnterior } });
+    }
+
+    return result;
   });
 
   await registrarMovimiento("INGRESOS", "EDITAR", `Ingreso #${id} editado`, req.usuario?.usuario || "admin");
