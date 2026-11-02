@@ -531,7 +531,7 @@ export default function Caja() {
                                   <button onClick={() => abrirDetalle(caja)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-teal-600 dark:hover:text-teal-400" title="Ver detalle">
                                     <Eye className="w-3.5 h-3.5" />
                                   </button>
-                                  <button onClick={() => { setCajaSel(caja); setFormEditar({ apertura: (caja.apertura || 0).toString(), observacion: caja.observacion || "" }); setMostrarEditar(true); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400" title="Editar">
+                                   <button disabled={caja.estado !== "ABIERTA"} onClick={() => { setCajaSel(caja); setFormEditar({ apertura: (caja.apertura || 0).toString(), observacion: caja.observacion || "" }); setMostrarEditar(true); }} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed" title={caja.estado === "CERRADA" ? "Caja cerrada: historial protegido" : "Editar caja abierta"}>
                                     <PenSquare className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
