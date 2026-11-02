@@ -6,6 +6,7 @@ export const crearUsuarioSchema = z.object({
   correo: z.string().trim().email("Email inválido").max(100),
   password: z.string().min(8, "Contraseña debe tener al menos 8 caracteres").max(128),
   rol: z.enum(["admin", "supervisor", "empleado"]).optional().default("empleado"),
+  sucursalId: z.number().int().positive().nullable().optional(),
 });
 
 export const loginSchema = z.object({
@@ -20,6 +21,7 @@ export const actualizarUsuarioSchema = z.object({
   nombre: z.string().trim().min(2).max(100).optional(),
   correo: z.string().trim().email().max(100).optional(),
   rol: z.enum(["admin", "supervisor", "empleado"]).optional(),
+  sucursalId: z.number().int().positive().nullable().optional(),
   password: z.string().min(8).max(128).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Contraseña debe tener mayúscula, minúscula y número").optional(),
 });
 
