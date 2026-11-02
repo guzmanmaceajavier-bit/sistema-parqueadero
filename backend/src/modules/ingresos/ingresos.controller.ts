@@ -111,6 +111,41 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       throw new AppError(`El vehículo con placa ${placa} ya tiene un ingreso activo`, 409);
     }
 
+    // Relee reservas y mensualidades dentro del bloqueo: los datos consultados antes
+    // de abrir la transacción podrían haber cambiado mientras se esperaba el puesto.
+    const ahora = new Date();
+    const [reservaActual, mensualidadActual] = await Promise.all([
+      tx.reserva.findFirst({
+        where: {
+          clienteId,
+          vehiculoId,
+          estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+          fechaInicio: { lte: ahora },
+          OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+        },
+        orderBy: { fechaInicio: "asc" },
+      }),
+      tx.mensualidad.findFirst({
+        where: {
+          vehiculoId,
+          estado: "ACTIVA",
+          fechaInicio: { lte: ahora },
+          fechaFin: { gte: ahora },
+          puestoId: { not: null },
+        },
+        include: { plan: true },
+      }),
+    ]);
+
+    if (reservaActual?.puestoId && Number(puestoId) !== reservaActual.puestoId) {
+      throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Actualiza la disponibilidad.", 409);
+    }
+    if (mensualidadActual?.puestoId && Number(puestoId) !== mensualidadActual.puestoId) {
+      throw new AppError("El vehículo tiene un puesto asignado por su mensualidad. Actualiza la disponibilidad.", 409);
+    }
+    reservaVinculada = reservaActual;
+    planDetectado = mensualidadActual;
+
     const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId), { vehiculoId, reservaId: reservaVinculada?.id });
     if (!disponible) throw new AppError("El puesto no está disponible para asignar", 409);
 
@@ -299,9 +334,10 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
   const actualizado = await prisma.$transaction(async (tx) => {
     // Bloquear vehículo y ambos puestos evita colisiones al editar un ingreso activo.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vid})`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
-    if (nuevoPuestoId !== ingreso.puestoId) {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${nuevoPuestoId})`;
+    // Adquirir los bloqueos de puesto siempre en orden ascendente evita deadlocks
+    // cuando dos usuarios intercambian simultáneamente las asignaciones.
+    for (const lockPuestoId of [...new Set([ingreso.puestoId, nuevoPuestoId])].sort((a, b) => a - b)) {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${lockPuestoId})`;
     }
 
     const duplicado = await tx.ingreso.findFirst({
@@ -364,6 +400,13 @@ export const eliminarIngreso = asyncHandler(async (req, res) => {
   }
 
   await prisma.$transaction(async (tx) => {
+    if (ingreso.puestoId) {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
+    }
+    const actual = await tx.ingreso.findUnique({ where: { id: Number(id) } });
+    if (!actual || actual.estado === "ACTIVO") {
+      throw new AppError("El ingreso cambió de estado y ya no puede eliminarse", 409);
+    }
     await tx.ingreso.delete({ where: { id: Number(id) } });
     if (ingreso.puestoId) {
       const ahora = new Date();
