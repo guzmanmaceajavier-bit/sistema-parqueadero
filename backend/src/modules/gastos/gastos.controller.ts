@@ -5,18 +5,20 @@ import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { emitirEvento } from "../../services/socket.js";
 import { getCajaOError } from "../../helpers/caja.js";
 import { calcularProximaGeneracion } from "./gastos.utils.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const crearGasto = asyncHandler(async (req, res) => {
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!concepto) throw new AppError("Concepto es requerido", 400);
 
   await getCajaOError();
 
   const [gasto] = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", ...(sucursalId ? { sucursalId } : {}) } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el gasto", 409);
-    const data: any = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor) };
+    const data: any = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor), sucursalId: sucursalId ?? null };
     if (recurrente) {
       data.recurrente = true;
       data.periodicidad = periodicidad || "mensual";
@@ -36,7 +38,8 @@ export const crearGasto = asyncHandler(async (req, res) => {
 
 export const obtenerGastos = asyncHandler(async (req, res) => {
   const { page, limit, q, fechaInicio, fechaFin } = req.query;
-  const where: any = {};
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const where: any = sucursalId ? { sucursalId } : {};
   if (q) {
     where.OR = [
       { concepto: { contains: q, mode: "insensitive" } },
@@ -57,13 +60,15 @@ export const obtenerGastos = asyncHandler(async (req, res) => {
 
 export const obtenerGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const gasto = await prisma.gasto.findUnique({ where: { id: Number(id) } });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const gasto = await prisma.gasto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!gasto) throw new AppError("Gasto no encontrado", 404);
   res.json({ ok: true, gasto });
 });
 
 export const actualizarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
   const data: any = {};
   if (concepto !== undefined) data.concepto = concepto;
@@ -80,7 +85,7 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
 
   const gasto = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
-    const existe = await tx.gasto.findUnique({ where: { id: Number(id) } });
+    const existe = await tx.gasto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
     if (!existe) throw new AppError("Gasto no encontrado", 404);
 
     const recurrenciaFinal = recurrente !== undefined ? recurrente : existe.recurrente;
@@ -124,6 +129,7 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
 
 export const eliminarGasto = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const gasto = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const existente = await tx.gasto.findUnique({ where: { id: Number(id) } });
