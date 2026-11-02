@@ -22,7 +22,7 @@ export const generarBackup = asyncHandler(async (req, res) => {
   const backup = {
     version: "1.1",
     fecha: new Date().toISOString(),
-    data: { usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion, ingresos, mensualidades, reservas, facturas, caja, movimientos: cajaMovimientos, gastos },
+    data: { usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion, ingresos, mensualidades, reservas, facturas, caja, movimientos, gastos },
   };
 
   res.json({ ok: true, backup });
@@ -39,7 +39,8 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
       if (data[modelo]?.length > 0) {
         for (const item of data[modelo]) {
           const { id, ...rest } = item;
-          await tx[modelo].upsert({
+          const delegate = (tx as any)[modelo];
+          await delegate.upsert({
             where: { id },
             create: item,
             update: rest,
