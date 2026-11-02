@@ -224,7 +224,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       const ingresoAsociado = await tx.ingreso.findFirst({ where: { reservaId: existente.id, estado: "ACTIVO" } });
       if (ingresoAsociado) {
         const fechaSalida = new Date();
-        const tiempoMinutos = Math.ceil((fechaSalida - ingresoAsociado.fechaEntrada) / (1000 * 60));
+        const tiempoMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingresoAsociado.fechaEntrada).getTime()) / (1000 * 60));
         await tx.ingreso.update({
           where: { id: ingresoAsociado.id },
           data: { estado: "FINALIZADO", fechaSalida, tiempoMinutos },
