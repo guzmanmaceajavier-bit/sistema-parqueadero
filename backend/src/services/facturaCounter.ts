@@ -23,7 +23,7 @@ export async function generarNumeroFactura(prefijo = "FACT"): Promise<string> {
   const limpio = sanitizarPrefijo(prefijo);
   const seqName = await asegurarSecuencia(limpio);
   const rows = await prisma.$queryRawUnsafe<Array<{ contador: bigint | number | string }>>(
-    `SELECT nextval('"\${seqName}"') as contador`
+    `SELECT nextval('"${seqName}"') as contador`
   );
   const [result] = rows;
   const contador = Number(result?.contador ?? 0);
