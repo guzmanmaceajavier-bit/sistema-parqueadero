@@ -219,7 +219,7 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
       throw new AppError("El vehículo está ocupando otro puesto", 409);
     }
     if (actual.puestoId) {
-      const [otraMensualidadPuesto, reservaPuesto] = await Promise.all([
+      const [otraMensualidadPuesto, reservaPuesto, ingresoEnPuesto] = await Promise.all([
         tx.mensualidad.findFirst({
           where: { id: { not: id }, puestoId: actual.puestoId, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
           select: { id: true },
@@ -229,8 +229,9 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
             fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
           select: { id: true },
         }),
+        tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO", ...(ingreso ? { id: { not: ingreso.id } } : {}) }, select: { id: true } }),
       ]);
-      if (otraMensualidadPuesto || reservaPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
+      if (otraMensualidadPuesto || reservaPuesto || ingresoEnPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
       await tx.puesto.updateMany({
         where: { id: actual.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO", "OCUPADO"] } },
         data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
@@ -347,16 +348,14 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
 
     const ahora = new Date();
     const vigente = inicio <= ahora && fin >= ahora;
-    if (nuevoPuestoId && nuevoPuestoId !== actual.puestoId) {
+    if (nuevoPuestoId) {
       if (vigente) {
-        if (ingresoVehiculo) {
+        if (ingresoVehiculo && ingresoVehiculo.puestoId !== nuevoPuestoId) {
           await tx.ingreso.update({ where: { id: ingresoVehiculo.id }, data: { puestoId: nuevoPuestoId } });
-        } else {
+        } else if (!ingresoVehiculo) {
           await tx.ingreso.create({ data: { clienteId: actual.clienteId, vehiculoId: vid, puestoId: nuevoPuestoId } });
         }
       }
-      await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: vigente ? "OCUPADO" : "RESERVADO" } });
-    } else if (nuevoPuestoId) {
       await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: vigente ? "OCUPADO" : "RESERVADO" } });
     }
 
