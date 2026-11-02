@@ -213,11 +213,40 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   const tiempoMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingreso.fechaEntrada).getTime()) / (1000 * 60));
 
   await prisma.$transaction(async (tx) => {
+    // Serializa la liberación con nuevas entradas, ediciones y salidas del mismo vehículo/puesto.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId})`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId})`;
+
+    const ingresoActual = await tx.ingreso.findFirst({
+      where: { id: Number(id), estado: "ACTIVO" },
+      select: { id: true, vehiculoId: true, puestoId: true, reservaId: true, fechaEntrada: true },
+    });
+    if (!ingresoActual) throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
+
+    const planActual = await tx.mensualidad.findFirst({
+      where: {
+        vehiculoId: ingresoActual.vehiculoId,
+        estado: "ACTIVA",
+        fechaInicio: { lte: fechaSalida },
+        fechaFin: { gte: fechaSalida },
+        OR: [{ puestoId: null }, { puestoId: ingresoActual.puestoId }],
+      },
+      select: { id: true },
+    });
+    if (!planActual) throw new AppError("La mensualidad dejó de estar vigente. Registre la salida con cobro desde Ingresos.", 409);
+
     const finalizado = await tx.ingreso.updateMany({
       where: { id: Number(id), estado: "ACTIVO" },
       data: { fechaSalida, estado: "FINALIZADO", tiempoMinutos, valorPagado: 0 },
     });
     if (finalizado.count !== 1) throw new AppError("El ingreso ya fue finalizado por otra operación", 409);
+
+    if (ingresoActual.reservaId) {
+      await tx.reserva.updateMany({
+        where: { id: ingresoActual.reservaId, estado: "ACTIVA" },
+        data: { estado: "FINALIZADA" },
+      });
+    }
 
     const [otroIngresoActivo, mensualidadVigenteEnPuesto, reservaFutura] = await Promise.all([
       tx.ingreso.count({ where: { puestoId: ingreso.puestoId, estado: "ACTIVO", id: { not: Number(id) } } }),
