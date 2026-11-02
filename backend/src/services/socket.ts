@@ -1,18 +1,24 @@
-import { Server } from "socket.io";
+import type { Server as HttpServer } from "node:http";
+import { Server, type Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 
-let io = null;
+interface AuthenticatedSocket extends Socket {
+  usuario?: jwt.JwtPayload;
+  authenticated?: boolean;
+}
 
-function parseCookies(header) {
+let io: Server | null = null;
+
+function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
-  return Object.fromEntries(header.split(";").map(c => {
-    const [k, ...v] = c.trim().split("=");
-    return [k, v.join("=")];
+  return Object.fromEntries(header.split(";").map((cookie) => {
+    const [key, ...value] = cookie.trim().split("=");
+    return [key, value.join("=")];
   }));
 }
 
-export function initSocket(server) {
-  io = new Server(server, {
+export function initSocket(server: HttpServer): Server {
+  const socketServer = new Server(server, {
     cors: {
       origin: true,
       methods: ["GET", "POST"],
@@ -20,37 +26,50 @@ export function initSocket(server) {
     },
     transports: ["websocket", "polling"],
   });
+  io = socketServer;
 
-  io.use((socket, next) => {
-    const cookies = socket.handshake.headers?.cookie ? parseCookies(socket.handshake.headers.cookie) : {};
-    const token = cookies?.token || socket.handshake.auth?.token;
-    if (!token) return next(new Error("Token requerido"));
+  socketServer.use((socket, next) => {
+    const authenticatedSocket = socket as AuthenticatedSocket;
+    const cookies = parseCookies(socket.handshake.headers.cookie);
+    const token = cookies.token || socket.handshake.auth?.token;
+
+    if (typeof token !== "string" || token.length === 0) {
+      return next(new Error("Token requerido"));
+    }
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return next(new Error("JWT_SECRET no está configurado"));
+
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.usuario = decoded;
-      socket.authenticated = true;
-      next();
+      const decoded = jwt.verify(token, secret);
+      if (typeof decoded === "string" || typeof decoded.id !== "number") {
+        return next(new Error("Token inválido"));
+      }
+      authenticatedSocket.usuario = decoded;
+      authenticatedSocket.authenticated = true;
+      return next();
     } catch {
-      next(new Error("Token invalido o expirado"));
+      return next(new Error("Token invalido o expirado"));
     }
   });
 
-  io.on("connection", (socket) => {
-    socket.on("join", (userId) => {
-      if (userId && socket.usuario && userId === socket.usuario.id) {
-        socket.join(`user:${userId}`);
+  socketServer.on("connection", (socket) => {
+    const authenticatedSocket = socket as AuthenticatedSocket;
+    authenticatedSocket.on("join", (userId: unknown) => {
+      if (typeof userId === "number" && authenticatedSocket.usuario?.id === userId) {
+        authenticatedSocket.join(`user:${userId}`);
       }
     });
   });
 
-  return io;
+  return socketServer;
 }
 
-export function getIO() {
+export function getIO(): Server {
   if (!io) throw new Error("Socket.io no inicializado");
   return io;
 }
 
-export function emitirEvento(evento, data) {
-  if (io) io.emit(evento, data);
+export function emitirEvento(evento: string, data: unknown): void {
+  io?.emit(evento, data);
 }
