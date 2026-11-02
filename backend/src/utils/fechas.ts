@@ -4,9 +4,11 @@ export function sumarMesesConTope(fecha: Date, meses: number): Date {
   }
   const resultado = new Date(fecha);
   const diaOriginal = resultado.getDate();
+  const ultimoDiaOrigen = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
+  const esFinDeMes = diaOriginal === ultimoDiaOrigen;
   resultado.setDate(1);
   resultado.setMonth(resultado.getMonth() + meses);
-  const ultimoDia = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
-  resultado.setDate(Math.min(diaOriginal, ultimoDia));
+  const ultimoDiaDestino = new Date(resultado.getFullYear(), resultado.getMonth() + 1, 0).getDate();
+  resultado.setDate(esFinDeMes ? ultimoDiaDestino : Math.min(diaOriginal, ultimoDiaDestino));
   return resultado;
 }
