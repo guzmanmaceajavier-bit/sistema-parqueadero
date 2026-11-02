@@ -183,8 +183,8 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
     default: {
       const horas = minutosFacturables <= 0 ? 0 : Math.max(1, Math.ceil(minutosFacturables / 60));
-      const valor = horas * tarifa.valor;
-      detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) (tarifa por defecto) × $${tarifa.valor}`, valor });
+      const valor = aplicarTopeDiario(horas * tarifa.valor);
+      detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) (tarifa por defecto) × ${tarifa.valor}`, valor });
       total = valor;
       desglose = { minutosFacturables, horas, valor, unidad: "hora" };
     }
