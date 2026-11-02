@@ -186,7 +186,7 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const { estado, vehiculoId, puestoId, fechaInicio, fechaFin, observaciones } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
-  const existente = await prisma.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
+  const existente = await prisma.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { vehiculo: { select: { sucursalId: true } }, puesto: { select: { sucursalId: true } } } });
   if (!existente) throw new AppError("Reserva no encontrada", 404);
   if (["FINALIZADA", "CANCELADA", "NO_SHOW", "ACTIVA"].includes(existente.estado)) {
     throw new AppError("Solo se pueden editar reservas pendientes o confirmadas", 409);
@@ -203,17 +203,18 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
   if (fechaFin && (!fin || !Number.isFinite(fin.getTime()))) throw new AppError("La fecha fin no es válida", 400);
   if (fin && fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
 
+  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo?.sucursalId ?? existente.puesto?.sucursalId ?? sucursalId ?? null;
   if (nuevoVehiculoId) {
     const vehiculo = await prisma.vehiculo.findUnique({ where: { id: nuevoVehiculoId } });
     if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-    if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
+    if (vehiculo.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la reserva a un vehículo de otra sucursal", 403);
     if (vehiculo.clienteId !== existente.clienteId) throw new AppError("El vehículo no pertenece al cliente de esta reserva", 400);
     if (vehiculo.bloqueado || !vehiculo.estado) throw new AppError("El vehículo está bloqueado o inactivo", 400);
   }
   if (nuevoPuestoId) {
     const puesto = await prisma.puesto.findUnique({ where: { id: nuevoPuestoId } });
     if (!puesto) throw new AppError("Puesto no encontrado", 404);
-    if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
+    if (puesto.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la reserva a un puesto de otra sucursal", 403);
     if (!puesto.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está inactivo o en mantenimiento", 400);
   }
 
@@ -316,7 +317,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
   const reserva = await prisma.$transaction(async (tx) => {
     if (reservaInicial.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${reservaInicial.vehiculoId}::integer)) AS advisory_lock`;
     if (reservaInicial.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${reservaInicial.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.reserva.findUnique({ where: { id } });
+    const actual = await tx.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
     if (!actual || actual.vehiculoId !== reservaInicial.vehiculoId || actual.puestoId !== reservaInicial.puestoId) {
       throw new AppError("La reserva cambió mientras se procesaba. Actualiza e inténtalo nuevamente.", 409);
     }
