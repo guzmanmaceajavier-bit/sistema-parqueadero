@@ -208,7 +208,13 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     for (const pid of puestosLocks) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${pid}::integer)) AS advisory_lock`;
 
     const actual = await tx.reserva.findUnique({ where: { id } });
-    if (!actual || !["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) throw new AppError("La reserva cambió y ya no se puede editar", 409);
+    if (
+      !actual ||
+      !["PENDIENTE", "CONFIRMADA"].includes(actual.estado) ||
+      actual.updatedAt.getTime() !== existente.updatedAt.getTime()
+    ) {
+      throw new AppError("La reserva cambió mientras se editaba. Actualiza e inténtalo nuevamente.", 409);
+    }
 
     const finLimite = fin || new Date("9999-12-31T23:59:59.999Z");
     if (nuevoVehiculoId) {
