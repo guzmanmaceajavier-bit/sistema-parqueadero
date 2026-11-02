@@ -351,7 +351,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     if (salidaActualizada.count !== 1) {
       throw new AppError("La salida ya fue registrada por otro usuario. Actualiza la lista antes de continuar.", 409);
     }
-    const s = await tx.ingreso.findUnique({
+    const s = await tx.ingreso.findUniqueOrThrow({
       where: { id: Number(id) },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
