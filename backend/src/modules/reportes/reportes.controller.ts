@@ -70,7 +70,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
     by: ["metodoPago"],
     _count: true,
     _sum: { valor: true },
-    where: { createdAt: rango, ...sf },
+    where: { createdAt: rango, metodoPago: { not: null }, ...sf },
   });
 
   res.json({
