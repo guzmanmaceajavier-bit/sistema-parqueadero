@@ -458,8 +458,8 @@ export const actualizarIngreso = asyncHandler(async (req, res) => {
 export const eliminarIngreso = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const ingreso = await prisma.ingreso.findUnique({
-    where: { id: Number(id) },
+  const ingreso = await prisma.ingreso.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
     include: { facturas: { select: { id: true, numero: true } } },
   });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
@@ -625,8 +625,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       cobroTotalMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
     }
 
-    const ingresoActual = await tx.ingreso.findUnique({
-      where: { id: Number(id) },
+    const ingresoActual = await tx.ingreso.findFirst({
+      where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
       select: { estado: true, vehiculoId: true, puestoId: true, reservaId: true },
     });
     if (!ingresoActual || ingresoActual.estado !== "ACTIVO") {
