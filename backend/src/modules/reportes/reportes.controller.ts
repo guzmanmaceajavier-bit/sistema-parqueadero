@@ -13,7 +13,9 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
   let inicio: Date;
   let finExclusivo: Date;
   try {
-    ({ inicio, finExclusivo } = obtenerPeriodoReporte(fechaInicio, fechaFin));
+    const configuracion = await prisma.configuracion.findFirst({ select: { zonaHoraria: true } });
+    const zonaHoraria = configuracion?.zonaHoraria || "America/Bogota";
+    ({ inicio, finExclusivo } = obtenerPeriodoReporte(fechaInicio, fechaFin, new Date(), zonaHoraria));
   } catch (error) {
     throw new AppError(error instanceof Error ? error.message : "El período del reporte no es válido", 400);
   }
