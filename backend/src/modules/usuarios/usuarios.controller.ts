@@ -73,16 +73,20 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const crearUsuario = asyncHandler(async (req, res) => {
-  const { nombre, usuario, correo, password, rol } = req.body;
+  const { nombre, usuario, correo, password, rol, sucursalId } = req.body;
 
   const existe = await prisma.usuario.findFirst({
     where: { OR: [{ usuario }, { correo }] },
   });
   if (existe) throw new AppError("El usuario o correo ya existe", 400);
 
+  if (sucursalId !== undefined && sucursalId !== null) {
+    const sucursal = await prisma.sucursal.findUnique({ where: { id: sucursalId }, select: { id: true } });
+    if (!sucursal) throw new AppError("Sucursal no encontrada", 404);
+  }
   const hash = await bcrypt.hash(password, 12);
   const nuevo = await prisma.usuario.create({
-    data: { nombre, usuario, correo, password: hash, rol: rol || "empleado" },
+    data: { nombre, usuario, correo, password: hash, rol: rol || "empleado", sucursalId: sucursalId ?? null },
   });
   res.status(201).json({ ok: true, message: "Usuario creado", usuario: { id: nuevo.id, nombre: nuevo.nombre, usuario: nuevo.usuario, rol: nuevo.rol } });
 });
@@ -149,7 +153,7 @@ export const obtenerAccesos = asyncHandler(async (req, res) => {
 
 export const actualizarUsuario = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { nombre, correo, rol, password } = req.body;
+  const { nombre, correo, rol, password, sucursalId } = req.body;
 
   const existe = await prisma.usuario.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Usuario no encontrado", 404);
@@ -168,12 +172,19 @@ export const actualizarUsuario = asyncHandler(async (req, res) => {
   if (nombre !== undefined) data.nombre = nombre;
   if (correo !== undefined) data.correo = correo;
   if (rol !== undefined) data.rol = rol;
+  if (sucursalId !== undefined) {
+    if (sucursalId !== null) {
+      const sucursal = await prisma.sucursal.findUnique({ where: { id: sucursalId }, select: { id: true } });
+      if (!sucursal) throw new AppError("Sucursal no encontrada", 404);
+    }
+    data.sucursalId = sucursalId;
+  }
   if (password) data.password = await bcrypt.hash(password, 12);
   if (cambiaPrivilegios) data.tokenVersion = { increment: 1 };
 
   const usuario = await prisma.usuario.update({
     where: { id: targetId }, data,
-    select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true },
+    select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true },
   });
   await registrarMovimiento("Usuarios", "USUARIO ACTUALIZADO", `Se actualizaron datos o privilegios del usuario ${usuario.usuario}`, req.usuario.usuario);
   res.json({ ok: true, usuario });
