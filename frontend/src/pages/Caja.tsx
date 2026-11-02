@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { X, Lock, AlertTriangle, PenSquare, Trash2, Eye, Wallet, ArrowLeft } from "lucide-react";
+import { X, Lock, AlertTriangle, PenSquare, Eye, Wallet, ArrowLeft } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import { useCaja } from "../context/CajaContext";
@@ -246,10 +246,12 @@ export default function Caja() {
     if (!cajaSel) return;
     setCargando(true);
     try {
-      await api.put(`/caja/${cajaSel.id}`, {
-        apertura: cajaSel.estado === "ABIERTA" ? (parseFloat(formEditar.apertura) || 0) : undefined,
-        observacion: formEditar.observacion,
-      });
+      const cambios = { observacion: formEditar.observacion };
+      const aperturaNueva = Number(formEditar.apertura);
+      if (cajaSel.estado === "ABIERTA" && Number.isFinite(aperturaNueva) && aperturaNueva !== Number(cajaSel.apertura)) {
+        cambios.apertura = aperturaNueva;
+      }
+      await api.put(`/caja/${cajaSel.id}`, cambios);
       setMostrarEditar(false);
       setCajaSel(null);
       mostrarToast("Caja actualizada");
@@ -437,7 +439,7 @@ export default function Caja() {
                               <td className="px-3 py-2.5 text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">{new Date(m.createdAt).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  <button disabled={m.anulado} onClick={() => abrirEditMov(m)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Movimiento anulado" : "Editar"}>
+                                  <button disabled={m.anulado || !!m.facturaId || !!m.gastoId} onClick={() => abrirEditMov(m)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Movimiento anulado" : m.facturaId || m.gastoId ? "Edita la factura o gasto desde su módulo de origen" : "Editar"}>
                                     <PenSquare className="w-3.5 h-3.5" />
                                   </button>
                                   <button disabled={m.anulado || !!m.facturaId || !!m.gastoId} onClick={() => setMovimientoAnular(m)} className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed" title={m.anulado ? "Ya está anulado" : m.facturaId || m.gastoId ? "Anula la factura o gasto desde su módulo de origen" : "Anular"}>
