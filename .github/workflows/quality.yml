@@ -78,5 +78,7 @@ jobs:
         run: npx prisma generate --schema=prisma/schema.prisma
       - name: Apply database migrations
         run: npx prisma migrate deploy --schema=prisma/schema.prisma
+      - name: Inspect schema drift against Prisma models
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
       - name: Run PostgreSQL integration tests
         run: npm run test:integration
