@@ -78,6 +78,33 @@ describe("obtenerReporte", () => {
     }));
   });
 
+  it("usa el día y la hora locales al agrupar actividad en reportes", async () => {
+    prismaMock.configuracion.findFirst.mockResolvedValue({ zonaHoraria: "America/Bogota" });
+    prismaMock.ingreso.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { fechaEntrada: new Date("2026-10-01T05:30:00.000Z") },
+        { fechaEntrada: new Date("2026-10-01T18:15:00.000Z") },
+      ]);
+
+    const resultado = await new Promise((resolve, reject) => {
+      const req = { query: { fechaInicio: "2026-10-01", fechaFin: "2026-10-01" } };
+      const res = { json: vi.fn(resolve) };
+      obtenerReporte(req as any, res as any, reject as any);
+    }) as any;
+
+    expect(prismaMock.factura.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        createdAt: {
+          gte: new Date("2026-10-01T05:00:00.000Z"),
+          lt: new Date("2026-10-02T05:00:00.000Z"),
+        },
+      },
+    }));
+    expect(resultado.ocupacionPorHora.find((item) => item.hora === "00:00").count).toBe(1);
+    expect(resultado.ocupacionPorHora.find((item) => item.hora === "13:00").count).toBe(1);
+  });
+
   it("rechaza sucursales inválidas antes de consultar la base de datos", async () => {
     const error = await new Promise((resolve) => {
       const req = { query: { sucursalId: "no-es-un-id" } };
