@@ -127,14 +127,39 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { apertura, observacion } = req.body;
 
-  const existente = await prisma.caja.findUnique({ where: { id: Number(id) } });
-  if (!existente) throw new AppError("Caja no encontrada", 404);
+  const caja = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124019)`;
+    const existente = await tx.caja.findUnique({ where: { id: Number(id) } });
+    if (!existente) throw new AppError("Caja no encontrada", 404);
 
-  const data = {};
-  if (apertura !== undefined) data.apertura = Number(apertura);
-  if (observacion !== undefined) data.observacion = observacion;
+    const data: any = {};
+    if (apertura !== undefined) {
+      const aperturaNormalizada = Number(apertura);
+      if (!Number.isFinite(aperturaNormalizada) || aperturaNormalizada < 0) {
+        throw new AppError("El fondo de apertura debe ser un valor válido y no negativo", 400);
+      }
+      if (existente.estado !== "ABIERTA") {
+        throw new AppError("No se puede modificar el fondo de apertura de una caja cerrada", 409);
+      }
+      const movimientos = await tx.cajaMovimiento.count({ where: { cajaId: existente.id } });
+      if (movimientos > 0) {
+        throw new AppError("No se puede cambiar el fondo de apertura después del primer movimiento. Registra un ajuste auditado en lugar de alterar el saldo inicial.", 409);
+      }
+      data.apertura = aperturaNormalizada;
+    }
+    if (observacion !== undefined) {
+      if (typeof observacion !== "string" || observacion.length > 500) {
+        throw new AppError("La observación debe tener máximo 500 caracteres", 400);
+      }
+      data.observacion = observacion.trim();
+    }
+    if (Object.keys(data).length === 0) throw new AppError("No hay cambios válidos para guardar", 400);
 
-  const caja = await prisma.caja.update({ where: { id: Number(id) }, data });
+    return tx.caja.update({ where: { id: Number(id) }, data });
+  });
+
+  await registrarMovimiento("CAJA", "EDITAR", `Caja #${id} actualizada${apertura !== undefined ? ` — fondo de apertura: $${caja.apertura}` : ""}`, req.usuario?.usuario);
+  emitirEvento("caja:actualizada", { mensaje: `Caja #${id} actualizada`, caja });
   res.json({ ok: true, caja });
 });
 
@@ -214,6 +239,9 @@ export const eliminarMovimientoCaja = asyncHandler(async (req, res) => {
     const caja = await tx.caja.findUnique({ where: { id: movimiento.cajaId } });
     if (caja && caja.estado === "CERRADA") throw new AppError("No se puede anular un movimiento de una caja cerrada", 400);
     if (movimiento.anulado) throw new AppError("Este movimiento ya fue anulado", 409);
+    if (movimiento.facturaId || movimiento.gastoId) {
+      throw new AppError("Este movimiento está vinculado a una factura o gasto. Corrige o anula la operación desde su módulo de origen para conservar la consistencia financiera.", 409);
+    }
     const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim().slice(0, 500) : "";
     return tx.cajaMovimiento.update({
       where: { id: Number(id) },
@@ -238,16 +266,30 @@ export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
     const movimiento = await tx.cajaMovimiento.findUnique({ where: { id: Number(id) } });
     if (!movimiento) throw new AppError("Movimiento no encontrado", 404);
     if (movimiento.anulado) throw new AppError("No se puede editar un movimiento anulado", 409);
+    if (movimiento.facturaId || movimiento.gastoId) {
+      throw new AppError("Este movimiento proviene de una factura o gasto. Modifica la operación desde su módulo de origen.", 409);
+    }
     const caja = await tx.caja.findUnique({ where: { id: movimiento.cajaId } });
     if (caja && caja.estado === "CERRADA") throw new AppError("No se puede modificar una caja cerrada", 400);
     const data: any = {};
-    if (concepto !== undefined) data.concepto = concepto;
+    if (concepto !== undefined) {
+      if (typeof concepto !== "string" || !concepto.trim() || concepto.trim().length > 255) {
+        throw new AppError("El concepto debe tener entre 1 y 255 caracteres", 400);
+      }
+      data.concepto = concepto.trim();
+    }
     if (monto !== undefined) {
       const montoNormalizado = Number(monto);
       if (!Number.isFinite(montoNormalizado) || montoNormalizado <= 0) throw new AppError("El monto debe ser un número mayor que cero", 400);
       data.monto = montoNormalizado;
     }
-    if (metodoPago !== undefined) data.metodoPago = metodoPago;
+    if (metodoPago !== undefined) {
+      if (typeof metodoPago !== "string" || !metodoPago.trim() || metodoPago.trim().length > 60) {
+        throw new AppError("El método de pago no es válido", 400);
+      }
+      data.metodoPago = metodoPago.trim();
+    }
+    if (Object.keys(data).length === 0) throw new AppError("No hay cambios válidos para guardar", 400);
     return tx.cajaMovimiento.update({ where: { id: Number(id) }, data });
   });
   await registrarMovimiento("CAJA", "EDITAR", `Movimiento #${id} editado: ${actualizado.concepto} - $${actualizado.monto}`, req.usuario?.usuario);
