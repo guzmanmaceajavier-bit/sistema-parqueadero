@@ -224,13 +224,18 @@ model CajaMovimiento {
   monto      Float
   metodoPago String?
   facturaId  Int?
-  gastoId    Int?
-  createdAt  DateTime @default(now())
-  caja       Caja     @relation(fields: [cajaId], references: [id], onDelete: Cascade)
+  gastoId          Int?
+  anulado          Boolean  @default(false)
+  anuladoEn        DateTime?
+  anuladoPor       String?
+  motivoAnulacion  String?
+  createdAt        DateTime @default(now())
+  caja             Caja     @relation(fields: [cajaId], references: [id], onDelete: Cascade)
   factura    Factura? @relation(fields: [facturaId], references: [id])
   gasto      Gasto?   @relation(fields: [gastoId], references: [id])
 
   @@index([cajaId])
+  @@index([cajaId, anulado])
 }
 
 model Plan {
