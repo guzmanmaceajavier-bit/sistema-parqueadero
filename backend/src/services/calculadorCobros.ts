@@ -1,4 +1,5 @@
 import prisma from "../config/prisma.js";
+import type { Tarifa } from "@prisma/client";
 
 function diffMinutos(fechaEntrada: Date, fechaSalida: Date): number {
   return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60));
@@ -46,7 +47,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   const modalidadNormalizada = (modalidad || "hora").toLowerCase();
 
-  let tarifa = null;
+  let tarifa: Tarifa | null = null;
 
   if (tarifaId) {
     tarifa = await prisma.tarifa.findUnique({ where: { id: tarifaId } });
