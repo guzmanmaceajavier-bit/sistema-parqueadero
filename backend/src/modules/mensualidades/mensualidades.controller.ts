@@ -275,7 +275,7 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
 export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const { vehiculoId, planId, puestoId, fechaInicio, fechaFin, valor, observacion } = req.body;
-  const existente = await prisma.mensualidad.findUnique({ where: { id } });
+  const existente = await prisma.mensualidad.findUnique({ where: { id }, include: { facturas: { select: { id: true } } } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "CANCELADA") throw new AppError("No se puede editar una mensualidad cancelada", 409);
 
@@ -296,6 +296,15 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
 
   let montoFinal = monto;
   let nuevoPlanId: number | null = planId !== undefined ? (planId ? Number(planId) : null) : existente.planId;
+  if (existente.facturas.length > 0 && (
+    vid !== existente.vehiculoId ||
+    inicio.getTime() !== existente.fechaInicio.getTime() ||
+    fin.getTime() !== existente.fechaFin.getTime() ||
+    montoFinal !== existente.valor ||
+    nuevoPlanId !== existente.planId
+  )) {
+    throw new AppError("No se pueden cambiar vehículo, periodo, plan o valor de una mensualidad con facturas emitidas. Cree una renovación para conservar el historial.", 409);
+  }
   if (planId) {
     const plan = await prisma.plan.findUnique({ where: { id: Number(planId) } });
     if (!plan?.activo) throw new AppError("El plan no existe o está inactivo", 400);
