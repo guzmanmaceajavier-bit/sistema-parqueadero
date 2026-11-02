@@ -675,7 +675,6 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
           puestoId: ingreso.puestoId,
           estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
           ...(ingreso.reservaId ? { id: { not: ingreso.reservaId } } : {}),
-          fechaInicio: { lte: fechaSalida },
           OR: [{ fechaFin: null }, { fechaFin: { gte: fechaSalida } }],
         },
       }),
