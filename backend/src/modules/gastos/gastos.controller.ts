@@ -111,21 +111,33 @@ export const eliminarGasto = asyncHandler(async (req, res) => {
   const gasto = await prisma.gasto.findUnique({ where: { id: Number(id) } });
   if (!gasto) throw new AppError("Gasto no encontrado", 404);
 
-  const movimiento = await prisma.cajaMovimiento.findFirst({
-    where: { gastoId: Number(id), tipo: "EGRESO" },
+  const movimientos = await prisma.cajaMovimiento.findMany({
+    where: { gastoId: Number(id), anulado: false },
     include: { caja: true },
   });
-  if (movimiento && movimiento.caja?.estado === "CERRADA") {
-    throw new AppError("No se puede eliminar un gasto que participó en una caja cerrada. Use una anulación auditada.", 400);
+  if (movimientos.some(m => m.caja?.estado === "CERRADA")) {
+    throw new AppError("No se puede eliminar un gasto que participó en una caja cerrada. El registro financiero debe conservarse.", 409);
   }
 
   await prisma.$transaction(async (tx) => {
-    if (movimiento) await tx.cajaMovimiento.delete({ where: { id: movimiento.id } });
+    if (movimientos.length > 0) {
+      await tx.cajaMovimiento.updateMany({
+        where: { gastoId: Number(id), anulado: false },
+        data: {
+          anulado: true,
+          anuladoEn: new Date(),
+          anuladoPor: req.usuario?.usuario || "usuario",
+          motivoAnulacion: "Gasto eliminado desde el módulo de gastos",
+          gastoId: null,
+          concepto: `Gasto anulado: ${gasto.concepto}`,
+        },
+      });
+    }
     await tx.gasto.delete({ where: { id: Number(id) } });
   });
-  await registrarMovimiento("GASTOS", "ELIMINAR", `Gasto #${id}: ${gasto.concepto} - $${gasto.valor}`, req.usuario?.usuario || "admin");
+  await registrarMovimiento("GASTOS", "ELIMINAR", `Gasto #${id} eliminado y movimiento(s) de caja anulados: ${gasto.concepto} - $${gasto.valor}`, req.usuario?.usuario || "admin");
   emitirEvento("gasto:eliminado", { mensaje: `Gasto #${id} eliminado: ${gasto.concepto}`, gasto });
-  res.json({ ok: true, message: "Gasto eliminado" });
+  res.json({ ok: true, message: "Gasto eliminado; sus movimientos se conservaron como anulados para auditoría" });
 });
 
 export const generarRecurrentes = asyncHandler(async (req, res) => {
