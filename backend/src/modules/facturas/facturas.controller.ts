@@ -7,7 +7,7 @@ import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 export const obtenerFacturas = asyncHandler(async (req, res) => {
   const { page, limit, q, desde, hasta, origen } = req.query;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
-  const where: any = sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
+  const where: any = sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
   if (desde || hasta) {
     where.createdAt = {};
     if (desde) where.createdAt.gte = new Date(String(desde));
