@@ -38,7 +38,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   let reservaVinculada = null;
   let planDetectado = null;
   if (!puestoId) {
-    reservaVinculada = await service.buscarReservaActiva(clienteId);
+    reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId);
     if (reservaVinculada) {
       puestoId = reservaVinculada.puestoId;
     } else {
@@ -145,7 +145,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
+    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
   });
   if (!planActivo) throw new AppError("El vehículo no tiene plan activo. Registre la salida con cobro desde Ingresos.", 400);
 
@@ -242,7 +242,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const planActivo = await prisma.mensualidad.findFirst({
-    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
+    where: { vehiculoId: ingreso.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: new Date() }, fechaFin: { gte: new Date() }, puestoId: { not: null } },
     include: { plan: true },
   });
   if (planActivo) {
@@ -283,6 +283,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     where: {
       vehiculoId: ingreso.vehiculoId,
       estado: "ACTIVA",
+      fechaInicio: { lte: ahora },
       fechaFin: { gte: ahora },
     },
     include: { plan: true, puesto: true },
