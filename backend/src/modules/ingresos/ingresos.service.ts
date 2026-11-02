@@ -14,12 +14,13 @@ export const eliminarIngresoPorId = (id: number) => prisma.ingreso.delete({ wher
 export const ocuparPuesto = (id: number) => prisma.puesto.update({ where: { id }, data: { estado: "OCUPADO" } });
 export const liberarPuesto = (id: number) => prisma.puesto.update({ where: { id }, data: { estado: "LIBRE" } });
 
-export const buscarReservaActiva = (clienteId: number, vehiculoId: number) => {
+export const buscarReservaActiva = (clienteId: number, vehiculoId: number, sucursalId?: number | null) => {
   const ahora = new Date();
   return prisma.reserva.findFirst({
     where: {
       clienteId,
       vehiculoId,
+      ...(sucursalId !== undefined ? { sucursalId } : {}),
       estado: { in: ["PENDIENTE", "CONFIRMADA"] },
       fechaInicio: { lte: ahora },
       OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
