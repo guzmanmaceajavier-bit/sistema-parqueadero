@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+import prisma from "../../config/prisma.js";
 import { asyncHandler } from "../../middlewares/error.middleware.js";
 import * as service from "./configuracion.service.js";
 
@@ -29,35 +31,38 @@ const CAMPOS_CONFIG = [
   "horarioApertura", "horarioCierre", "paginacionPorDefecto", "iva",
   "pieFactura", "metodosPago", "intentosMaximos", "minutosGracia",
   "listasConfiguracion",
-];
+] as const;
 
 export const guardarConfiguracion = asyncHandler(async (req, res) => {
   const existe = await service.obtenerConfiguracion();
-  const data = {};
+  const data: Record<string, unknown> = {};
   for (const campo of CAMPOS_CONFIG) {
     if (req.body[campo] !== undefined) data[campo] = req.body[campo];
   }
 
   if (existe) {
-    const actualizada = await service.actualizarConfiguracion(existe.id, data);
+    const actualizada = await service.actualizarConfiguracion(existe.id, data as Prisma.ConfiguracionUpdateInput);
     return res.json({ ok: true, message: "Configuración actualizada", configuracion: actualizada });
   }
 
   data.nombreParqueadero = data.nombreParqueadero || "Parqueadero";
-  const nueva = await service.crearConfiguracion(data);
+  const nueva = await service.crearConfiguracion(data as Prisma.ConfiguracionCreateInput);
   res.status(201).json({ ok: true, message: "Configuración creada", configuracion: nueva });
 });
 
-import prisma from "../../config/prisma.js";
-
-export const formatearSistema = asyncHandler(async (req, res) => {
+export const formatearSistema = asyncHandler(async (_req, res) => {
   const orden = [
     "factura", "ingreso", "mensualidad", "reserva", "ausencia",
     "gasto", "movimiento", "caja", "acceso",
     "tarifa", "plan", "puesto", "vehiculo", "cliente", "configuracion",
-  ];
+  ] as const;
+  const db = prisma as unknown as Record<string, { deleteMany: () => Promise<unknown> }>;
   for (const modelo of orden) {
-    try { await prisma[modelo].deleteMany(); } catch { }
+    try {
+      await db[modelo].deleteMany();
+    } catch {
+      // El orden respeta las dependencias y se continúa para modelos opcionales.
+    }
   }
   res.json({ ok: true, message: "Sistema formateado correctamente. Todos los datos han sido eliminados excepto usuarios." });
 });
