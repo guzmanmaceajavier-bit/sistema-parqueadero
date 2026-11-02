@@ -20,13 +20,22 @@ import {
 const $ = (v: number) => formatCurrency(v);
 const n = (v: number) => (v ?? 0).toLocaleString();
 const hoy = () => new Date();
-const fechaLocalInput = (fecha: Date) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}-${String(fecha.getDate()).padStart(2, "0")}`;
-const days7 = (ref: Date) => {
+const fechaLocalInput = (fecha: Date, zonaHoraria: string) => {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: zonaHoraria, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(fecha);
+  const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+  return `${valores.year}-${valores.month}-${valores.day}`;
+};
+const days7 = (ref: Date, zonaHoraria: string) => {
+  const [year, month, day] = fechaLocalInput(ref, zonaHoraria).split("-").map(Number);
   const r: { label: string; date: string }[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(ref);
-    d.setDate(d.getDate() - i);
-    r.push({ label: d.toLocaleDateString("es-CO", { weekday: "short" }), date: fechaLocalInput(d) });
+    const d = new Date(Date.UTC(year, month - 1, day - i));
+    r.push({
+      label: d.toLocaleDateString("es-CO", { weekday: "short", timeZone: "UTC" }),
+      date: d.toISOString().slice(0, 10),
+    });
   }
   return r;
 };
@@ -166,7 +175,7 @@ export default function DashboardPage() {
 
   const maxHora = Math.max(...(ingresosPorHora as Array<{ count: number }>).map((h) => h.count), 1);
 
-  const dias = days7(now);
+  const dias = days7(now, config?.zonaHoraria || "America/Bogota");
   const bars = dias.map((day) => {
     const found = (ingresos7Dias as Array<Record<string, unknown>>).find((i) => i.fecha === day.date || i.dia === day.date);
     const gasto = (gastos7Dias as Array<Record<string, unknown>>).find((g) => g.fecha === day.date || g.dia === day.date);
