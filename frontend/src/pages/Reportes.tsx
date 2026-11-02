@@ -25,6 +25,20 @@ export default function Reportes() {
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
+  const [sucursales, setSucursales] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [sucursalSel, setSucursalSel] = useState("");
+  const [sucursalesReady, setSucursalesReady] = useState(false);
+
+  useEffect(() => {
+    api.get("/sucursales")
+      .then((res) => {
+        const list = res.data?.sucursales || res.data?.data || res.data || [];
+        setSucursales(list);
+        if (list.length > 0) setSucursalSel(String(list[0].id));
+      })
+      .catch(() => { /* el reporte puede consultarse sin filtro de sucursal */ })
+      .finally(() => setSucursalesReady(true));
+  }, []);
 
   useEffect(() => {
     const now = new Date();
@@ -45,7 +59,7 @@ export default function Reportes() {
   }, [preset]);
 
   const cargar = useCallback(async () => {
-    if (!fechaInicio || !fechaFin) return;
+    if (!sucursalesReady || !fechaInicio || !fechaFin) return;
     if (fechaInicio > fechaFin) {
       setError("La fecha inicial no puede ser posterior a la fecha final.");
       setData(null);
@@ -54,13 +68,13 @@ export default function Reportes() {
     setLoading(true);
     setError("");
     try {
-      const res = await api.get("/reportes", { params: { fechaInicio, fechaFin } });
+      const res = await api.get("/reportes", { params: { fechaInicio, fechaFin, ...(sucursalSel ? { sucursalId: sucursalSel } : {}) } });
       setData(res.data);
     } catch (requestError) {
       setData(null);
       setError(requestError?.response?.data?.message || "No fue posible cargar el reporte. Intenta nuevamente.");
     } finally { setLoading(false); }
-  }, [fechaInicio, fechaFin]);
+  }, [fechaInicio, fechaFin, sucursalSel, sucursalesReady]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -142,6 +156,17 @@ export default function Reportes() {
           </button>
         ))}
         <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 mx-1" />
+        {sucursales.length > 0 && (
+          <select
+            aria-label="Filtrar por sucursal"
+            value={sucursalSel}
+            onChange={e => setSucursalSel(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">Todas las sucursales</option>
+            {sucursales.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+          </select>
+        )}
         <input type="date" value={fechaInicio} onChange={e => { setPreset("personalizado"); setFechaInicio(e.target.value); }} className={inputClass} />
         <span className="text-slate-400 text-sm">a</span>
         <input type="date" value={fechaFin} onChange={e => { setPreset("personalizado"); setFechaFin(e.target.value); }} className={inputClass} />
