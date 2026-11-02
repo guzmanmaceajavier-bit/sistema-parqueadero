@@ -237,7 +237,7 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     if (nuevoVehiculoId) {
       const [otraReserva, mensualidad, ingreso] = await Promise.all([
         tx.reserva.findFirst({
-          where: { id: { not: id }, vehiculoId: nuevoVehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          where: { id: { not: id }, vehiculoId: nuevoVehiculoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
           select: { id: true },
         }),
@@ -245,7 +245,7 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
           where: { vehiculoId: nuevoVehiculoId, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
           select: { id: true },
         }),
-        tx.ingreso.findFirst({ where: { vehiculoId: nuevoVehiculoId, estado: "ACTIVO" }, select: { id: true } }),
+        tx.ingreso.findFirst({ where: { vehiculoId: nuevoVehiculoId, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true } }),
       ]);
       if (otraReserva) throw new AppError("El vehículo ya tiene otra reserva en ese periodo", 409);
       if (mensualidad) throw new AppError("El vehículo tiene una mensualidad que se cruza con ese periodo", 409);
@@ -254,7 +254,7 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     if (nuevoPuestoId) {
       const [otraReserva, mensualidad, ingreso] = await Promise.all([
         tx.reserva.findFirst({
-          where: { id: { not: id }, puestoId: nuevoPuestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          where: { id: { not: id }, puestoId: nuevoPuestoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
           select: { id: true },
         }),
@@ -262,7 +262,7 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
           where: { puestoId: nuevoPuestoId, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
           select: { id: true },
         }),
-        tx.ingreso.findFirst({ where: { puestoId: nuevoPuestoId, estado: "ACTIVO" }, select: { id: true } }),
+        tx.ingreso.findFirst({ where: { puestoId: nuevoPuestoId, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true } }),
       ]);
       if (otraReserva || mensualidad || ingreso) throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
       const puesto = await tx.puesto.findUnique({ where: { id: nuevoPuestoId } });
@@ -476,7 +476,7 @@ export const eliminarReserva = asyncHandler(async (req, res) => {
   await prisma.$transaction(async (tx) => {
     if (existente.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
     if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.reserva.findUnique({ where: { id } });
+    const actual = await tx.reserva.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
     if (!actual || actual.vehiculoId !== existente.vehiculoId || actual.puestoId !== existente.puestoId) {
       throw new AppError("La reserva cambió mientras se eliminaba. Actualiza e inténtalo nuevamente.", 409);
     }
