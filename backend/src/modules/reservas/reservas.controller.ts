@@ -281,113 +281,101 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
 
 
 export const cambiarEstado = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
   const { estado } = req.body;
   if (!ESTADOS.includes(estado)) throw new AppError(`Estado inválido. Válidos: ${ESTADOS.join(", ")}`, 400);
 
-  const existente = await prisma.reserva.findUnique({ where: { id: Number(id) } });
-  if (!existente) throw new AppError("Reserva no encontrada", 404);
+  const reservaInicial = await prisma.reserva.findUnique({ where: { id } });
+  if (!reservaInicial) throw new AppError("Reserva no encontrada", 404);
 
   const reserva = await prisma.$transaction(async (tx) => {
-    if (existente.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
-    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const reservaActual = await tx.reserva.findUnique({ where: { id: Number(id) } });
-    if (!reservaActual || reservaActual.vehiculoId !== existente.vehiculoId || reservaActual.puestoId !== existente.puestoId) {
+    if (reservaInicial.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${reservaInicial.vehiculoId}::integer)) AS advisory_lock`;
+    if (reservaInicial.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${reservaInicial.puestoId}::integer)) AS advisory_lock`;
+    const actual = await tx.reserva.findUnique({ where: { id } });
+    if (!actual || actual.vehiculoId !== reservaInicial.vehiculoId || actual.puestoId !== reservaInicial.puestoId) {
       throw new AppError("La reserva cambió mientras se procesaba. Actualiza e inténtalo nuevamente.", 409);
     }
-    if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(reservaActual.estado)) throw new AppError("La reserva ya está cerrada", 409);
-    if (reservaActual.estado === "ACTIVA" && estado === "ACTIVA") throw new AppError("La reserva ya está activa", 409);
+    if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(actual.estado)) throw new AppError("La reserva ya está cerrada", 409);
+    if (actual.estado === estado) throw new AppError("La reserva ya tiene ese estado", 409);
+
+    if (estado === "CONFIRMADA") {
+      if (actual.estado !== "PENDIENTE") throw new AppError("Solo se puede confirmar una reserva pendiente", 409);
+      if (actual.puestoId) {
+        const puesto = await tx.puesto.findUnique({ where: { id: actual.puestoId } });
+        if (!puesto?.activo || puesto.estado === "MANTENIMIENTO" || puesto.estado === "OCUPADO") {
+          throw new AppError("El puesto no está disponible para confirmar la reserva", 409);
+        }
+        await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: "RESERVADO" } });
+      }
+      await tx.reserva.update({ where: { id }, data: { estado } });
+    } else if (estado === "ACTIVA") {
+      if (!["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) throw new AppError("La reserva no puede activarse desde su estado actual", 409);
+      if (!actual.puestoId || !actual.vehiculoId) throw new AppError("Debe asignar un puesto y un vehículo antes de activar la reserva", 400);
+      const ahora = new Date();
       if (actual.fechaInicio > ahora || (actual.fechaFin && actual.fechaFin < ahora)) {
         throw new AppError("La reserva solo puede activarse dentro de su horario vigente", 409);
       }
-
-      const puesto = await tx.puesto.findUnique({ where: { id: existente.puestoId } });
-      if (!puesto) throw new AppError("Puesto no encontrado", 404);
-      if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
-      const [ingresoYaActivo, ingresoEnPuesto, mensualidadEnPuesto, otraReserva] = await Promise.all([
-        tx.ingreso.findFirst({ where: { vehiculoId: existente.vehiculoId, estado: "ACTIVO" }, select: { id: true } }),
-        tx.ingreso.findFirst({ where: { puestoId: existente.puestoId, estado: "ACTIVO" }, select: { id: true } }),
-        tx.mensualidad.findFirst({
-          where: {
-            puestoId: existente.puestoId,
-            estado: "ACTIVA",
-            fechaInicio: { lte: ahora },
-            fechaFin: { gte: ahora },
-          },
-          select: { id: true },
-        }),
-        tx.reserva.findFirst({
-          where: {
-            id: { not: Number(id) },
-            puestoId: existente.puestoId,
-            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            fechaInicio: { lte: ahora },
-            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
-          },
-          select: { id: true },
-        }),
+      const [puesto, ingresoVehiculo, ingresoPuesto, mensualidad, otraReserva] = await Promise.all([
+        tx.puesto.findUnique({ where: { id: actual.puestoId } }),
+        tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVO" }, select: { id: true } }),
+        tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO" }, select: { id: true } }),
+        tx.mensualidad.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } }, select: { id: true } }),
+        tx.reserva.findFirst({ where: { id: { not: id }, puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] }, select: { id: true } }),
       ]);
-      if (ingresoYaActivo) throw new AppError("El vehículo ya tiene un ingreso activo", 409);
-      if (ingresoEnPuesto || mensualidadEnPuesto || otraReserva) {
-        throw new AppError("El puesto tiene otra ocupación, mensualidad o reserva vigente", 409);
+      if (!puesto?.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible", 409);
+      if (ingresoVehiculo || ingresoPuesto || mensualidad || otraReserva) {
+        throw new AppError("El vehículo o el puesto tiene otra ocupación o asignación vigente", 409);
       }
-
       const asignado = await tx.puesto.updateMany({
-        where: { id: existente.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO"] } },
+        where: { id: actual.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO"] } },
         data: { estado: "OCUPADO" },
       });
       if (asignado.count !== 1) throw new AppError("El puesto ya fue asignado. Actualiza la disponibilidad.", 409);
-
-      await tx.reserva.update({ where: { id: Number(id) }, data: { estado } });
+      await tx.reserva.update({ where: { id }, data: { estado } });
       await tx.ingreso.create({
-        data: {
-          clienteId: existente.clienteId,
-          vehiculoId: existente.vehiculoId,
-          puestoId: existente.puestoId,
-          reservaId: reservaActual.id,
-          fechaEntrada: ahora,
-        },
+        data: { clienteId: actual.clienteId, vehiculoId: actual.vehiculoId, puestoId: actual.puestoId, reservaId: actual.id, fechaEntrada: ahora },
       });
+    } else if (estado === "CANCELADA" || estado === "NO_SHOW") {
+      if (!["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) {
+        throw new AppError("Una reserva activa debe finalizarse mediante el proceso de salida", 409);
+      }
+      await tx.reserva.update({ where: { id }, data: { estado } });
+      if (actual.puestoId) {
+        const ahora = new Date();
+        const [ingresoActivo, mensualidadVigente, reservaVigente] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+          tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: id },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        ]);
+        const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
+        await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
+      }
+    } else if (estado === "FINALIZADA") {
+      if (actual.estado !== "ACTIVA") throw new AppError("Solo se puede finalizar una reserva activa", 409);
+      const ingreso = await tx.ingreso.findFirst({ where: { reservaId: id } });
+      if (!ingreso || ingreso.estado === "ACTIVO") {
+        throw new AppError("Registre primero la salida y el cobro del ingreso asociado", 409);
+      }
+      await tx.reserva.update({ where: { id }, data: { estado } });
+      if (actual.puestoId) {
+        const ahora = new Date();
+        const [ingresoActivo, mensualidadVigente, reservaVigente] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId: actual.puestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId: actual.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+          tx.reserva.count({ where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: id },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+        ]);
+        const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : mensualidadVigente + reservaVigente > 0 ? "RESERVADO" : "LIBRE";
+        await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: estadoPuesto } });
+      }
     } else {
-      await tx.reserva.update({
-        where: { id: Number(id) },
-        data: { estado },
-      });
-    }
-
-    if (estado === "FINALIZADA" && reservaActual.puestoId) {
-      const ingresoAsociado = await tx.ingreso.findFirst({ where: { reservaId: existente.id, estado: "ACTIVO" } });
-      if (ingresoAsociado) {
-        const fechaSalida = new Date();
-        const tiempoMinutos = Math.ceil((fechaSalida.getTime() - new Date(ingresoAsociado.fechaEntrada).getTime()) / (1000 * 60));
-        await tx.ingreso.update({
-          where: { id: ingresoAsociado.id },
-          data: { estado: "FINALIZADO", fechaSalida, tiempoMinutos },
-        });
-      }
-      const ingresoActivo = await tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } });
-      const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA" } });
-      const otraReserva = await tx.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
-      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
-        await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
-      }
-    }
-
-    if (["CANCELADA", "NO_SHOW"].includes(estado) && reservaActual.puestoId) {
-      const ingresoActivo = await tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } });
-      const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA" } });
-      const otraReserva = await tx.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
-      if (ingresoActivo === 0 && otraMensualidad === 0 && otraReserva === 0) {
-        await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
-      }
-    }
-
-    if (estado === "CONFIRMADA" && reservaActual.puestoId) {
-      await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "RESERVADO" } });
+      throw new AppError("Transición de estado no permitida", 400);
     }
 
     return tx.reserva.findUniqueOrThrow({
-      where: { id: Number(id) },
+      where: { id },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
   });
@@ -399,6 +387,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
   emitirEvento("reserva:estado", { mensaje: `Reserva #${id} cambió a ${estado}`, reserva });
   res.json({ ok: true, reserva });
 });
+
 
 export const cancelarReserva = asyncHandler(async (req, res) => {
   const { id } = req.params;
