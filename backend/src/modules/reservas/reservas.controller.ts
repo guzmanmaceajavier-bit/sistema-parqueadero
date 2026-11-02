@@ -116,7 +116,7 @@ export const crearReserva = asyncHandler(async (req, res) => {
 export const obtenerReservas = asyncHandler(async (req, res) => {
   const { page, limit, estado, clienteId, puestoId, desde, hasta, q } = req.query;
   const where: Prisma.ReservaWhereInput = {};
-  if (typeof estado === "string") where.estado = estado as Prisma.EnumEstadoReservaFilter["equals"];
+  if (typeof estado === "string") where.estado = estado as string;
   if (typeof clienteId === "string") where.clienteId = Number(clienteId);
   if (typeof puestoId === "string") where.puestoId = Number(puestoId);
   if (typeof desde === "string" || typeof hasta === "string") {
