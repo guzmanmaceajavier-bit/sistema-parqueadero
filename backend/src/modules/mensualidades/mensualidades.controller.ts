@@ -21,7 +21,8 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
 
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
+  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo.sucursalId ?? sucursalId ?? null;
+  if (vehiculo.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la mensualidad a un vehículo de otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -64,7 +65,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     if (puesto) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puesto.id}::integer)) AS advisory_lock`;
     const ahora = new Date();
     const [ingresoActual, mensualidadVehiculo, reservaVehiculo, conflictosPuesto] = await Promise.all([
-      tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
+      tx.ingreso.findFirst({ where: { vehiculoId: vid, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
       tx.mensualidad.findFirst({
         where: { vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lte: fin }, fechaFin: { gte: inicio } },
         select: { id: true },
@@ -230,7 +231,7 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
           fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
         select: { id: true },
       }),
-      tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
+      tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
     ]);
     if (otraMensualidad || reserva) throw new AppError("El vehículo ya tiene otra asignación que se cruza con la renovación", 409);
     if (ingreso && (!actual.puestoId || ingreso.puestoId !== actual.puestoId || fechaInicio > ahora)) {
@@ -293,7 +294,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const id = Number(req.params.id);
   const { vehiculoId, planId, puestoId, fechaInicio, fechaFin, valor, observacion } = req.body;
-  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { facturas: { select: { id: true } } } });
+  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { facturas: { select: { id: true } }, vehiculo: { select: { sucursalId: true } } } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "CANCELADA") throw new AppError("No se puede editar una mensualidad cancelada", 409);
 
@@ -348,11 +349,11 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
     const finLimite = fin;
     const [otraMensualidad, reservaVehiculo] = await Promise.all([
       tx.mensualidad.findFirst({
-        where: { id: { not: id }, vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+        where: { id: { not: id }, vehiculoId: vid, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
         select: { id: true },
       }),
       tx.reserva.findFirst({
-        where: { vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+        where: { vehiculoId: vid, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
           fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
         select: { id: true },
       }),
@@ -372,17 +373,18 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
       const [puesto, otraMensualidadPuesto, reservaPuesto, ingresoPuesto] = await Promise.all([
         tx.puesto.findUnique({ where: { id: nuevoPuestoId } }),
         tx.mensualidad.findFirst({
-          where: { id: { not: id }, puestoId: nuevoPuestoId, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
+          where: { id: { not: id }, puestoId: nuevoPuestoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: finLimite }, fechaFin: { gte: inicio } },
           select: { id: true },
         }),
         tx.reserva.findFirst({
-          where: { puestoId: nuevoPuestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          where: { puestoId: nuevoPuestoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             fechaInicio: { lt: finLimite }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
           select: { id: true },
         }),
         tx.ingreso.findFirst({ where: { puestoId: nuevoPuestoId, estado: "ACTIVO", ...(ingresoVehiculo ? { id: { not: ingresoVehiculo.id } } : {}) }, select: { id: true } }),
       ]);
       if (!puesto?.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible", 409);
+      if (puesto.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la mensualidad a un puesto de otra sucursal", 403);
       if (sucursalId && puesto.sucursalId !== sucursalId) throw new AppError("El puesto pertenece a otra sucursal", 403);
       if (vehiculo.sucursalId !== puesto.sucursalId) throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
       if (otraMensualidadPuesto || reservaPuesto || ingresoPuesto) throw new AppError("El puesto tiene otra ocupación o asignación en ese periodo", 409);
