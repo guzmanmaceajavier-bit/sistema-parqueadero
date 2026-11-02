@@ -81,6 +81,6 @@ jobs:
       - name: Inspect schema drift against Prisma models
         run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
       - name: Sync ephemeral test database to Prisma schema
-        run: npx prisma db push --schema=prisma/schema.prisma --skip-generate
+        run: npx prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss
       - name: Run PostgreSQL integration tests
         run: npm run test:integration
