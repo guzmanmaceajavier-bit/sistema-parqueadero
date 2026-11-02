@@ -219,6 +219,8 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
       throw new AppError("El vehículo está ocupando otro puesto", 409);
     }
     if (actual.puestoId) {
+      const puestoActual = await tx.puesto.findUnique({ where: { id: actual.puestoId } });
+      if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible para renovar", 409);
       const [otraMensualidadPuesto, reservaPuesto, ingresoEnPuesto] = await Promise.all([
         tx.mensualidad.findFirst({
           where: { id: { not: id }, puestoId: actual.puestoId, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
@@ -232,10 +234,11 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
         tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO", ...(ingreso ? { id: { not: ingreso.id } } : {}) }, select: { id: true } }),
       ]);
       if (otraMensualidadPuesto || reservaPuesto || ingresoEnPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
-      await tx.puesto.updateMany({
+      const puestoActualizado = await tx.puesto.updateMany({
         where: { id: actual.puestoId, activo: true, estado: { in: ["LIBRE", "RESERVADO", "OCUPADO"] } },
         data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
       });
+      if (puestoActualizado.count !== 1) throw new AppError("El puesto cambió y no se pudo renovar la mensualidad", 409);
     }
     return tx.mensualidad.update({
       where: { id },
