@@ -560,8 +560,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { metodoPago, ticketExtraviado } = req.body;
 
-  const ingreso = await prisma.ingreso.findUnique({
-    where: { id: Number(id) },
+  const ingreso = await prisma.ingreso.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
     include: { cliente: true, vehiculo: { include: { tarifa: true, plan: true } }, puesto: true },
   });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
