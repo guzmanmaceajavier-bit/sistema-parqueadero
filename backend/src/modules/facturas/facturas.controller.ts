@@ -10,13 +10,14 @@ export const obtenerFacturas = asyncHandler(async (req, res) => {
   const where: any = sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
   if (desde || hasta) {
     where.createdAt = {};
-    if (desde) where.createdAt.gte = new Date(desde);
-    if (hasta) where.createdAt.lte = new Date(hasta);
+    if (desde) where.createdAt.gte = new Date(String(desde));
+    if (hasta) where.createdAt.lte = new Date(String(hasta));
   }
   if (origen) where.origen = origen;
   if (q) {
+    const queryText = String(q);
     const filtroTexto = [
-      { numero: { contains: q, mode: "insensitive" } },
+      { numero: { contains: queryText, mode: "insensitive" } },
       { ingreso: { cliente: { nombres: { contains: q, mode: "insensitive" } } } },
       { ingreso: { cliente: { apellidos: { contains: q, mode: "insensitive" } } } },
       { ingreso: { vehiculo: { placa: { contains: q, mode: "insensitive" } } } },
@@ -61,9 +62,9 @@ export const descargarFacturaPDF = asyncHandler(async (req, res) => {
   ]);
   if (!factura) throw new AppError("Factura no encontrada", 404);
 
-  const ref = factura.origen === "MENSUALIDAD" ? factura.mensualidad : factura.ingreso;
-  const cliente = ref?.cliente || {};
-  const vehiculo = ref?.vehiculo || {};
+  const ref: any = factura.origen === "MENSUALIDAD" ? factura.mensualidad : factura.ingreso;
+  const cliente: any = ref?.cliente || {};
+  const vehiculo: any = ref?.vehiculo || {};
   const entrada = ref?.fechaEntrada ? new Date(ref.fechaEntrada) : null;
   const salida = ref?.fechaSalida ? new Date(ref.fechaSalida) : null;
   const minutos = ref?.tiempoMinutos || (salida && entrada ? Math.ceil((salida - entrada) / 60000) : 0);
@@ -166,7 +167,8 @@ export const reciboSalida = asyncHandler(async (req, res) => {
   if (!factura) throw new AppError('Factura no encontrada', 404);
 
   const ing = factura.ingreso;
-  const diffMs = ing?.fechaSalida
+  if (!ing) throw new AppError("La factura no tiene un ingreso asociado", 404);
+  const diffMs = ing.fechaSalida
     ? new Date(ing.fechaSalida).getTime() - new Date(ing.fechaEntrada).getTime()
     : 0;
   const horas = Math.floor(diffMs / 3600000);
