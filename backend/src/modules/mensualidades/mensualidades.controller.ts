@@ -25,8 +25,6 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) throw new AppError("Fecha inválida", 400);
   if (fin <= inicio) throw new AppError("La fecha fin debe ser posterior a la fecha inicio", 400);
   if (fin <= new Date()) throw new AppError("La fecha fin debe estar en el futuro", 400);
-  if (!Number.isFinite(monto) || monto <= 0) throw new AppError("El valor de la mensualidad debe ser mayor que cero", 400);
-
   let plan = null;
   let monto = Number(valor);
   if (planId) {
@@ -34,6 +32,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     if (!plan || !plan.activo) throw new AppError("Plan no encontrado o inactivo", 400);
     monto = plan.valor;
   }
+  if (!Number.isFinite(monto) || monto <= 0) throw new AppError("El valor de la mensualidad debe ser mayor que cero", 400);
 
   let puesto = null;
   if (puestoId) {
