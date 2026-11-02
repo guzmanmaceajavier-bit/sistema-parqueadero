@@ -522,11 +522,11 @@ export default function Mensualidades() {
       </FormModal>
 
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
-      <ConfirmDialog abierto={confirm.abierto} titulo={confirm.titulo} mensaje={confirm.mensaje} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, abierto: false }))} />
+      <ConfirmDialog abierto={confirm.abierto} titulo={confirm.titulo} mensaje={confirm.mensaje} confirmLabel="Renovar mensualidad" onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, abierto: false }))} />
       <ConfirmDialog
         abierto={!!cancelarId}
         titulo="Cancelar mensualidad"
-        mensaje="Al cancelar esta mensualidad, el vehículo dejará de estar cubierto por el plan y el puesto asignado podrá volver a utilizarse. Los cobros anteriores no se modifican."
+        mensaje="Al cancelar esta mensualidad, el vehículo dejará de estar cubierto por el plan y el puesto asignado podrá volver a utilizarse. Los cobros anteriores no se modifican."\n        confirmLabel="Cancelar mensualidad"
         onConfirm={cancelarMensualidad}
         onCancel={() => setCancelarId(null)}
       />
@@ -711,7 +711,7 @@ export default function Mensualidades() {
       <ConfirmDialog
         abierto={!!eliminarId}
         titulo="Eliminar mensualidad"
-        mensaje="Vas a eliminar el registro de esta mensualidad. Se perderá su referencia operativa en el historial; utiliza Cancelar si lo que buscas es detener su vigencia y liberar el puesto."
+        mensaje="Vas a eliminar el registro de esta mensualidad. Se perderá su referencia operativa en el historial; utiliza Cancelar si lo que buscas es detener su vigencia y liberar el puesto."\n        confirmLabel="Eliminar mensualidad"
         onConfirm={eliminarMensualidad}
         onCancel={() => setEliminarId(null)}
       />
