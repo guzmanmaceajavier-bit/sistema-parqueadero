@@ -1,12 +1,13 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import prisma from "../../config/prisma.js";
 
-const suffix = `it-${process.pid}-${Date.now()}`;
+let fixtureCounter = 0;
 let clienteId = 0;
 let vehiculoId = 0;
 let puestoId = 0;
 
 beforeEach(async () => {
+  const suffix = `it-${process.pid}-${Date.now()}-${++fixtureCounter}`;
   const cliente = await prisma.cliente.create({
     data: {
       nombres: "Prueba",
@@ -35,13 +36,16 @@ beforeEach(async () => {
   puestoId = puesto.id;
 });
 
-afterAll(async () => {
+afterEach(async () => {
   if (vehiculoId) {
     await prisma.ingreso.deleteMany({ where: { vehiculoId } });
     await prisma.vehiculo.deleteMany({ where: { id: vehiculoId } });
   }
   if (puestoId) await prisma.puesto.deleteMany({ where: { id: puestoId } });
   if (clienteId) await prisma.cliente.deleteMany({ where: { id: clienteId } });
+});
+
+afterAll(async () => {
   await prisma.$disconnect();
 });
 
