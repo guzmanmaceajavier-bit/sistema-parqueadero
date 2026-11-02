@@ -289,18 +289,14 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
   if (!existente) throw new AppError("Reserva no encontrada", 404);
 
   const reserva = await prisma.$transaction(async (tx) => {
-    if (estado === "ACTIVA") {
-      if (!existente.puestoId) throw new AppError("Debe asignar un puesto antes de activar la reserva", 400);
-      if (!existente.vehiculoId) throw new AppError("Debe asignar un vehículo antes de activar la reserva", 400);
-
-      // La activación compite con entradas y otras reservas: utiliza los mismos bloqueos.
-      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
-      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-      const actual = await tx.reserva.findUnique({ where: { id: Number(id) } });
-      if (!actual || !["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) {
-        throw new AppError("La reserva ya no está disponible para activarse", 409);
-      }
-      const ahora = new Date();
+    if (existente.vehiculoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
+    const reservaActual = await tx.reserva.findUnique({ where: { id: Number(id) } });
+    if (!reservaActual || reservaActual.vehiculoId !== existente.vehiculoId || reservaActual.puestoId !== existente.puestoId) {
+      throw new AppError("La reserva cambió mientras se procesaba. Actualiza e inténtalo nuevamente.", 409);
+    }
+    if (["FINALIZADA", "CANCELADA", "NO_SHOW"].includes(reservaActual.estado)) throw new AppError("La reserva ya está cerrada", 409);
+    if (reservaActual.estado === "ACTIVA" && estado === "ACTIVA") throw new AppError("La reserva ya está activa", 409);
       if (actual.fechaInicio > ahora || (actual.fechaFin && actual.fechaFin < ahora)) {
         throw new AppError("La reserva solo puede activarse dentro de su horario vigente", 409);
       }
@@ -348,7 +344,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
           clienteId: existente.clienteId,
           vehiculoId: existente.vehiculoId,
           puestoId: existente.puestoId,
-          reservaId: existente.id,
+          reservaId: reservaActual.id,
           fechaEntrada: ahora,
         },
       });
@@ -359,7 +355,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       });
     }
 
-    if (estado === "FINALIZADA" && existente.puestoId) {
+    if (estado === "FINALIZADA" && reservaActual.puestoId) {
       const ingresoAsociado = await tx.ingreso.findFirst({ where: { reservaId: existente.id, estado: "ACTIVO" } });
       if (ingresoAsociado) {
         const fechaSalida = new Date();
@@ -377,7 +373,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       }
     }
 
-    if (["CANCELADA", "NO_SHOW"].includes(estado) && existente.puestoId) {
+    if (["CANCELADA", "NO_SHOW"].includes(estado) && reservaActual.puestoId) {
       const ingresoActivo = await tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } });
       const otraMensualidad = await tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA" } });
       const otraReserva = await tx.reserva.count({ where: { puestoId: existente.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, id: { not: Number(id) } } });
@@ -386,7 +382,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       }
     }
 
-    if (estado === "CONFIRMADA" && existente.puestoId) {
+    if (estado === "CONFIRMADA" && reservaActual.puestoId) {
       await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "RESERVADO" } });
     }
 
