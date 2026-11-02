@@ -1,6 +1,7 @@
 import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 async function siguienteNumeroPuesto(prefijo = "Puesto") {
   const pattern = `${prefijo} `;
