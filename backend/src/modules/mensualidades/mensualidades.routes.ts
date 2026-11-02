@@ -35,7 +35,7 @@ const router = express.Router();
  *       400:
  *         description: Error de validacion
  */
-router.post("/", verificarToken, validate(crearMensualidadSchema), crearMensualidad);
+router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(crearMensualidadSchema), crearMensualidad);
 
 /**
  * @swagger
@@ -103,7 +103,7 @@ router.get("/:id", verificarToken, validateIdParam, obtenerMensualidad);
  *       200:
  *         description: Mensualidad renovada
  */
-router.put("/renovar/:id", verificarToken, validateIdParam, renovarMensualidad);
+router.put("/renovar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, renovarMensualidad);
 
 /**
  * @swagger
@@ -122,8 +122,8 @@ router.put("/renovar/:id", verificarToken, validateIdParam, renovarMensualidad);
  *       200:
  *         description: Mensualidad cancelada
  */
-router.put("/cancelar/:id", verificarToken, validateIdParam, cancelarMensualidad);
-router.put("/:id", verificarToken, validateIdParam, validate(actualizarMensualidadSchema), actualizarMensualidad);
+router.put("/cancelar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, cancelarMensualidad);
+router.put("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, validate(actualizarMensualidadSchema), actualizarMensualidad);
 
 /**
  * @swagger
@@ -142,7 +142,7 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarMensualid
  *       200:
  *         description: Mensualidad eliminada
  */
-router.delete("/:id", verificarToken, validateIdParam, eliminarMensualidad);
+router.delete("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, eliminarMensualidad);
 
 /**
  * @swagger
@@ -161,7 +161,7 @@ router.delete("/:id", verificarToken, validateIdParam, eliminarMensualidad);
  *       200:
  *         description: Mensualidad cobrada
  */
-router.post("/cobrar/:id", verificarToken, validateIdParam, cobrarMensualidad);
-router.post("/generar-facturas", verificarToken, generarFacturasPendientes);
+router.post("/cobrar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, cobrarMensualidad);
+router.post("/generar-facturas", verificarToken, verificarRol("admin", "supervisor"), generarFacturasPendientes);
 
 export default router;
