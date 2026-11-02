@@ -155,10 +155,42 @@ export default function Reportes() {
             <FileText className="w-4 h-4" /> PDF
           </button>
           <ExportButton
-            data={(d.facturas || []).map(f => ({ Numero: f.numero, Cliente: f.cliente || "—", Placa: f.placa || "—", Valor: $(f.valor), Metodo: f.metodoPago || "—", Fecha: formatDate(f.createdAt) }))}
+            data={(d.facturas || []).map(f => ({
+              Numero: f.numero,
+              Cliente: f.cliente || "—",
+              Placa: f.placa || "—",
+              Valor: $(f.valor),
+              Estado: f.estadoPago || "Pendiente",
+              Metodo: f.metodoPago || "—",
+              Fecha: formatDate(f.createdAt),
+            }))}
             filename={`facturas-${fechaInicio}-al-${fechaFin}`}
             title="Facturas"
-            columns={[{ key: 'Numero', label: '#' }, { key: 'Cliente', label: 'Cliente' }, { key: 'Placa', label: 'Placa' }, { key: 'Valor', label: 'Valor' }, { key: 'Metodo', label: 'Método' }, { key: 'Fecha', label: 'Fecha' }]}
+            columns={[
+              { key: "Numero", label: "#" },
+              { key: "Cliente", label: "Cliente" },
+              { key: "Placa", label: "Placa" },
+              { key: "Valor", label: "Valor" },
+              { key: "Estado", label: "Estado" },
+              { key: "Metodo", label: "Método" },
+              { key: "Fecha", label: "Fecha" },
+            ]}
+          />
+          <ExportButton
+            data={(d.gastos || []).map(g => ({
+              Concepto: g.concepto,
+              Categoria: g.categoria || "—",
+              Valor: $(g.valor),
+              Fecha: formatDate(g.fecha),
+            }))}
+            filename={`gastos-${fechaInicio}-al-${fechaFin}`}
+            title="Gastos"
+            columns={[
+              { key: "Concepto", label: "Concepto" },
+              { key: "Categoria", label: "Categoría" },
+              { key: "Valor", label: "Valor" },
+              { key: "Fecha", label: "Fecha" },
+            ]}
           />
         </div>
       </div>
