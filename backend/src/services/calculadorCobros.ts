@@ -106,9 +106,10 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   // El máximo diario se aplica por cada bloque de 24 horas facturables.
   function aplicarTopeDiario(valor: number): number {
-    if (minutosFacturables <= 0 || tarifa.tarifaMaximaDiaria == null || tarifa.tarifaMaximaDiaria <= 0) return valor;
+    const maximoDiario = tarifa?.tarifaMaximaDiaria;
+    if (minutosFacturables <= 0 || maximoDiario == null || maximoDiario <= 0) return valor;
     const bloquesDiarios = Math.ceil(minutosFacturables / 1440);
-    return Math.min(valor, tarifa.tarifaMaximaDiaria * bloquesDiarios);
+    return Math.min(valor, maximoDiario * bloquesDiarios);
   }
 
   let detalle = [];
