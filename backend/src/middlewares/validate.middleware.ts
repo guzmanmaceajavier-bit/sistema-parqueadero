@@ -1,15 +1,21 @@
-export const validate = (schema) => (req, res, next) => {
+import type { RequestHandler } from "express";
+import { ZodError, type ZodTypeAny } from "zod";
+
+export const validate = (schema: ZodTypeAny): RequestHandler => (req, res, next) => {
   try {
     req.body = schema.parse(req.body);
-    next();
+    return next();
   } catch (error) {
-    if (error.name === "ZodError") {
+    if (error instanceof ZodError) {
       return res.status(400).json({
         ok: false,
         message: "Error de validación",
-        errors: error.errors.map(e => ({ field: e.path.join("."), message: e.message })),
+        errors: error.issues.map(issue => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
       });
     }
-    next(error);
+    return next(error);
   }
 };
