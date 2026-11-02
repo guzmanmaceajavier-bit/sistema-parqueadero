@@ -12,7 +12,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!concepto) throw new AppError("Concepto es requerido", 400);
 
-  await getCajaOError(sucursalId);
+  await getCajaOError(sucursalId ?? null);
 
   const [gasto] = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
