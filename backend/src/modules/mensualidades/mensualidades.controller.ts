@@ -233,20 +233,34 @@ export const eliminarMensualidad = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const existente = await prisma.mensualidad.findUnique({
     where: { id: Number(id) },
-    include: { facturas: { select: { numero: true } } },
+    include: { facturas: { select: { id: true, numero: true } } },
   });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "ACTIVA") throw new AppError("No se puede eliminar una mensualidad activa. Cáncela primero.", 400);
-
-  const facturaIds = existente.facturas.map(f => f.id);
+  if (existente.facturas.length > 0) {
+    throw new AppError("Esta mensualidad tiene facturas emitidas. No se puede eliminar porque forma parte del historial financiero; utiliza la cancelación para conservar la auditoría.", 409);
+  }
 
   await prisma.$transaction(async (tx) => {
-    if (existente.puestoId) await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "LIBRE" } });
-    await tx.cajaMovimiento.deleteMany({ where: { facturaId: { in: facturaIds } } });
-    await tx.factura.deleteMany({ where: { mensualidadId: Number(id) } });
     await tx.mensualidad.delete({ where: { id: Number(id) } });
+    if (existente.puestoId) {
+      const ahora = new Date();
+      const [ingresos, mensualidades, reservas] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: existente.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({ where: { puestoId: existente.puestoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+        tx.reserva.count({
+          where: {
+            puestoId: existente.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA"] },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+        }),
+      ]);
+      const estadoPuesto = ingresos > 0 ? "OCUPADO" : mensualidades + reservas > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: estadoPuesto } });
+    }
   });
-  await registrarMovimiento("MENSUALIDADES", "ELIMINAR", `Mensualidad #${id} eliminada${facturaIds.length ? ` (${facturaIds.length} factura(s) anulada(s))` : ""}`, req.usuario?.usuario);
+  await registrarMovimiento("MENSUALIDADES", "ELIMINAR", `Mensualidad #${id} eliminada`, req.usuario?.usuario);
   res.json({ ok: true, message: "Mensualidad eliminada correctamente" });
 });
 
