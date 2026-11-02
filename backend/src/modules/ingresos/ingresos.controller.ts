@@ -522,7 +522,20 @@ export const simularCobro = asyncHandler(async (req, res) => {
 
   if (cobro.error) throw new AppError(cobro.error, 400);
 
-  res.json({ ok: true, cobro, ingreso });
+  const saldoDisponible = Math.max(0, ingreso.cliente?.saldo ?? 0);
+  const saldoUsado = Math.min(saldoDisponible, cobro.total);
+  const totalPorPagar = Math.max(0, cobro.total - saldoUsado);
+
+  res.json({
+    ok: true,
+    cobro: {
+      ...cobro,
+      totalBruto: cobro.total,
+      saldoUsado,
+      total: totalPorPagar,
+    },
+    ingreso,
+  });
 });
 
 export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
