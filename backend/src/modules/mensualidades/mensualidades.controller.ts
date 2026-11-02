@@ -21,8 +21,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
 
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo.sucursalId ?? sucursalId ?? null;
-  if (vehiculo.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la mensualidad a un vehículo de otra sucursal", 403);
+  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
   if (vehiculo.bloqueado) throw new AppError("El vehículo está bloqueado", 400);
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
@@ -52,7 +51,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   }
   const sucursalRegistro = sucursalId ?? vehiculo.sucursalId ?? puesto?.sucursalId ?? null;
 
-  const ingresoActivo = await prisma.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
+  const ingresoActivo = await prisma.ingreso.findFirst({ where: { vehiculoId: vid, vehiculo: { sucursalId: sucursalRegistro }, estado: "ACTIVO" } });
   if (ingresoActivo && (!puesto || ingresoActivo.puestoId !== puesto.id)) {
     throw new AppError("El vehículo ya tiene un ingreso activo en otro puesto", 400);
   }
@@ -65,14 +64,14 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     if (puesto) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puesto.id}::integer)) AS advisory_lock`;
     const ahora = new Date();
     const [ingresoActual, mensualidadVehiculo, reservaVehiculo, conflictosPuesto] = await Promise.all([
-      tx.ingreso.findFirst({ where: { vehiculoId: vid, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
+      tx.ingreso.findFirst({ where: { vehiculoId: vid, vehiculo: { sucursalId: sucursalRegistro }, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
       tx.mensualidad.findFirst({
-        where: { vehiculoId: vid, estado: "ACTIVA", fechaInicio: { lte: fin }, fechaFin: { gte: inicio } },
+        where: { vehiculoId: vid, sucursalId: sucursalRegistro, estado: "ACTIVA", fechaInicio: { lte: fin }, fechaFin: { gte: inicio } },
         select: { id: true },
       }),
       tx.reserva.findFirst({
         where: {
-          vehiculoId: vid, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          vehiculoId: vid, sucursalId: sucursalRegistro, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
           fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }],
         },
         select: { id: true },
@@ -197,10 +196,11 @@ export const obtenerVencidas = asyncHandler(async (req, res) => {
 export const renovarMensualidad = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const id = Number(req.params.id);
-  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
+  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { vehiculo: { select: { sucursalId: true } } } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
 
+  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo.sucursalId ?? sucursalId ?? null;
   const ahora = new Date();
   // El nuevo periodo comienza después del anterior; se conserva la mensualidad histórica y sus facturas.
   const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin.getTime() + 1) : ahora;
@@ -223,11 +223,11 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
 
     const [otraMensualidad, reserva, ingreso] = await Promise.all([
       tx.mensualidad.findFirst({
-        where: { id: { not: id }, vehiculoId: actual.vehiculoId, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
+        where: { id: { not: id }, vehiculoId: actual.vehiculoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
         select: { id: true },
       }),
       tx.reserva.findFirst({
-        where: { vehiculoId: actual.vehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+        where: { vehiculoId: actual.vehiculoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
           fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
         select: { id: true },
       }),
@@ -239,15 +239,15 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
     }
 
     if (actual.puestoId) {
-      const puestoActual = await tx.puesto.findUnique({ where: { id: actual.puestoId } });
+      const puestoActual = await tx.puesto.findFirst({ where: { id: actual.puestoId, sucursalId: sucursalOrigen } });
       if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible para renovar", 409);
       const [otraMensualidadPuesto, reservaPuesto, ingresoEnPuesto] = await Promise.all([
         tx.mensualidad.findFirst({
-          where: { id: { not: id }, puestoId: actual.puestoId, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
+          where: { id: { not: id }, puestoId: actual.puestoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
           select: { id: true },
         }),
         tx.reserva.findFirst({
-          where: { puestoId: actual.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+          where: { puestoId: actual.puestoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
             fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
           select: { id: true },
         }),
@@ -296,6 +296,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const { vehiculoId, planId, puestoId, fechaInicio, fechaFin, valor, observacion } = req.body;
   const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { facturas: { select: { id: true } }, vehiculo: { select: { sucursalId: true } } } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
+  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo.sucursalId ?? sucursalId ?? null;
   if (existente.estado === "CANCELADA") throw new AppError("No se puede editar una mensualidad cancelada", 409);
 
   const vid = vehiculoId !== undefined ? (vehiculoId ? Number(vehiculoId) : existente.vehiculoId) : existente.vehiculoId;
@@ -310,7 +311,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
 
   const vehiculo = await prisma.vehiculo.findUnique({ where: { id: vid } });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-  if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
+  if (vehiculo.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la mensualidad a un vehículo de otra sucursal", 403);
   if (vehiculo.clienteId !== existente.clienteId) throw new AppError("El vehículo no pertenece al cliente de esta mensualidad", 400);
   if (vehiculo.bloqueado || !vehiculo.estado) throw new AppError("El vehículo está bloqueado o inactivo", 400);
 
