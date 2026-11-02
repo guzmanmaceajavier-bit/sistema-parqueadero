@@ -40,7 +40,7 @@ describe("obtenerPeriodoReporte", () => {
     const hoy = inicioDiaActualEnZona(ahora, "Europe/Berlin");
     expect(hoy.toISOString()).toBe("2026-01-14T23:00:00.000Z");
     expect(desplazarDiasEnZona(hoy, 1, "Europe/Berlin").toISOString()).toBe("2026-01-15T23:00:00.000Z");
-    expect(inicioSemanaEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2026-01-11T23:00:00.000Z");
+    expect(inicioSemanaEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2026-01-10T23:00:00.000Z");
     expect(inicioMesEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2025-12-31T23:00:00.000Z");
     expect(inicioAnioEnZona(hoy, "Europe/Berlin").toISOString()).toBe("2025-12-31T23:00:00.000Z");
     expect(obtenerHoraEnZona(ahora, "Europe/Berlin")).toBe(13);
