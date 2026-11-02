@@ -10,6 +10,8 @@ let puestosIds: number[] = [];
 let usuariosIds: number[] = [];
 let cajasIds: number[] = [];
 let gastosIds: number[] = [];
+let reservasIds: number[] = [];
+let mensualidadesIds: number[] = [];
 
 beforeEach(async () => {
   const suffix = `it-${process.pid}-${Date.now()}-${++fixtureCounter}`;
@@ -44,6 +46,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (reservasIds.length) await prisma.reserva.deleteMany({ where: { id: { in: reservasIds } } });
+  if (mensualidadesIds.length) await prisma.mensualidad.deleteMany({ where: { id: { in: mensualidadesIds } } });
   if (vehiculoId) {
     await prisma.ingreso.deleteMany({ where: { vehiculoId: { in: vehiculosIds } } });
     await prisma.vehiculo.deleteMany({ where: { id: { in: vehiculosIds } } });
@@ -266,5 +270,62 @@ describe("Concurrencia de caja y gastos recurrentes (PostgreSQL real)", () => {
     });
     expect(movimiento?.tipo).toBe("EGRESO");
     expect(movimiento?.monto).toBe(12000);
+  });
+});
+
+
+describe("Concurrencia de reservas y mensualidades (PostgreSQL real)", () => {
+  it("impide asignar simultáneamente el mismo vehículo y puesto a reserva y mensualidad", async () => {
+    const inicio = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const fin = new Date(inicio.getTime() + 24 * 60 * 60 * 1000);
+
+    const intentarReserva = () => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+      const [reserva, mensualidad] = await Promise.all([
+        tx.reserva.findFirst({
+          where: { vehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+          select: { id: true },
+        }),
+        tx.mensualidad.findFirst({
+          where: { vehiculoId, estado: "ACTIVA", fechaInicio: { lt: fin }, fechaFin: { gte: inicio } },
+          select: { id: true },
+        }),
+      ]);
+      if (reserva || mensualidad) return false;
+      const creada = await tx.reserva.create({
+        data: { clienteId, vehiculoId, puestoId, fechaInicio: inicio, fechaFin: fin, estado: "PENDIENTE" },
+      });
+      reservasIds.push(creada.id);
+      return true;
+    });
+
+    const intentarMensualidad = () => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+      const [reserva, mensualidad] = await Promise.all([
+        tx.reserva.findFirst({
+          where: { vehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: fin }, OR: [{ fechaFin: null }, { fechaFin: { gte: inicio } }] },
+          select: { id: true },
+        }),
+        tx.mensualidad.findFirst({
+          where: { vehiculoId, estado: "ACTIVA", fechaInicio: { lt: fin }, fechaFin: { gte: inicio } },
+          select: { id: true },
+        }),
+      ]);
+      if (reserva || mensualidad) return false;
+      const creada = await tx.mensualidad.create({
+        data: { clienteId, vehiculoId, puestoId, fechaInicio: inicio, fechaFin: fin, valor: 100000, estado: "ACTIVA" },
+      });
+      mensualidadesIds.push(creada.id);
+      return true;
+    });
+
+    const resultados = await Promise.all([intentarReserva(), intentarMensualidad()]);
+    expect(resultados.filter(Boolean)).toHaveLength(1);
+    expect(await prisma.reserva.count({ where: { vehiculoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }) +
+      await prisma.mensualidad.count({ where: { vehiculoId, estado: "ACTIVA", fechaInicio: { lt: fin }, fechaFin: { gte: inicio } } })).toBe(1);
   });
 });
