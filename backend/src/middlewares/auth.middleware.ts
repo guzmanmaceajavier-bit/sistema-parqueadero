@@ -20,11 +20,11 @@ export const verificarToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.usuario = decoded;
+    req.usuario = { ...decoded, rol: user.rol, sucursalId: user.sucursalId };
 
     const user = await prisma.usuario.findUnique({
       where: { id: decoded.id },
-      select: { tokenVersion: true, estado: true },
+      select: { tokenVersion: true, estado: true, rol: true, sucursalId: true },
     });
 
     if (!user) {
