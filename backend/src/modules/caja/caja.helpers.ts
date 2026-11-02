@@ -14,7 +14,7 @@ export async function calcularTotalesHelper(cajaId: number, db: { cajaMovimiento
   for (const m of movs) {
     if (m.tipo === "INGRESO") {
       totalIngresos += m.monto;
-      const metodo = m.metodoPago || "otros";
+      const metodo = String(m.metodoPago || "efectivo").trim().toLowerCase();
       if (porMetodo[metodo] !== undefined) porMetodo[metodo] += m.monto;
       else porMetodo.otros += m.monto;
     } else if (m.tipo === "EGRESO") {
