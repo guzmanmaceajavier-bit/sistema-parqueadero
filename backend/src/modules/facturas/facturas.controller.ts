@@ -123,11 +123,11 @@ export const enviarWhatsapp = asyncHandler(async (req, res) => {
   ]);
   if (!factura) throw new AppError("Factura no encontrada", 404);
 
-  const ref = factura.origen === "MENSUALIDAD" ? factura.mensualidad : factura.ingreso;
+  const ref: any = factura.origen === "MENSUALIDAD" ? factura.mensualidad : factura.ingreso;
   const telefono = ref?.cliente?.telefono;
   if (!telefono) throw new AppError("Cliente sin teléfono", 400);
 
-  const vehiculo = ref?.vehiculo || {};
+  const vehiculo: any = ref?.vehiculo || {};
   const entrada = ref?.fechaEntrada ? new Date(ref.fechaEntrada).toLocaleString("es-CO") : "";
   const salida = ref?.fechaSalida ? new Date(ref.fechaSalida).toLocaleString("es-CO") : "";
   const nombreParqueadero = config?.nombreParqueadero || "Parqueadero";
