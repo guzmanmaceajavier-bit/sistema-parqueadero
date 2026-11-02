@@ -22,9 +22,10 @@ async function asegurarSecuencia(prefijo: string): Promise<string> {
 export async function generarNumeroFactura(prefijo = "FACT"): Promise<string> {
   const limpio = sanitizarPrefijo(prefijo);
   const seqName = await asegurarSecuencia(limpio);
-  const [result] = await prisma.$queryRawUnsafe(
-    `SELECT nextval('"${seqName}"') as contador`
+  const rows = await prisma.$queryRawUnsafe<Array<{ contador: bigint | number | string }>>(
+    `SELECT nextval('"\${seqName}"') as contador`
   );
-  const contador = Number((result as Record<string, unknown>).contador);
+  const [result] = rows;
+  const contador = Number(result?.contador ?? 0);
   return `${limpio}-${String(contador).padStart(6, "0")}`;
 }
