@@ -147,8 +147,12 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     if (mensualidadActual?.puestoId && Number(puestoId) !== mensualidadActual.puestoId) {
       throw new AppError("El vehículo tiene un puesto asignado por su mensualidad. Actualiza la disponibilidad.", 409);
     }
-    if (reservaActual && mensualidadActual) {
-      throw new AppError("El vehículo tiene una reserva y una mensualidad con puesto asignado simultáneamente. Revisa sus asignaciones antes de ingresarlo.", 409);
+    if (
+      reservaActual?.puestoId &&
+      mensualidadActual?.puestoId &&
+      reservaActual.puestoId !== mensualidadActual.puestoId
+    ) {
+      throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
     }
     reservaVinculada = reservaActual;
     planDetectado = mensualidadActual;
