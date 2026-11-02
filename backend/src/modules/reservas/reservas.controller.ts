@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import type { Prisma } from "@prisma/client";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
@@ -6,12 +7,12 @@ import { emitirEvento } from "../../services/socket.js";
 
 const ESTADOS = ["PENDIENTE", "CONFIRMADA", "ACTIVA", "FINALIZADA", "CANCELADA", "NO_SHOW"];
 
-async function ocuparPuesto(puestoId, usuario) {
+async function ocuparPuesto(puestoId: number, usuario?: string) {
   await prisma.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "RESERVADO" } });
   await registrarMovimiento("PUESTOS", "RESERVAR", `Puesto #${puestoId} reservado`, usuario);
 }
 
-async function liberarPuesto(puestoId, usuario, motivo = "liberado") {
+async function liberarPuesto(puestoId: number, usuario?: string, motivo = "liberado") {
   await prisma.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "LIBRE" } });
   await registrarMovimiento("PUESTOS", "LIBERAR", `Puesto #${puestoId} ${motivo}`, usuario);
 }
@@ -114,16 +115,16 @@ export const crearReserva = asyncHandler(async (req, res) => {
 
 export const obtenerReservas = asyncHandler(async (req, res) => {
   const { page, limit, estado, clienteId, puestoId, desde, hasta, q } = req.query;
-  const where = {};
-  if (estado) where.estado = estado;
-  if (clienteId) where.clienteId = Number(clienteId);
-  if (puestoId) where.puestoId = Number(puestoId);
-  if (desde || hasta) {
+  const where: Prisma.ReservaWhereInput = {};
+  if (typeof estado === "string") where.estado = estado as Prisma.EnumEstadoReservaFilter["equals"];
+  if (typeof clienteId === "string") where.clienteId = Number(clienteId);
+  if (typeof puestoId === "string") where.puestoId = Number(puestoId);
+  if (typeof desde === "string" || typeof hasta === "string") {
     where.fechaInicio = {};
-    if (desde) where.fechaInicio.gte = new Date(desde);
-    if (hasta) where.fechaInicio.lte = new Date(hasta);
+    if (typeof desde === "string") where.fechaInicio.gte = new Date(desde);
+    if (typeof hasta === "string") where.fechaInicio.lte = new Date(hasta);
   }
-  if (q) {
+  if (typeof q === "string") {
     where.OR = [
       { cliente: { nombres: { contains: q, mode: "insensitive" } } },
       { cliente: { apellidos: { contains: q, mode: "insensitive" } } },
@@ -346,7 +347,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       await tx.puesto.update({ where: { id: existente.puestoId }, data: { estado: "RESERVADO" } });
     }
 
-    return tx.reserva.findUnique({
+    return tx.reserva.findUniqueOrThrow({
       where: { id: Number(id) },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
