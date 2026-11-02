@@ -78,8 +78,8 @@ export const crearReserva = asyncHandler(async (req, res) => {
 
   const reserva = await prisma.$transaction(async (tx) => {
     // Serializa la reserva por vehículo y puesto para evitar solapamientos simultáneos.
-    if (vid) await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)`;
-    if (pid) await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${pid}::integer)`;
+    if (vid) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
+    if (pid) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${pid}::integer)) AS advisory_lock`;
 
     if (vid) {
       const reservaVehiculo = await tx.reserva.findFirst({
@@ -250,8 +250,8 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
       if (!existente.vehiculoId) throw new AppError("Debe asignar un vehículo antes de activar la reserva", 400);
 
       // La activación compite con entradas y otras reservas: utiliza los mismos bloqueos.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
       const actual = await tx.reserva.findUnique({ where: { id: Number(id) } });
       if (!actual || !["PENDIENTE", "CONFIRMADA"].includes(actual.estado)) {
         throw new AppError("La reserva ya no está disponible para activarse", 409);
