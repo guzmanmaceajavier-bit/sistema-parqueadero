@@ -1,5 +1,6 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
+import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearReservaSchema, actualizarReservaSchema } from "../../schemas/reserva.schema.js";
@@ -43,7 +44,7 @@ const router = express.Router();
  *       400:
  *         description: Error de validacion
  */
-router.post("/", verificarToken, validate(crearReservaSchema), crearReserva);
+router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(crearReservaSchema), crearReserva);
 
 /**
  * @swagger
@@ -79,7 +80,7 @@ router.get("/", verificarToken, obtenerReservas);
  *         description: Reserva no encontrada
  */
 router.get("/:id", verificarToken, validateIdParam, obtenerReserva);
-router.put("/:id", verificarToken, validateIdParam, validate(actualizarReservaSchema), actualizarReserva);
+router.put("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, validate(actualizarReservaSchema), actualizarReserva);
 
 /**
  * @swagger
@@ -98,7 +99,7 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarReservaSc
  *       200:
  *         description: Estado actualizado
  */
-router.put("/:id/estado", verificarToken, validateIdParam, cambiarEstado);
+router.put("/:id/estado", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, cambiarEstado);
 
 /**
  * @swagger
@@ -117,7 +118,7 @@ router.put("/:id/estado", verificarToken, validateIdParam, cambiarEstado);
  *       200:
  *         description: Reserva cancelada
  */
-router.put("/cancelar/:id", verificarToken, validateIdParam, cancelarReserva);
+router.put("/cancelar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, cancelarReserva);
 
 /**
  * @swagger
@@ -136,7 +137,7 @@ router.put("/cancelar/:id", verificarToken, validateIdParam, cancelarReserva);
  *       200:
  *         description: Reserva eliminada
  */
-router.delete("/:id", verificarToken, validateIdParam, eliminarReserva);
+router.delete("/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, eliminarReserva);
 
 /**
  * @swagger
@@ -150,6 +151,6 @@ router.delete("/:id", verificarToken, validateIdParam, eliminarReserva);
  *       200:
  *         description: Reservas vencidas liberadas
  */
-router.post("/liberar-vencidas", verificarToken, liberarReservasVencidas);
+router.post("/liberar-vencidas", verificarToken, verificarRol("admin", "supervisor"), liberarReservasVencidas);
 
 export default router;
