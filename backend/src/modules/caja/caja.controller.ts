@@ -15,14 +15,16 @@ export const abrirCaja = asyncHandler(async (req, res) => {
     const abierta = await tx.caja.findFirst({ where: { estado: "ABIERTA" } });
     if (abierta) throw new AppError("Ya hay una caja abierta", 400);
 
-    const usuario = await tx.usuario.findUnique({ where: { id: req.usuario.id } });
+    const usuarioId = req.usuario?.id;
+    if (!usuarioId) throw new AppError("Sesión de usuario no válida", 401);
+    const usuario = await tx.usuario.findUnique({ where: { id: usuarioId } });
     if (!usuario) throw new AppError("Usuario no encontrado", 404);
 
     const valida = await bcrypt.compare(password, usuario.password);
     if (!valida) throw new AppError("Contraseña incorrecta", 401);
 
     return tx.caja.create({
-      data: { apertura: Number(apertura), observacion, usuarioId: req.usuario.id },
+      data: { apertura: Number(apertura), observacion, usuarioId },
     });
   });
 
@@ -186,7 +188,7 @@ export const obtenerMovimientosCaja = asyncHandler(async (req, res) => {
   const caja = await prisma.caja.findUnique({ where: { id: Number(id) } });
   if (!caja) throw new AppError("Caja no encontrada", 404);
 
-  const where = { cajaId: caja.id };
+  const where: any = { cajaId: caja.id };
   if (tipo) where.tipo = tipo;
   if (metodoPago) where.metodoPago = metodoPago;
   if (q) {
