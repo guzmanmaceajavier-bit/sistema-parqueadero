@@ -506,8 +506,8 @@ export const simularCobro = asyncHandler(async (req, res) => {
   const { ingresoId, ticketExtraviado } = req.body;
   if (!ingresoId) throw new AppError("ingresoId es requerido", 400);
 
-  const ingreso = await prisma.ingreso.findUnique({
-    where: { id: Number(ingresoId) },
+  const ingreso = await prisma.ingreso.findFirst({
+    where: { id: Number(ingresoId), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
     include: { vehiculo: true, cliente: true, puesto: true, facturas: true },
   });
   if (!ingreso) throw new AppError("Ingreso no encontrado", 404);
