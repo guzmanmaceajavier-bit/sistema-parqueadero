@@ -46,7 +46,7 @@ describe("calcularCobro", () => {
     });
 
     expect(prismaMock.tarifa.findFirst).toHaveBeenCalledWith({ where: { id: 7, OR: [{ sucursalId: null }, { sucursalId: null }] } });
-    expect(prismaMock.tarifa.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.tarifa.findUnique).not.toHaveBeenCalled();
     expect(result.total).toBe(12000);
   });
 
@@ -93,7 +93,7 @@ describe("calcularCobro", () => {
     });
 
     expect(result.error).toContain("anterior");
-    expect(prismaMock.tarifa.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.tarifa.findFirst).not.toHaveBeenCalled();
   });
 
   it("normaliza modalidades guardadas en mayúsculas y calcula la unidad correcta", async () => {
