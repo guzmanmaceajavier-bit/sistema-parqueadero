@@ -90,7 +90,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
 
     sucursalId
       ? prisma.$queryRawUnsafe(
-          `SELECT v.placa, v.tipo, v.color, c.nombres as cliente, COUNT(*) as total
+          `SELECT v.placa, v.tipo, v.color, c.nombres as cliente, COUNT(*)::int as total
            FROM "Ingreso" i
            JOIN "Vehiculo" v ON v.id = i."vehiculoId"
            LEFT JOIN "Cliente" c ON c.id = v."clienteId"
@@ -100,7 +100,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
           sucursalId
         ).catch(() => [])
       : prisma.$queryRawUnsafe(
-          `SELECT v.placa, v.tipo, v.color, c.nombres as cliente, COUNT(*) as total
+          `SELECT v.placa, v.tipo, v.color, c.nombres as cliente, COUNT(*)::int as total
            FROM "Ingreso" i
            JOIN "Vehiculo" v ON v.id = i."vehiculoId"
            LEFT JOIN "Cliente" c ON c.id = v."clienteId"
