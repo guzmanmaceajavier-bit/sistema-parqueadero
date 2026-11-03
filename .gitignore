@@ -60,7 +60,10 @@ coverage/
 .docker/
 
 # ─── Temp / Migrations ───
+# Se ignoran los .sql sueltos (dumps, scripts temporales),
+# pero las migraciones de Prisma SIEMPRE deben versionarse.
 *.sql
+!backend/prisma/migrations/**/*.sql
 *.dump
 *.backup
 backups/

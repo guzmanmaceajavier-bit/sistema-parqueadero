@@ -38,12 +38,17 @@ cd backend
 npm install
 # backend/.env mínimo:
 # DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_db"
+# SHADOW_DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_shadow"  (solo para `migrate dev`)
 # JWT_SECRET=un-secreto-largo-generado-con-crypto
 # ADMIN_PASSWORD=clave-inicial-del-admin
 # CORS_ORIGINS=https://tu-dominio.com
-npx prisma db push
+npm run migrate:deploy   # aplica las migraciones (NO usar `db push`)
 npm run dev
 ```
+
+> La base de datos se versiona con **migraciones** de Prisma, no con `db push`.
+> Para desarrollo local, cuando cambies `schema.prisma`, usa `npx prisma migrate dev`.
+> Nunca uses `db push` contra producción.
 
 ```bash
 # 2. Frontend (http://localhost:5173), en otra consola

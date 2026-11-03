@@ -200,3 +200,44 @@ Antes de modificar archivos:
 - Presenta un plan de trabajo antes de realizar cambios importantes.
 
 El objetivo es terminar el proyecto de forma segura, conservar todos los datos y dejar un proceso de despliegue reproducible.
+
+## 11. Sesión de reconciliación de migraciones (completada)
+
+Se auditaron las 18 migraciones vs schema.prisma y se detectó que el historial
+solo describía el esquema inicial (todo lo posterior se aplicó con `db push`).
+
+Cambios preparados y verificados (sin tocar producción en la auditoría):
+
+- `20261103000000_reconciliacion_esquema`: migración idempotente que lleva
+  cualquier base al estado de schema.prisma (tablas CajaMovimiento,
+  PushSubscription y Sucursal, columnas, FKs e índices faltantes). Usa
+  `IF NOT EXISTS` / `IF EXISTS` y FKs guardadas en bloques `DO`.
+- `20261103000100_cajamovimiento_anulacion`: repone en producción las columnas
+  `anulado/anuladoEn/anuladoPor/motivoAnulacion` y el índice
+  `CajaMovimiento_cajaId_anulado_idx`.
+- `20261019000000_vehiculo_plan_tarifa`: reescrita de forma idempotente para
+  que `migrate deploy` la registre en producción sin error (sus objetos ya
+  existían físicamente).
+- `.gitignore`: `!backend/prisma/migrations/**/*.sql` (antes las migraciones
+  nuevas quedaban ignoradas por `*.sql`).
+- `backend/package.json`: `start` ejecuta `prisma migrate deploy` antes de
+  arrancar; scripts `migrate:status/deploy/diff` y `start:only`.
+- `README.md` y `backend/prisma/MIGRATIONS.md`: instalación y estrategia
+  documentadas (sin `db push`).
+
+Verificaciones aprobadas: instalación nueva reproduce schema.prisma exacto;
+simulación de producción (17 migraciones + faltantes) aplica limpio con
+`migrate deploy`; typecheck OK; pruebas 91/91.
+
+## 12. Despliegue a producción (Neon) — procedimiento
+
+1. Respaldo previo con `pg_dump` (archivo local ignorado por Git).
+2. Verificación read-only del estado (`migrate status` con
+   PRODUCTION_DATABASE_URL).
+3. `migrate deploy` apuntando a producción (conexión directa, no pooled).
+4. Verificación final: status "up to date", columnas e índice presentes,
+   `migrate diff` vacío.
+5. Reversión: restaurar el respaldo pg_dump.
+
+Reglas vigentes: nunca `db push` ni `migrate reset` contra producción; no usar
+la base de producción como shadow database; no subir `.env` ni credenciales.
