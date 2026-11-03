@@ -20,6 +20,7 @@ const ESTADOS_CLIENTE = [
   { value: "VENCIDO", label: "Vencido", bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-700 dark:text-red-400", border: "border-red-200 dark:border-red-800", dot: "bg-red-500" },
   { value: "SUSPENDIDO", label: "Suspendido", bg: "bg-slate-100 dark:bg-slate-700", text: "text-slate-600 dark:text-slate-300", border: "border-slate-300 dark:border-slate-600", dot: "bg-slate-400" },
   { value: "MOROSO", label: "Moroso", bg: "bg-rose-50 dark:bg-rose-900/20", text: "text-rose-700 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800", dot: "bg-rose-500" },
+  { value: "RETIRADO", label: "Retirado", bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-500 dark:text-slate-400", border: "border-slate-300 dark:border-slate-700", dot: "bg-slate-500" },
 ];
 
 const TIPOS_VEHICULO_BASE = [];
@@ -457,13 +458,14 @@ export default function Clientes() {
     setMostrarModal(true);
   };
 
-  const eliminarCliente = async (id) => {
+  const eliminarCliente = async (id, forzar = false) => {
     try {
-      const res = await api.delete(`/clientes/${id}`);
+      const res = await api.delete(`/clientes/${id}`, forzar ? { data: { forzar: true } } : undefined);
       mostrarToast(res.data.message, "success");
+      setConfirm(c => ({ ...c, abierto: false }));
       cargarClientes();
     } catch (error) {
-      mostrarToast(error.response?.data?.message || "Error al eliminar cliente", "error");
+      mostrarToast(error.response?.data?.message || "Error al cerrar la cuenta", "error");
     }
   };
 
@@ -481,8 +483,43 @@ export default function Clientes() {
     } finally { setRecargando(false); }
   };
 
-  const confirmarEliminar = (id) => {
-    setConfirm({ abierto: true, titulo: "Eliminar cliente", mensaje: "Se suspenderá el cliente y se bloquearán sus vehículos. El historial se conserva y la acción no se puede deshacer.", onConfirm: () => eliminarCliente(id) });
+  const confirmarEliminar = async (id) => {
+    const cliente = clientes.find(c => c.id === id);
+    const nombre = cliente ? `${cliente.nombres} ${cliente.apellidos}` : "este cliente";
+    let bloqueos = null;
+    try {
+      const res = await api.get(`/clientes/${id}/bloqueos`);
+      bloqueos = res.data;
+    } catch { /* si falla el chequeo, el DELETE informará */ }
+
+    // Vehículo dentro: no se puede cerrar sin cobrar la salida.
+    if (bloqueos && bloqueos.ingresos?.length > 0) {
+      const placas = [...new Set(bloqueos.ingresos.map(i => i.vehiculo?.placa).filter(Boolean))].join(", ");
+      setConfirm({
+        abierto: true,
+        titulo: "Vehículo dentro del parqueadero",
+        mensaje: `${nombre} tiene un vehículo dentro${placas ? ` (${placas})` : ""}. Registra primero la salida con cobro en "Entradas / Salidas".`,
+        soloAceptar: true,
+        onConfirm: () => setConfirm(c => ({ ...c, abierto: false })),
+      });
+      return;
+    }
+
+    // Mensualidades / reservas: se pueden cancelar automáticamente al cerrar.
+    const pendientes = [];
+    if (bloqueos?.mensualidades?.length > 0) pendientes.push(`${bloqueos.mensualidades.length} mensualidad(es)`);
+    if (bloqueos?.reservas?.length > 0) pendientes.push(`${bloqueos.reservas.length} reserva(s)`);
+
+    const requiereForzar = pendientes.length > 0;
+    setConfirm({
+      abierto: true,
+      titulo: "Cerrar cuenta del cliente",
+      mensaje: requiereForzar
+        ? `${nombre}: se cancelarán ${pendientes.join(" y ")}, se bloquearán sus vehículos y el cliente pasará a RETIRADO. El historial se conserva.`
+        : `${nombre} pasará a RETIRADO y se bloquearán sus vehículos. El historial se conserva.`,
+      confirmLabel: requiereForzar ? "Cancelar pendientes y retirar" : "Retirar cliente",
+      onConfirm: () => eliminarCliente(id, requiereForzar),
+    });
   };
 
   const abrirNuevo = () => {
@@ -1220,7 +1257,7 @@ export default function Clientes() {
       )}
 
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
-      <ConfirmDialog abierto={confirm.abierto} titulo={confirm.titulo} mensaje={confirm.mensaje} confirmLabel="Eliminar cliente" onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, abierto: false }))} />
+      <ConfirmDialog abierto={confirm.abierto} titulo={confirm.titulo} mensaje={confirm.mensaje} confirmLabel={confirm.confirmLabel} soloAceptar={confirm.soloAceptar} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, abierto: false }))} />
       <ScrollLock cuando={mostrarModal || !!renovarCli || !!recargaCli} />
     </div>
   );

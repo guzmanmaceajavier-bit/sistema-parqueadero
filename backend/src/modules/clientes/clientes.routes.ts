@@ -1,7 +1,7 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
-import { crearCliente, obtenerClientes, obtenerCliente, actualizarCliente, eliminarCliente, perfilCliente, importarClientes, recargarSaldo } from "./clientes.controller.js";
+import { crearCliente, obtenerClientes, obtenerCliente, actualizarCliente, eliminarCliente, obtenerBloqueosCliente, perfilCliente, importarClientes, recargarSaldo } from "./clientes.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearClienteSchema, actualizarClienteSchema } from "../../schemas/cliente.schema.js";
@@ -93,6 +93,8 @@ router.put("/:id", verificarToken, validateIdParam, validate(actualizarClienteSc
  *         description: Cliente no encontrado
  */
 router.delete("/:id", verificarToken, verificarRol("admin"), validateIdParam, eliminarCliente);
+
+router.get("/:id/bloqueos", verificarToken, verificarRol("admin"), validateIdParam, obtenerBloqueosCliente);
 
 /**
  * @swagger

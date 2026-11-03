@@ -138,26 +138,123 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
   res.json({ ok: true, message: "Cliente actualizado", cliente });
 });
 
-export const eliminarCliente = asyncHandler(async (req, res) => {
+/**
+ * Consulta los bloqueos activos de un cliente (sin modificar nada).
+ * Sirve para informar al operador qué debe resolverse antes de cerrar la cuenta.
+ */
+export const obtenerBloqueosCliente = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const cliente = await prisma.cliente.findUnique({ where: { id: Number(id) } });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
 
-  const ingresosActivos = await prisma.ingreso.count({ where: { clienteId: Number(id), estado: "ACTIVO" } });
-  const mensualidadesActivas = await prisma.mensualidad.count({ where: { clienteId: Number(id), estado: "ACTIVA" } });
-  const reservasActivas = await prisma.reserva.count({ where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
+  const [ingresos, mensualidades, reservas] = await Promise.all([
+    prisma.ingreso.findMany({
+      where: { clienteId: Number(id), estado: "ACTIVO" },
+      select: { id: true, puesto: { select: { codigo: true } }, vehiculo: { select: { placa: true } }, fechaEntrada: true },
+    }),
+    prisma.mensualidad.findMany({
+      where: { clienteId: Number(id), estado: "ACTIVA" },
+      select: { id: true, plan: { select: { nombre: true } }, vehiculo: { select: { placa: true } }, fechaFin: true },
+    }),
+    prisma.reserva.findMany({
+      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
+      select: { id: true, estado: true, fechaInicio: true, puesto: { select: { codigo: true } }, vehiculo: { select: { placa: true } } },
+    }),
+  ]);
 
-  if (ingresosActivos > 0 || mensualidadesActivas > 0 || reservasActivas > 0) {
-    throw new AppError("No se puede desactivar: el cliente tiene ingresos, mensualidades o reservas activas", 400);
+  res.json({
+    ok: true,
+    puedeCerrar: ingresos.length === 0 && mensualidades.length === 0 && reservas.length === 0,
+    ingresos, mensualidades, reservas,
+  });
+});
+
+export const eliminarCliente = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const forzar = req.body?.forzar === true || req.query?.forzar === "true";
+  const cliente = await prisma.cliente.findUnique({ where: { id: Number(id) } });
+  if (!cliente) throw new AppError("Cliente no encontrado", 404);
+
+  const [ingresosActivos, mensualidadesActivas, reservasActivas] = await Promise.all([
+    prisma.ingreso.count({ where: { clienteId: Number(id), estado: "ACTIVO" } }),
+    prisma.mensualidad.count({ where: { clienteId: Number(id), estado: "ACTIVA" } }),
+    prisma.reserva.count({ where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }),
+  ]);
+
+  // Un vehículo que está DENTRO del parqueadero nunca se puede cerrar sin cobrar.
+  if (ingresosActivos > 0) {
+    throw new AppError("El cliente tiene un vehículo dentro del parqueadero. Registre la salida (con cobro) antes de cerrar la cuenta.", 400);
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.cliente.update({ where: { id: Number(id) }, data: { estado: "SUSPENDIDO", bloqueado: true } });
-    await tx.vehiculo.updateMany({ where: { clienteId: Number(id) }, data: { estado: false } });
+  const pendientes = [];
+  if (mensualidadesActivas > 0) pendientes.push(`${mensualidadesActivas} mensualidad(es)`);
+  if (reservasActivas > 0) pendientes.push(`${reservasActivas} reserva(s)`);
+
+  // Mensualidades y reservas sí se pueden cancelar automáticamente al cerrar la cuenta.
+  if (pendientes.length > 0 && !forzar) {
+    throw new AppError(
+      `Para cerrar la cuenta debe cancelar: ${pendientes.join(" y ")}. Confirme el cierre para cancelarlas automáticamente.`,
+      409,
+    );
+  }
+
+  const resultado = await prisma.$transaction(async (tx) => {
+    let canceladas = { mensualidades: 0, reservas: 0 };
+
+    if (forzar) {
+      const ms = await tx.mensualidad.updateMany({
+        where: { clienteId: Number(id), estado: "ACTIVA" },
+        data: { estado: "CANCELADA" },
+      });
+      const rs = await tx.reserva.updateMany({
+        where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
+        data: { estado: "CANCELADA" },
+      });
+      canceladas = { mensualidades: ms.count, reservas: rs.count };
+
+      // Liberar los puestos asociados a esas mensualidades/reservas si quedaron sin ocupantes.
+      const puestosAfectados = await tx.mensualidad.findMany({
+        where: { clienteId: Number(id), puestoId: { not: null } },
+        select: { puestoId: true },
+        distinct: ["puestoId"],
+      });
+      for (const { puestoId } of puestosAfectados) {
+        if (!puestoId) continue;
+        const [ing, men, res] = await Promise.all([
+          tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
+          tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA" } }),
+          tx.reserva.count({ where: { puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } }),
+        ]);
+        if (ing === 0 && men === 0 && res === 0) {
+          await tx.puesto.update({ where: { id: puestoId }, data: { estado: "LIBRE" } });
+        }
+      }
+    }
+
+    await tx.cliente.update({
+      where: { id: Number(id) },
+      data: { estado: "RETIRADO", bloqueado: true, deseaReservar: false },
+    });
+    await tx.vehiculo.updateMany({ where: { clienteId: Number(id) }, data: { estado: false, bloqueado: true } });
+
+    return canceladas;
   });
 
-  await registrarMovimiento("CLIENTES", "SUSPENDER", `Cliente ${cliente.nombres} ${cliente.apellidos} suspendido`, req.usuario?.usuario || "admin");
-  res.json({ ok: true, message: "Cliente suspendido (historial preservado)" });
+  const detalle = [
+    resultado.mensualidades ? `${resultado.mensualidades} mensualidad(es) cancelada(s)` : null,
+    resultado.reservas ? `${resultado.reservas} reserva(s) cancelada(s)` : null,
+  ].filter(Boolean).join(", ");
+
+  await registrarMovimiento(
+    "CLIENTES",
+    "RETIRAR",
+    `Cliente ${cliente.nombres} ${cliente.apellidos} retirado${detalle ? ` (${detalle})` : ""}. Historial conservado.`,
+    req.usuario?.usuario || "admin",
+  );
+  res.json({
+    ok: true,
+    message: `Cliente retirado.${detalle ? ` ${detalle}.` : ""} Historial conservado.`,
+  });
 });
 
 export const perfilCliente = asyncHandler(async (req, res) => {
