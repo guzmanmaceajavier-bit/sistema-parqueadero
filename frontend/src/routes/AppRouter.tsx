@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { useAuth } from "../context/AuthContext";
@@ -46,7 +46,7 @@ function GuestRoute() {
 
 function AppRouter() {
   return (
-    <BrowserRouter future={{ v7_relativeSplatPath: true }}>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<GuestRoute />} />
         <Route path="/forgot-password" element={<Suspense fallback={<Spinner />}><ForgotPassword /></Suspense>} />
@@ -80,7 +80,7 @@ function AppRouter() {
           </Route>
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
