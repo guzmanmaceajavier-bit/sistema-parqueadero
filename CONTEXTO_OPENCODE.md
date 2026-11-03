@@ -241,3 +241,28 @@ simulación de producción (17 migraciones + faltantes) aplica limpio con
 
 Reglas vigentes: nunca `db push` ni `migrate reset` contra producción; no usar
 la base de producción como shadow database; no subir `.env` ni credenciales.
+
+### 12.1 Ejecución real (2026-11-03) — COMPLETADA
+
+- Respaldo previo con `pg_dump` (formato custom y plano) guardado fuera del
+  repositorio, reversible con `pg_restore`.
+- Primer `migrate deploy` falló en `20261103000000_reconciliacion_esquema`
+  (42703: el índice `CajaMovimiento_cajaId_anulado_idx` se creaba antes de que
+  existiera la columna `anulado` en la tabla ya existente). La transacción se
+  revirtió: datos intactos.
+- Corrección: el índice compuesto se crea dentro de un bloque `DO` solo si la
+  columna `anulado` existe (instalaciones nuevas) y si el índice no existe. En
+  bases donde la tabla ya existe sin la columna, lo crea la migración
+  dedicada `20261103000100_cajamovimiento_anulacion` después de agregarla.
+- Re-testeo aprobado (BD desechables): instalación nueva diff vacío;
+  simulación fiel de producción (17 registradas + columnas eliminadas) aplicó
+  las 3 migraciones y dejó diff vacío.
+- Recuperación en producción: `migrate resolve --rolled-back` de la migración
+  fallida + `migrate deploy` con conexión DIRECTA (sin pooler).
+- Verificación final en producción: 20 migraciones, "Database schema is up to
+  date", columnas `anulado/anuladoEn/anuladoPor/motivoAnulacion` e índice
+  presentes, `migrate diff` vacío, datos íntegros.
+
+Pendiente operativo: desplegar este código en Render (merge a la rama que
+Render vigila) y confirmar en el log de arranque que `prisma migrate deploy`
+se ejecuta antes del servidor.

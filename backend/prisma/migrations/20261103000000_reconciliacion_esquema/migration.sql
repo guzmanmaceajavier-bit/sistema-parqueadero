@@ -168,7 +168,25 @@ CREATE TABLE IF NOT EXISTS "Sucursal" (
 
 -- ─── Índices ───
 CREATE INDEX IF NOT EXISTS "CajaMovimiento_cajaId_idx" ON "CajaMovimiento"("cajaId");
-CREATE INDEX IF NOT EXISTS "CajaMovimiento_cajaId_anulado_idx" ON "CajaMovimiento"("cajaId", "anulado");
+
+-- Este índice depende de la columna "anulado". En bases donde la tabla ya
+-- existe sin esa columna (p. ej. producción), NO debe crearse aquí: lo hará
+-- la migración 20261103000100_cajamovimiento_anulacion justo después de
+-- agregar la columna. En instalaciones nuevas la columna existe porque la
+-- tabla se acaba de crear.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'CajaMovimiento' AND column_name = 'anulado'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE tablename = 'CajaMovimiento' AND indexname = 'CajaMovimiento_cajaId_anulado_idx'
+  ) THEN
+    CREATE INDEX "CajaMovimiento_cajaId_anulado_idx" ON "CajaMovimiento"("cajaId", "anulado");
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_usuarioId_key" ON "PushSubscription"("usuarioId");
 CREATE UNIQUE INDEX IF NOT EXISTS "Ingreso_reservaId_key" ON "Ingreso"("reservaId");
 
