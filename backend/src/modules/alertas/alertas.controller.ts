@@ -5,7 +5,7 @@ import { asyncHandler } from "../../middlewares/error.middleware.js";
 type ClienteMoroso = Prisma.ClienteGetPayload<{ select: { id: true; nombres: true; apellidos: true; telefono: true } }>;
 type MensualidadAlerta = Prisma.MensualidadGetPayload<{ include: { cliente: { select: { nombres: true; apellidos: true } } } }>;
 type IngresoProlongado = Prisma.IngresoGetPayload<{ include: { vehiculo: { select: { placa: true } }; cliente: { select: { nombres: true; apellidos: true } } } }>;
-type ReservaAlerta = Prisma.ReservaGetPayload<{ include: { cliente: { select: { nombres: true; apellidos: true } }; puesto: { select: { codigo: true } } }>;
+type ReservaAlerta = Prisma.ReservaGetPayload<{ include: { cliente: { select: { nombres: true; apellidos: true } }; puesto: { select: { codigo: true } } } }>;
 
 export const obtenerAlertas = asyncHandler(async (_req, res) => {
   const hoy = new Date();

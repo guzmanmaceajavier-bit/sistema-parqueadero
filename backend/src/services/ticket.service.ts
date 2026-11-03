@@ -86,7 +86,7 @@ export function generarTicketPDF(data: TicketData): Promise<Buffer> {
     if (data.logoBase64) {
       try {
         const imgData = Buffer.from(data.logoBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-        doc.image(imgData, M, 16, { width: 40, height: 40, fit: 'contain' });
+        doc.image(imgData, M, 16, { fit: [40, 40] });
       } catch {
         doc.rect(M, 16, 40, 40).fill(PRIMARY);
         doc.font('Helvetica-Bold').fontSize(16).fillColor(WHITE)
