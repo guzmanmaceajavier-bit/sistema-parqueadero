@@ -28,21 +28,51 @@ export const generarBackup = asyncHandler(async (req, res) => {
   res.json({ ok: true, backup });
 });
 
+const RELACIONES: Record<string, string[]> = {
+  atributos: [],
+  clientes: ["vehiculos", "ingresos", "mensualidades", "reservas", "ausencias"],
+  vehiculos: ["cliente", "sucursal", "plan", "tarifa", "ingresos", "mensualidades", "reservas", "ausencias"],
+  puestos: ["sucursal", "ingresos", "mensualidades", "reservas"],
+  ingresos: ["cliente", "vehiculo", "puesto", "facturas", "reserva"],
+  mensualidades: ["cliente", "vehiculo", "plan", "puesto", "facturas", "sucursal"],
+  reservas: ["cliente", "vehiculo", "puesto", "ingreso", "sucursal"],
+  facturas: ["ingreso", "mensualidad", "cajaMovimientos", "sucursal"],
+  caja: ["movimientos", "usuario", "sucursal"],
+  movimientos: ["factura", "gasto", "caja"],
+  gastos: ["cajaMovimientos", "sucursal"],
+};
+
+function prepararRegistro(modelo: string, item: any) {
+  if (!item || typeof item !== "object") return null;
+  const limpio = { ...item };
+  for (const rel of RELACIONES[modelo] || []) {
+    delete limpio[rel];
+  }
+  return limpio;
+}
+
 export const restaurarBackup = asyncHandler(async (req, res) => {
   const { data } = req.body;
   if (!data) throw new AppError("No hay datos para restaurar", 400);
 
-  await prisma.$transaction(async (tx) => {
-    const modelos = ["configuracion", "planes", "tarifas", "puestos", "vehiculos", "clientes", "usuarios", "ingresos", "mensualidades", "reservas", "facturas", "caja", "movimientos", "gastos"];
+  const modelos = ["configuracion", "planes", "tarifas", "puestos", "vehiculos", "clientes", "usuarios", "ingresos", "mensualidades", "reservas", "facturas", "caja", "movimientos", "gastos"];
+  const omitidas: Record<string, number> = {};
 
+  await prisma.$transaction(async (tx) => {
     for (const modelo of modelos) {
       if (data[modelo]?.length > 0) {
         for (const item of data[modelo]) {
-          const { id, ...rest } = item;
+          const registro = prepararRegistro(modelo, item);
+          if (!registro) continue;
+          const { id, ...rest } = registro;
+          if (id === undefined || id === null) {
+            omitidas[modelo] = (omitidas[modelo] || 0) + 1;
+            continue;
+          }
           const delegate = (tx as any)[modelo];
           await delegate.upsert({
-            where: { id },
-            create: item,
+            where: { id: Number(id) },
+            create: { id: Number(id), ...rest },
             update: rest,
           });
         }
@@ -50,5 +80,6 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
     }
   });
 
-  res.json({ ok: true, message: "Restauración completada" });
+  const resumen = Object.entries(omitidas).map(([m, n]) => `${m}: ${n} omitido(s)`).join(", ");
+  res.json({ ok: true, message: `Restauración completada.${resumen ? ` Registros sin id omitidos — ${resumen}` : ""}` });
 });

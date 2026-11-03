@@ -227,6 +227,13 @@ export const eliminarUsuario = asyncHandler(async (req, res) => {
   }
   const target = await prisma.usuario.findUnique({ where: { id: targetId }, select: { id: true, usuario: true, rol: true } });
   if (!target) throw new AppError("Usuario no encontrado", 404);
+  const [cajas, accesos] = await Promise.all([
+    prisma.caja.count({ where: { usuarioId: targetId } }),
+    prisma.acceso.count({ where: { usuarioId: targetId } }),
+  ]);
+  if (cajas > 0 || accesos > 0) {
+    throw new AppError("El usuario tiene registros de caja o accesos asociados. Desactívalo en lugar de eliminarlo para conservar el historial.", 409);
+  }
   await prisma.$transaction(async (tx) => {
     if (target.rol === "admin") {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(78124022)`;

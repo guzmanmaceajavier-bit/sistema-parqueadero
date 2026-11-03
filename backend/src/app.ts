@@ -54,7 +54,7 @@ const app = express();
 // En desarrollo se dispara el límite con nada, por eso va más alto.
 const limiter = rateLimit({
   windowMs: 60 * 1000,
-  max: NODE_ENV === "production" ? 60 : 600,
+  max: NODE_ENV === "production" ? 300 : 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, message: "Demasiadas peticiones, intente de nuevo en 1 minuto" },
@@ -85,7 +85,7 @@ app.use((req, res, next) => {
 });
 app.use(limiter);
 app.use(cookieParser());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "25mb" }));
 app.use(sanitizeBody);
 app.use(morgan("dev"));
 const UPLOADS_DIR = path.resolve("uploads");
