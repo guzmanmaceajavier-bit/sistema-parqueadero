@@ -144,7 +144,12 @@ export default function Ingresos() {
           vehiculoId: parseInt(formEntrada.vehiculoId),
           puestoId: formEntrada.puestoId ? parseInt(formEntrada.puestoId) : undefined,
         });
-        mostrarToast(res.data.reservaAsignada ? "Entrada registrada — Puesto asignado por reserva" : "Entrada registrada correctamente", "success");
+        mostrarToast(
+          res.data.reservaAsignada ? "Entrada registrada — puesto por reserva"
+          : res.data.tipoIngreso === "plan_mensual" ? "Entrada registrada — cubierta por el plan"
+          : "Entrada registrada correctamente",
+          "success"
+        );
       }
       setMostrarModalEntrada(false);
       setEditandoIngreso(null);
@@ -642,7 +647,7 @@ export default function Ingresos() {
       <ConfirmDialog
         abierto={!!eliminarId}
         titulo="Eliminar ingreso"
-        mensaje="Solo se pueden eliminar ingresos finalizados sin facturas emitidas. Si este ingreso ya generó una factura, se conservará para proteger el historial financiero y la auditoría."
+        mensaje="Solo se eliminan ingresos finalizados sin factura emitida. Los que tienen factura se conservan por auditoría."
         confirmLabel="Eliminar ingreso"
         onConfirm={eliminarIngreso}
         onCancel={() => setEliminarId(null)}

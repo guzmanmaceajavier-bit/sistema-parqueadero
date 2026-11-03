@@ -530,13 +530,13 @@ export default function Puestos() {
             if (planVehiculo) {
               mostrarConfirm(
                 "Vehículo con plan activo",
-                `El vehículo ${v?.placa || ""} está amparado por ${planVehiculo.plan?.nombre || "su plan"} (vence ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}).\n\nLa tarifa mensual cubre esta entrada hasta el ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}. El puesto quedará asociado al plan. ¿Deseas registrar la entrada?`,
+                `${v?.placa || ""} tiene el plan "${planVehiculo.plan?.nombre || "vigente"}" hasta ${new Date(planVehiculo.fechaFin).toLocaleDateString("es-CO")}.\nLa entrada queda cubierta por el plan y el puesto se asociará a él.\n\n¿Registrar entrada?`,
                 ejecutar
               );
             } else if (planes.length > 0) {
               mostrarConfirm(
                 "Vehículo sin plan",
-                `El cliente tiene una mensualidad vigente, pero no corresponde a la placa seleccionada. Esta entrada se cobrará con la tarifa habitual al registrar la salida. ¿Continuar?`,
+                `El cliente tiene un plan vigente para otra placa. Esta entrada se cobrará normalmente a la salida.\n\n¿Continuar?`,
                 ejecutar
               );
             } else {

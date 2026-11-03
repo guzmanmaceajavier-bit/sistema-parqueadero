@@ -803,7 +803,7 @@ export default function Caja() {
         </div>
       )}
 
-      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se marcará como anulado el movimiento “${movimientoAnular.concepto}” por ${formatValor(movimientoAnular.monto)}. Se excluirá de los totales, pero el registro permanecerá visible para auditoría.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
+      <ConfirmDialog abierto={!!movimientoAnular} titulo="Anular movimiento de caja" mensaje={movimientoAnular ? `Se anulará "${movimientoAnular.concepto}" por ${formatValor(movimientoAnular.monto)}. Quedará en el historial pero fuera de los totales.` : ""} confirmLabel="Anular movimiento" onConfirm={anularMovimiento} onCancel={() => setMovimientoAnular(null)} />
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ScrollLock cuando={mostrarCerrar || mostrarEditar || !!mostrarDetalle || !!editMovimiento} />
     </div>

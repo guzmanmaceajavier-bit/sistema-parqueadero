@@ -526,7 +526,7 @@ export default function Mensualidades() {
       <ConfirmDialog
         abierto={!!cancelarId}
         titulo="Cancelar mensualidad"
-        mensaje="Al cancelar esta mensualidad, el vehículo dejará de estar cubierto por el plan y el puesto asignado podrá volver a utilizarse. Los cobros anteriores no se modifican."
+        mensaje="El vehículo dejará de estar cubierto por el plan y el puesto quedará libre."
         confirmLabel="Cancelar mensualidad"
         onConfirm={cancelarMensualidad}
         onCancel={() => setCancelarId(null)}
@@ -712,7 +712,7 @@ export default function Mensualidades() {
       <ConfirmDialog
         abierto={!!eliminarId}
         titulo="Eliminar mensualidad"
-        mensaje="Vas a eliminar el registro de esta mensualidad. Se perderá su referencia operativa en el historial; utiliza Cancelar si lo que buscas es detener su vigencia y liberar el puesto."
+        mensaje="Se eliminará el registro de la mensualidad. Si solo quieres detener su vigencia, usa Cancelar."
         confirmLabel="Eliminar mensualidad"
         onConfirm={eliminarMensualidad}
         onCancel={() => setEliminarId(null)}

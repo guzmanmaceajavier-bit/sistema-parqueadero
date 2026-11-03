@@ -512,7 +512,7 @@ export default function Tarifas() {
           </div>
         </div>
       </FormModal>
-      <ConfirmDialog abierto={!!confirmDelete} titulo="Eliminar precio" mensaje="Vas a eliminar esta tarifa de la lista de cobros disponibles. Los ingresos ya registrados conservan sus importes, pero los próximos vehículos podrían quedarse sin una tarifa compatible." confirmLabel="Eliminar tarifa" onConfirm={() => eliminarTarifa(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
+      <ConfirmDialog abierto={!!confirmDelete} titulo="Eliminar precio" mensaje="Se eliminará esta tarifa. Los cobros ya registrados no se modifican." confirmLabel="Eliminar tarifa" onConfirm={() => eliminarTarifa(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ScrollLock cuando={mostrarModal} />
     </div>
