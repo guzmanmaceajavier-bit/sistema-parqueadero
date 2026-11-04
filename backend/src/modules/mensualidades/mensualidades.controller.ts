@@ -135,10 +135,14 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   res.status(201).json({ ok: true, mensualidad });
 });
 export const obtenerMensualidades = asyncHandler(async (req, res) => {
-  const { page, limit, estado, q } = req.query;
+  const { page, limit, estado, q, vehiculoId } = req.query;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const where: Prisma.MensualidadWhereInput = sucursalId ? { sucursalId } : {};
   if (typeof estado === "string") where.estado = estado as string;
+  if (vehiculoId !== undefined && vehiculoId !== null && vehiculoId !== "") {
+    const vid = Number(vehiculoId);
+    if (Number.isSafeInteger(vid) && vid > 0) where.vehiculoId = vid;
+  }
   if (typeof q === "string") {
     where.OR = [
       { cliente: { nombres: { contains: q, mode: "insensitive" } } },

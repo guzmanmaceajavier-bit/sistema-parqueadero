@@ -89,6 +89,22 @@ export default function Ingresos() {
 
   const [formEntrada, setFormEntrada] = useState({ clienteId: "", vehiculoId: "", puestoId: "", observaciones: "" });
   const [ingresosActivosCliente, setIngresosActivosCliente] = useState([]);
+  const [planEntrada, setPlanEntrada] = useState(null);
+
+  const asignarPlanAlVehiculo = (m) => {
+    if (!m || !m.puestoId) return null;
+    return { mensualidadId: m.id, puestoId: m.puestoId, puestoCodigo: m.puesto?.codigo || "—", planNombre: m.plan?.nombre || m.observacion || "Plan", fechaFin: m.fechaFin };
+  };
+  const detectarPlanDelVehiculo = async (vehiculoId) => {
+    if (!vehiculoId) { setPlanEntrada(null); return; }
+    try {
+      const res = await api.get("/mensualidades", { params: { vehiculoId, estado: "ACTIVA", limit: 5 } });
+      const hoy = new Date();
+      const plan = (res.data.mensualidades || []).find(m => new Date(m.fechaInicio) <= hoy && new Date(m.fechaFin) >= hoy && m.puestoId);
+      setPlanEntrada(plan || null);
+      if (plan?.puestoId) setFormEntrada(p => ({ ...p, puestoId: String(plan.puestoId) }));
+    } catch { setPlanEntrada(null); }
+  };
 
   const cargarIngresos = async (p = 1) => {
     try {
@@ -153,6 +169,7 @@ export default function Ingresos() {
       }
       setMostrarModalEntrada(false);
       setEditandoIngreso(null);
+      setPlanEntrada(null);
       setFormEntrada({ clienteId: "", vehiculoId: "", puestoId: "", observaciones: "" });
       cargarIngresos();
       cargarPuestos();
@@ -414,14 +431,14 @@ export default function Ingresos() {
 
       <FormModal
         open={mostrarModalEntrada}
-        onClose={() => { setMostrarModalEntrada(false); setEditandoIngreso(null); setIngresosActivosCliente([]); }}
+        onClose={() => { setMostrarModalEntrada(false); setEditandoIngreso(null); setIngresosActivosCliente([]); setPlanEntrada(null); }}
         gradient="from-blue-600 to-cyan-500"
         icon={LogIn}
         titulo={editandoIngreso ? "Editar Entrada" : "Registrar Entrada"}
         subtitulo={editandoIngreso ? "Modifica los datos de la entrada activa" : "Selecciona cliente, vehículo y puesto"}
         footer={
           <>
-            <button onClick={() => { setMostrarModalEntrada(false); setEditandoIngreso(null); }} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
+            <button onClick={() => { setMostrarModalEntrada(false); setEditandoIngreso(null); setPlanEntrada(null); }} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
             <button onClick={registrarEntrada} disabled={cargando || (!editandoIngreso && (!formEntrada.clienteId || !formEntrada.vehiculoId || !formEntrada.puestoId))} className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 ${editandoIngreso ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
               {cargando ? "Guardando..." : editandoIngreso ? "Guardar Cambios" : "Registrar Entrada"}
             </button>
@@ -434,7 +451,7 @@ export default function Ingresos() {
             {editandoIngreso ? (
               <div className={inputDisabled}>{editandoIngreso.cliente?.nombres} {editandoIngreso.cliente?.apellidos}</div>
             ) : (
-              <ClientSearch value={formEntrada.clienteId} onChange={(id) => { const val = id?.toString() || ""; setFormEntrada(p => ({ ...p, clienteId: val, vehiculoId: "" })); cargarVehiculosDelCliente(val); }} placeholder="Buscar cliente por nombre o documento..." />
+              <ClientSearch value={formEntrada.clienteId} onChange={(id) => { const val = id?.toString() || ""; setFormEntrada(p => ({ ...p, clienteId: val, vehiculoId: "", puestoId: "" })); setPlanEntrada(null); cargarVehiculosDelCliente(val); }} placeholder="Buscar cliente por nombre o documento..." />
             )}
           </div>
           {ingresosActivosCliente.length > 0 && !editandoIngreso && (
@@ -465,18 +482,32 @@ export default function Ingresos() {
           )}
           <div>
             <label className={labelClass}>Vehículo</label>
-            <Select value={formEntrada.vehiculoId} onChange={(val) => setFormEntrada(p => ({ ...p, vehiculoId: val }))} options={[
+            <Select value={formEntrada.vehiculoId} onChange={(val) => { setFormEntrada(p => ({ ...p, vehiculoId: val })); detectarPlanDelVehiculo(val); }} options={[
               { value: "", label: formEntrada.clienteId ? "Cargando vehículos..." : "Seleccionar cliente primero..." },
               ...vehiculosDelCliente.map(v => ({ value: String(v.id), label: `${v.placa} — ${v.marca} ${v.modelo}${v.tipo ? ` (${v.tipo})` : ''}` })),
             ]} placeholder={formEntrada.clienteId ? "Cargando vehículos..." : "Seleccionar cliente primero..."} />
           </div>
           <div>
             <label className={labelClass}>Puesto</label>
-            <Select value={formEntrada.puestoId} onChange={(val) => setFormEntrada(p => ({ ...p, puestoId: val }))} options={[
-              { value: "", label: "Seleccionar puesto..." },
-              ...puestosLibres.map(p => ({ value: String(p.id), label: `${p.codigo} (${p.tipoPuesto})` })),
-            ]} placeholder="Seleccionar puesto..." />
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{`Solo se muestran puestos libres (${puestosLibres.length} disponibles)`}</p>
+            {planEntrada ? (
+              <>
+                <div className="w-full px-3 py-2.5 border border-purple-200 dark:border-purple-700 rounded-lg text-sm bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300 font-semibold flex items-center justify-between">
+                  <span>{planEntrada.puesto?.codigo || planEntrada.observacion || "Puesto del plan"}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 dark:text-purple-400">Asignado por plan</span>
+                </div>
+                <p className="text-xs text-purple-600 dark:text-purple-400 mt-1.5 font-medium">
+                  {(planEntrada.plan?.nombre || planEntrada.observacion || "Plan vigente")} · vence {new Date(planEntrada.fechaFin).toLocaleDateString("es-CO")} — el vehículo volverá a ese puesto y la entrada quedará registrada sin elegir de nuevo.
+                </p>
+              </>
+            ) : (
+              <>
+                <Select value={formEntrada.puestoId} onChange={(val) => setFormEntrada(p => ({ ...p, puestoId: val }))} options={[
+                  { value: "", label: "Seleccionar puesto..." },
+                  ...puestosLibres.map(p => ({ value: String(p.id), label: `${p.codigo} (${p.tipoPuesto})` })),
+                ]} placeholder="Seleccionar puesto..." />
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{`Solo se muestran puestos libres (${puestosLibres.length} disponibles)`}</p>
+              </>
+            )}
           </div>
         </div>
       </FormModal>
@@ -491,8 +522,8 @@ export default function Ingresos() {
         footer={
           <>
             <button onClick={() => { setMostrarModalSalida(false); setErrorSimulacion(""); }} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
-            <button onClick={() => registrarSalida()} disabled={cargando} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-              {cargando ? "Registrando salida..." : "Registrar salida y cobrar"}
+            <button onClick={() => registrarSalida()} disabled={cargando || !!errorSimulacion || !simulacion} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
+              {cargando ? "Registrando salida..." : simulacion?.plan ? "Registrar salida (sin cobro)" : "Registrar salida y cobrar"}
             </button>
           </>
         }
@@ -505,16 +536,18 @@ export default function Ingresos() {
             <div className="flex justify-between"><span className="text-sm text-slate-500 dark:text-slate-400">Entrada:</span><span className="text-sm dark:text-slate-300">{ingresoSalida?.fechaEntrada ? new Date(ingresoSalida.fechaEntrada).toLocaleString() : "—"}</span></div>
           </div>
 
-          <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer hover:border-amber-300 transition-all">
-            <input type="checkbox" checked={ticketExtraviado} onChange={(e) => { setTicketExtraviado(e.target.checked); }} className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20" />
-            <div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Ticket className="w-4 h-4 text-amber-500" />
-                Perdió el ticket
-              </p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Se cobrará la tarifa máxima del día</p>
-            </div>
-          </label>
+          {!simulacion?.plan && (
+            <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer hover:border-amber-300 transition-all">
+              <input type="checkbox" checked={ticketExtraviado} onChange={(e) => { setTicketExtraviado(e.target.checked); }} className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20" />
+              <div>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <Ticket className="w-4 h-4 text-amber-500" />
+                  Perdió el ticket
+                </p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">Se cobrará la tarifa máxima del día</p>
+              </div>
+            </label>
+          )}
 
           {cargandoSimulacion ? (
             <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl text-center text-sm text-slate-400 dark:text-slate-500">Calculando cobro...</div>
