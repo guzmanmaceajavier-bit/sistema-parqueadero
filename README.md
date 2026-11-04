@@ -1,24 +1,21 @@
 # ParkAdmin
 
-Sistema web para administrar parqueaderos: entradas y salidas con cobro
-automático, planes mensuales, reservas, caja y facturación en PDF.
-Lo hice pensando en el computador del parqueadero, corriendo todo en local.
-
-**Demo:** https://sistema-parqueadero-mu.vercel.app
-
-Por seguridad, las credenciales de acceso no se publican en este repositorio. En instalaciones nuevas, define `ADMIN_PASSWORD` en el archivo de entorno del backend y utiliza esa clave para el primer acceso.
+Sistema web para administrar un parqueadero: entradas y salidas con cobro
+automático, planes de suscripción, reservas de puesto, caja y facturación PDF.
+Funciona en una sola PC (instalación local) o desplegado en la nube (Render + Neon).
 
 ## Qué hace
 
-- Registro de entradas y salidas, calcula el cobro por tiempo solo.
-- Planes mensuales con puesto fijo y control de días.
-- Reservas de puestos con fecha.
+- Registro de entradas y salidas; el cobro por tiempo se calcula solo (tarifas o plan de suscripción).
+- Puestos con estado (libre / ocupado / reservado / mantenimiento / ausencia).
+- Planes de suscripción con puesto fijo y renovación automática.
+- Reservas de puestos con fecha y validación de solapamientos.
 - Caja: apertura, movimientos del día y cierre con arqueo.
-- Facturas en PDF.
+- Facturas en PDF y envío por WhatsApp.
 - Dashboard con ocupación e ingresos del día.
-- Usuarios con roles (admin, supervisor, empleado).
+- Usuarios con roles: `admin`, `supervisor`, `empleado`.
 
-## Con qué está hecho
+## Stack
 
 | Parte | Tecnologías |
 |---|---|
@@ -28,60 +25,66 @@ Por seguridad, las credenciales de acceso no se publican en este repositorio. En
 | Auth | JWT en cookies httpOnly, roles por usuario |
 | Extras | PDFKit (facturas), Docker Compose (opcional) |
 
-## Cómo correrlo
+## Cómo correrlo (desarrollo)
 
 Necesitas Node 20 y PostgreSQL 16 corriendo en el equipo.
 
+**1. Backend (http://localhost:3001)**
+
 ```bash
-# 1. Backend (http://localhost:3001)
 cd backend
 npm install
 # backend/.env mínimo:
 # DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_db"
-# SHADOW_DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_shadow"  (solo para `migrate dev`)
-# JWT_SECRET=un-secreto-largo-generado-con-crypto
+# SHADOW_DATABASE_URL="postgresql://postgres:TU_CLAVE@localhost:5432/parqueadero_shadow"   (solo para `prisma migrate dev`)
+# JWT_SECRET=una-clave-larga (openssl rand -hex 32)
 # ADMIN_PASSWORD=clave-inicial-del-admin
-# CORS_ORIGINS=https://tu-dominio.com
-npm run migrate:deploy   # aplica las migraciones (NO usar `db push`)
+npm run migrate:deploy     # aplica las migraciones (nunca `db push`)
 npm run dev
 ```
 
-> La base de datos se versiona con **migraciones** de Prisma, no con `db push`.
-> Para desarrollo local, cuando cambies `schema.prisma`, usa `npx prisma migrate dev`.
-> Nunca uses `db push` contra producción.
+**2. Frontend (http://localhost:5173)**
 
 ```bash
-# 2. Frontend (http://localhost:5173), en otra consola
 cd frontend
 npm install
 npm run dev
 ```
 
-Entra con `admin` y la clave que pusiste en `ADMIN_PASSWORD`. Si la base
-estaba vacía, el backend crea ese admin solo en el primer arranque.
+Entra con `admin` y la clave de `ADMIN_PASSWORD`. Si la base estaba vacía, el
+backend crea ese admin solo en el primer arranque.
 
-En desarrollo no hace falta `frontend/.env`: Vite ya manda `/api` al backend. En producción configura `CORS_ORIGINS` con los dominios exactos desde los que se servirá el frontend.
+## Instalación en la PC del parqueadero (una sola vez)
+
+```bash
+instalar.bat       # verifica Node y PostgreSQL, instala, compila y programa backup diario
+iniciar-parqueadero.bat   # abre el sistema (o se auto-arranca con Windows)
+```
+
+## Despliegue en producción (Render + Neon)
+
+1. Ramas: despliega desde `main`.
+2. Backend = Web Service Docker (`Dockerfile` de la raíz), con estas variables:
+   - `DATABASE_URL` → cadena de Neon **directa** (no `-pooler`).
+   - `JWT_SECRET` → aleatoria y larga (`openssl rand -hex 32`).
+   - `NODE_ENV=production`, `CORS_ORIGINS` → URL del frontend.
+   - `ADMIN_PASSWORD`.
+   El arranque ejecuta `prisma migrate deploy` automáticamente.
+3. Frontend = Static Site: `cd frontend && npm install && npm run build`,
+   publicar `frontend/dist`, definir `VITE_API_URL` = URL del backend y
+   redirección `/* -> /index.html` (Rewrite).
+
+Detalles de la estrategia de base de datos en `backend/prisma/MIGRATIONS.md`.
 
 ## Estructura
 
 ```
-backend/src/modules   # cada cosa (ingresos, caja, tarifas…) vive en su módulo
+backend/src/modules   # cada módulo (ingresos, caja, tarifas, ...)
 backend/src/schemas   # validaciones Zod
-backend/prisma        # esquema de la base de datos
+backend/prisma        # schema.prisma y migraciones
 frontend/src/pages    # pantallas
-frontend/src/services # cliente Axios con refresh de token
+frontend/src/services # cliente Axios (auth refresh)
 ```
-
-## Capturas
-
-Login
-<img width="1195" height="594" alt="image" src="https://github.com/user-attachments/assets/f0f58ade-5fa8-40d1-ba70-70e1455a2f91" />
-
-Dashboard
-<img width="1351" height="620" alt="image" src="https://github.com/user-attachments/assets/9501d680-9747-46ca-8b78-d1f00508f1b0" />
-
-Caja
-<img width="1173" height="607" alt="image" src="https://github.com/user-attachments/assets/fbeb5ef0-a340-4ef0-98ab-146c4391327a" />
 
 ## Autor
 

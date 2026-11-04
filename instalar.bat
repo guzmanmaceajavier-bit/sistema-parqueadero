@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 REM Instalador ParkAdmin - ejecutar UNA vez en el PC del cliente (como Administrador).
 setlocal
 cd /d "%~dp0"
@@ -23,7 +23,7 @@ if not exist "backend\.env" (
 node -e "const fs=require('fs');let s=fs.readFileSync('backend\\.env','utf8');if(s.includes('generate_with_node')){const k=require('crypto').randomBytes(32).toString('hex');s=s.replace('generate_with_node_e_console_log_require_crypto_random_bytes_32_toString_hex',k);fs.writeFileSync('backend\\.env',s);console.log('  JWT_SECRET generado.');}else{console.log('  JWT_SECRET ya definido.');}"
 
 echo [5/6] Creando tablas en la base de datos...
-cd backend && call npx prisma db push || (echo Fallo prisma db push. Revisa DATABASE_URL en backend\.env. & pause & exit /b 1)
+cd backend && call npx prisma migrate deploy || (echo Fallo prisma db push. Revisa DATABASE_URL en backend\.env. & pause & exit /b 1)
 cd ..
 
 echo [6/6] Programando backup diario 23:00 y acceso directo de inicio...
@@ -38,3 +38,4 @@ echo.
 echo INSTALACION OK. Abre el sistema con: iniciar-parqueadero.bat
 echo La primera vez entra con usuario admin y la clave ADMIN_PASSWORD de backend\.env
 pause
+
