@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { verificarToken, verificarTokenOpcional } from "../../middlewares/auth.middleware.js";
+import rateLimit from "express-rate-limit";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { actualizarConfiguracionSchema } from "../../schemas/configuracion.schema.js";
@@ -97,7 +98,15 @@ router.post("/", verificarToken, verificarRol("admin", "supervisor"), validate(a
  *       200:
  *         description: Sistema formateado
  */
-router.post("/formatear", verificarToken, verificarRol("admin"), formatearSistema);
+const formatearLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 2,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, message: "El sistema ya se formateó recientemente. Intenta de nuevo más tarde." },
+});
+
+router.post("/formatear", verificarToken, verificarRol("admin"), formatearLimiter, formatearSistema);
 
 /**
  * @swagger

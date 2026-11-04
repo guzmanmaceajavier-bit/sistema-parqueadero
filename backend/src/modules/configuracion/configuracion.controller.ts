@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../config/prisma.js";
-import { asyncHandler } from "../../middlewares/error.middleware.js";
+import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import * as service from "./configuracion.service.js";
 
 export const obtenerConfiguracion = asyncHandler(async (req, res) => {
@@ -50,7 +50,13 @@ export const guardarConfiguracion = asyncHandler(async (req, res) => {
   res.status(201).json({ ok: true, message: "Configuración creada", configuracion: nueva });
 });
 
-export const formatearSistema = asyncHandler(async (_req, res) => {
+export const formatearSistema = asyncHandler(async (req, res) => {
+  // Confirmación escrita obligatoria: el frontend la exige, pero el servidor
+  // es la última barrera. Sin este token el borrado masivo no se ejecuta.
+  if (req.body?.confirmacion !== "FORMATEAR") {
+    throw new AppError("Debes escribir FORMATEAR para confirmar la operación", 400);
+  }
+
   const orden = [
     "factura", "ingreso", "mensualidad", "reserva", "ausencia",
     "gasto", "movimiento", "caja", "acceso",

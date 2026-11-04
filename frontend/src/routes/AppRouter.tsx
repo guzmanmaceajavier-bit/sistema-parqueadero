@@ -67,10 +67,12 @@ function AppRouter() {
             <Route path="/reservas" element={<Suspense fallback={<Spinner />}><Reservas /></Suspense>} />
             <Route path="/ausencias" element={<Suspense fallback={<Spinner />}><Ausencias /></Suspense>} />
             <Route path="/ocupacion" element={<Suspense fallback={<Spinner />}><Ocupacion /></Suspense>} />
-            <Route path="/reportes" element={<Suspense fallback={<Spinner />}><Reportes /></Suspense>} />
             <Route path="/facturas" element={<Suspense fallback={<Spinner />}><Facturas /></Suspense>} />
-            <Route path="/movimientos" element={<Suspense fallback={<Spinner />}><Movimientos /></Suspense>} />
-            <Route path="/configuracion" element={<Suspense fallback={<Spinner />}><Configuracion /></Suspense>} />
+            <Route element={<ProtectedRoute allowedRoles={["admin", "supervisor"]} />}>
+              <Route path="/reportes" element={<Suspense fallback={<Spinner />}><Reportes /></Suspense>} />
+              <Route path="/movimientos" element={<Suspense fallback={<Spinner />}><Movimientos /></Suspense>} />
+              <Route path="/configuracion" element={<Suspense fallback={<Spinner />}><Configuracion /></Suspense>} />
+            </Route>
 
             <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
               <Route path="/usuarios" element={<Suspense fallback={<Spinner />}><Usuarios /></Suspense>} />

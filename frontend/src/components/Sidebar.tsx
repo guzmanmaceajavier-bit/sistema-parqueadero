@@ -241,12 +241,17 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
                 <SubLink to="/gastos" icon={Receipt}>Gastos</SubLink>
               </Submenu>
             </Section>
-            <Section id="auditoria" label="Auditoria" icon={ArrowRightLeft} color="text-amber-600 dark:text-amber-400" open={sAuditoria} onToggle={() => setSAuditoria(!sAuditoria)}>
-              <Submenu open={sAuditoria}>
-                <SubLink to="/movimientos" icon={ArrowRightLeft}>Movimientos</SubLink>
-                <SubLink to="/reportes" icon={BarChart3}>Reportes</SubLink>
-              </Submenu>
-            </Section>
+            {(isAdmin || isSupervisor) && (
+              <>
+                <Section id="auditoria" label="Auditoria" icon={ArrowRightLeft} color="text-amber-600 dark:text-amber-400" open={sAuditoria} onToggle={() => setSAuditoria(!sAuditoria)}>
+                  <Submenu open={sAuditoria}>
+                    <SubLink to="/movimientos" icon={ArrowRightLeft}>Movimientos</SubLink>
+                    <SubLink to="/reportes" icon={BarChart3}>Reportes</SubLink>
+                  </Submenu>
+                </Section>
+                <Divider />
+              </>
+            )}
             {(isAdmin || isSupervisor) && (
               <>
                 <Divider />
@@ -318,12 +323,17 @@ export default function Sidebar({ abierto, onToggle, colapsado: colapsadoExt, on
               <SubLink to="/gastos" icon={Receipt}>Gastos</SubLink>
             </Submenu>
           </Section>
-          <Section id="auditoria" label="Auditoria" icon={ArrowRightLeft} color="text-amber-600 dark:text-amber-400" open={sAuditoria} onToggle={() => setSAuditoria(!sAuditoria)}>
-            <Submenu open={sAuditoria}>
-              <SubLink to="/movimientos" icon={ArrowRightLeft}>Movimientos</SubLink>
-              <SubLink to="/reportes" icon={BarChart3}>Reportes</SubLink>
-            </Submenu>
-          </Section>
+          {(isAdmin || isSupervisor) && (
+            <>
+              <Section id="auditoria" label="Auditoria" icon={ArrowRightLeft} color="text-amber-600 dark:text-amber-400" open={sAuditoria} onToggle={() => setSAuditoria(!sAuditoria)}>
+                <Submenu open={sAuditoria}>
+                  <SubLink to="/movimientos" icon={ArrowRightLeft}>Movimientos</SubLink>
+                  <SubLink to="/reportes" icon={BarChart3}>Reportes</SubLink>
+                </Submenu>
+              </Section>
+              <Divider />
+            </>
+          )}
           {(isAdmin || isSupervisor) && (
             <>
               <Divider />

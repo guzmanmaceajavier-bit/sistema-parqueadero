@@ -16,7 +16,7 @@ export default function BackupPage() {
     if (formatConfirm !== "FORMATEAR") return;
     setFormatLoading(true);
     try {
-      await api.post("/configuracion/formatear");
+      await api.post("/configuracion/formatear", { confirmacion: "FORMATEAR" });
       limpiarNotificaciones();
       setResultados(["Sistema formateado correctamente — recargando..."]);
       setTimeout(() => window.location.href = "/", 2000);

@@ -3,7 +3,8 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 
 export const generarBackup = asyncHandler(async (req, res) => {
   const [usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion, ingresos, mensualidades, reservas, facturas, caja, movimientos, gastos] = await Promise.all([
-    prisma.usuario.findMany({ select: { id: true, nombre: true, usuario: true, correo: true, rol: true, password: true, estado: true, bloqueadoHasta: true, tokenVersion: true, createdAt: true } }),
+    // El respaldo nunca incluye contraseñas ni tokens de sesión.
+    prisma.usuario.findMany({ select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true } }),
     prisma.cliente.findMany({ include: { vehiculos: true, ingresos: true, mensualidades: true, reservas: true, ausencias: true } }),
     prisma.vehiculo.findMany({ include: { ingresos: true, mensualidades: true, reservas: true, ausencias: true } }),
     prisma.puesto.findMany({ include: { ingresos: true, mensualidades: true, reservas: true } }),
@@ -57,6 +58,9 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
 
   const modelos = ["configuracion", "planes", "tarifas", "puestos", "vehiculos", "clientes", "usuarios", "ingresos", "mensualidades", "reservas", "facturas", "caja", "movimientos", "gastos"];
   const omitidas: Record<string, number> = {};
+  const creadosConClaveTemp: string[] = [];
+  const bcrypt = (await import("bcrypt")).default;
+  const crypto = (await import("crypto")).default;
 
   await prisma.$transaction(async (tx) => {
     for (const modelo of modelos) {
@@ -69,6 +73,32 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
             omitidas[modelo] = (omitidas[modelo] || 0) + 1;
             continue;
           }
+
+          // Los usuarios se restauran sin contraseña: si el respaldo la trae se respeta;
+          // si no, se asigna una clave aleatoria (el admin podrá restablecerla luego).
+          if (modelo === "usuarios") {
+            const tieneClave = typeof rest.password === "string" && rest.password.length > 0;
+            if (tieneClave) {
+              await tx.usuario.upsert({
+                where: { id: Number(id) },
+                create: { id: Number(id), ...rest },
+                update: rest,
+              });
+            } else {
+              const regSinClave: any = { ...rest };
+              delete regSinClave.password;
+              await tx.usuario.upsert({
+                where: { id: Number(id) },
+                create: { id: Number(id), ...regSinClave, password: await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12) },
+                update: regSinClave,
+              });
+              if (!creadosConClaveTemp.includes(String(rest.usuario || id))) {
+                creadosConClaveTemp.push(String(rest.usuario || id));
+              }
+            }
+            continue;
+          }
+
           const delegate = (tx as any)[modelo];
           await delegate.upsert({
             where: { id: Number(id) },
@@ -81,5 +111,8 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
   });
 
   const resumen = Object.entries(omitidas).map(([m, n]) => `${m}: ${n} omitido(s)`).join(", ");
-  res.json({ ok: true, message: `Restauración completada.${resumen ? ` Registros sin id omitidos — ${resumen}` : ""}` });
+  const clavesTemp = creadosConClaveTemp.length
+    ? ` Se creó(n) con clave temporal aleatoria: ${creadosConClaveTemp.join(", ")} — restabécelas desde Usuarios.`
+    : "";
+  res.json({ ok: true, message: `Restauración completada.${resumen ? ` Registros sin id omitidos — ${resumen}.` : ""}${clavesTemp}` });
 });
