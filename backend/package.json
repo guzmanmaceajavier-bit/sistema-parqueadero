@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run src/tests/integration/ingresos.postgres.test.ts"
+    "test:integration": "vitest run src/tests/integration"
   },
   "keywords": [],
   "author": "",
