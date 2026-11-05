@@ -7,6 +7,7 @@ import api from "../services/api";
 import SelectWithOther from "../components/SelectWithOther";
 import Select from "../components/ui/Select";
 import { useListas } from "../context/ListasContext";
+import { useAuth } from "../context/AuthContext";
 import ExportButton from "../components/ExportButton";
 import Pagination from "../components/Pagination";
 import FormModal from "../components/ui/FormModal";
@@ -131,6 +132,7 @@ function FiltroDropdown({ label, opciones, valor, onChange, color = "teal" }) {
 
 export default function Clientes() {
   const { listas } = useListas();
+  const { isAdmin } = useAuth();
   const [clientes, setClientes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const busquedaDebounced = useDebounce(busqueda);
@@ -757,12 +759,14 @@ export default function Clientes() {
                             <MessageCircle className="w-4 h-4" />
                           </button>
                         )}
-                        <button
-                          onClick={() => confirmarEliminar(cliente.id)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all" title="Eliminar"
-                        >
-                          <IconTrash />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => confirmarEliminar(cliente.id)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all" title="Eliminar"
+                          >
+                            <IconTrash />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

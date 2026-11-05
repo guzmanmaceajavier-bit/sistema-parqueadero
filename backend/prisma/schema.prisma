@@ -146,7 +146,7 @@ model Vehiculo {
 
 model Puesto {
   id            Int           @id @default(autoincrement())
-  codigo        String        @unique
+  codigo        String
   estado        String        @default("LIBRE")
   observacion   String?
   createdAt     DateTime      @default(now())
@@ -159,6 +159,8 @@ model Puesto {
   mensualidades Mensualidad[]
   sucursal      Sucursal?     @relation(fields: [sucursalId], references: [id])
   reservas      Reserva[]
+
+  @@unique([sucursalId, codigo])
 }
 
 model Ingreso {
@@ -312,6 +314,11 @@ model Factura {
   valor           Float
   metodoPago      String?
   sucursalId      Int?
+  /// ─── Snapshot del cálculo (para reconstruir el cobro) ───
+  tarifaId        Int?
+  modalidad       String?
+  tiempoMinutos   Int?
+  desglose        Json?
   createdAt       DateTime         @default(now())
   cajaMovimientos CajaMovimiento[]
   ingreso         Ingreso?         @relation(fields: [ingresoId], references: [id])

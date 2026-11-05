@@ -6,6 +6,7 @@ import ScrollLock from "../components/ScrollLock";
 import api from "../services/api";
 import SelectWithOther from "../components/SelectWithOther";
 import { useListas } from "../context/ListasContext";
+import { useAuth } from "../context/AuthContext";
 import ExportButton from "../components/ExportButton";
 import Pagination from "../components/Pagination";
 import Toast from "../components/Toast";
@@ -47,6 +48,7 @@ function TipoBadge({ tipo }) {
 
 export default function Vehiculos() {
   const { listas } = useListas();
+  const { isAdmin } = useAuth();
   const [vehiculos, setVehiculos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [planes, setPlanes] = useState([]);
@@ -261,9 +263,11 @@ export default function Vehiculos() {
                         <button onClick={() => editarVehiculo(v)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 border border-teal-200 dark:border-teal-800 rounded-lg">
                           <IconEdit /> Editar
                         </button>
-                        <button onClick={() => confirmarEliminar(v.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg">
-                          <IconBan /> Eliminar
-                        </button>
+                        {isAdmin && (
+                          <button onClick={() => confirmarEliminar(v.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg">
+                            <IconBan /> Eliminar
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

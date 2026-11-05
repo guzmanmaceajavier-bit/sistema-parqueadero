@@ -59,8 +59,6 @@ function AppRouter() {
             <Route path="/vehiculos" element={<Suspense fallback={<Spinner />}><Vehiculos /></Suspense>} />
             <Route path="/puestos" element={<Suspense fallback={<Spinner />}><Puestos /></Suspense>} />
             <Route path="/ingresos" element={<Suspense fallback={<Spinner />}><Ingresos /></Suspense>} />
-            <Route path="/tarifas" element={<Suspense fallback={<Spinner />}><Tarifas /></Suspense>} />
-            <Route path="/planes" element={<Suspense fallback={<Spinner />}><Planes /></Suspense>} />
             <Route path="/caja" element={<Suspense fallback={<Spinner />}><Caja /></Suspense>} />
             <Route path="/gastos" element={<Suspense fallback={<Spinner />}><Gastos /></Suspense>} />
             <Route path="/mensualidades" element={<Suspense fallback={<Spinner />}><Mensualidades /></Suspense>} />
@@ -69,6 +67,8 @@ function AppRouter() {
             <Route path="/ocupacion" element={<Suspense fallback={<Spinner />}><Ocupacion /></Suspense>} />
             <Route path="/facturas" element={<Suspense fallback={<Spinner />}><Facturas /></Suspense>} />
             <Route element={<ProtectedRoute allowedRoles={["admin", "supervisor"]} />}>
+              <Route path="/tarifas" element={<Suspense fallback={<Spinner />}><Tarifas /></Suspense>} />
+              <Route path="/planes" element={<Suspense fallback={<Spinner />}><Planes /></Suspense>} />
               <Route path="/reportes" element={<Suspense fallback={<Spinner />}><Reportes /></Suspense>} />
               <Route path="/movimientos" element={<Suspense fallback={<Spinner />}><Movimientos /></Suspense>} />
               <Route path="/configuracion" element={<Suspense fallback={<Spinner />}><Configuracion /></Suspense>} />

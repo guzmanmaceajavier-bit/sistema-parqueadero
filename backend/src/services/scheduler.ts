@@ -89,14 +89,20 @@ export async function vencerMensualidades() {
       });
       if (actualizada.count !== 1) return false;
       if (mensualidad.puestoId) {
-        const [ingresoActivo, otraMensualidad, otraReserva] = await Promise.all([
-          tx.ingreso.count({ where: { puestoId: mensualidad.puestoId, estado: "ACTIVO" } }),
-          tx.mensualidad.count({ where: { puestoId: mensualidad.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
-          tx.reserva.count({ where: { puestoId: mensualidad.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
-        ]);
-        const estadoPuesto = ingresoActivo > 0 ? "OCUPADO" : otraMensualidad + otraReserva > 0 ? "RESERVADO" : "LIBRE";
-        await tx.puesto.update({ where: { id: mensualidad.puestoId }, data: { estado: estadoPuesto } });
+        // El puesto NUNCA se libera si el vehículo sigue físicamente dentro:
+        // el ingreso activo manda sobre el vencimiento de la cobertura.
+        const ingresoActivo = await tx.ingreso.count({ where: { puestoId: mensualidad.puestoId, estado: "ACTIVO" } });
+        if (ingresoActivo > 0) {
+          await tx.puesto.update({ where: { id: mensualidad.puestoId }, data: { estado: "OCUPADO" } });
+        } else {
+          const [otraMensualidad, otraReserva] = await Promise.all([
+            tx.mensualidad.count({ where: { puestoId: mensualidad.puestoId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+            tx.reserva.count({ where: { puestoId: mensualidad.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+              OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+          ]);
+          const estadoPuesto = otraMensualidad + otraReserva > 0 ? "RESERVADO" : "LIBRE";
+          await tx.puesto.update({ where: { id: mensualidad.puestoId }, data: { estado: estadoPuesto } });
+        }
       }
       return true;
     });

@@ -8,6 +8,18 @@ import { sumarMesesConTope } from "../../utils/fechas.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
+/** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
+function puestoAceptaTipo(puesto: { tipoPuesto?: string | null }, tipoVehiculo?: string | null): boolean {
+  const tipos = String(puesto?.tipoPuesto || "")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  if (tipos.length === 0) return true;
+  if (!tipoVehiculo) return false;
+  const tipo = tipoVehiculo.trim().toLowerCase();
+  return tipos.includes(tipo) || tipos.includes("todos");
+}
+
 
 export const crearMensualidad = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, puestoId, planId, fechaInicio, fechaFin, valor, observacion } = req.body;
@@ -48,6 +60,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     if (!puesto.activo) throw new AppError("El puesto está inactivo", 400);
     if (puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está en mantenimiento", 400);
     if (vehiculo.sucursalId !== puesto.sucursalId) throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
+    if (!puestoAceptaTipo(puesto, vehiculo.tipo)) throw new AppError(`El puesto ${puesto.codigo} no admite vehículos de tipo ${vehiculo.tipo || "desconocido"}`, 400);
   }
   const sucursalRegistro = sucursalId ?? vehiculo.sucursalId ?? puesto?.sucursalId ?? null;
 
@@ -557,6 +570,16 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
     // Bloquea la mensualidad para que dos abonos simultáneos no excedan su saldo.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${Number(id)}::integer)) AS advisory_lock`;
     await tx.$queryRaw`SELECT id FROM "Mensualidad" WHERE id = ${Number(id)} FOR UPDATE`;
+
+    // Relee para conocer vehículo/puesto y adquirir los MISMOS bloqueos que usa la
+    // renovación (renovarMensualidad). Así "cobrar" y "renovar" no pueden ejecutarse
+    // en paralelo y duplicar el período.
+    const mensualidadRef = await tx.mensualidad.findFirst({ where: { id: Number(id) }, select: { vehiculoId: true, puestoId: true } });
+    if (!mensualidadRef) throw new AppError("Mensualidad no encontrada", 404);
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${mensualidadRef.vehiculoId}::integer)) AS advisory_lock`;
+    if (mensualidadRef.puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${mensualidadRef.puestoId}::integer)) AS advisory_lock`;
+    }
 
     // El mismo bloqueo global de caja se usa al abrir, cerrar y registrar otros movimientos.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;

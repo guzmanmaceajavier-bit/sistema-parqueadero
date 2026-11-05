@@ -39,33 +39,50 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     if (ingresoActivo) {
       const ahora = new Date();
       const tiempoMinutos = Math.ceil((ahora.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
-      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null } });
-      if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
-
-      const numeroFactura = await generarNumeroFactura("FACT");
       const sucursalIngreso = ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null;
-      const tarifas = await tx.tarifa.findMany({
+
+      // Si el vehículo está cubierto por una mensualidad vigente, la salida por
+      // ausencia NO genera cobro (mismo criterio que la salida normal).
+      const planActivo = await tx.mensualidad.findFirst({
         where: {
-          tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
-          activa: true,
-          OR: [{ sucursalId: sucursalIngreso }, { sucursalId: null }],
+          vehiculoId: vid,
+          sucursalId: sucursalIngreso,
+          estado: "ACTIVA",
+          fechaInicio: { lte: ahora },
+          fechaFin: { gte: ahora },
+          OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }],
         },
-        orderBy: { valor: "asc" },
       });
-      const tarifa = tarifas.find(t => t.sucursalId === sucursalIngreso) ?? tarifas.find(t => t.sucursalId === null);
-      let valorPagado = 0;
-      if (tarifa) {
-        const cortesia = tarifa.minutosCortesia || 0;
-        const minutosFacturables = Math.max(0, tiempoMinutos - cortesia);
-        const horas = Math.ceil(minutosFacturables / 60);
-        valorPagado = horas * tarifa.valor;
+
+      let valorFacturado = 0;
+      if (!planActivo) {
+        const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalIngreso } });
+        if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
+
+        const numeroFactura = await generarNumeroFactura("FACT");
+        const tarifas = await tx.tarifa.findMany({
+          where: {
+            tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
+            activa: true,
+            OR: [{ sucursalId: sucursalIngreso }, { sucursalId: null }],
+          },
+          orderBy: { valor: "asc" },
+        });
+        const tarifa = tarifas.find(t => t.sucursalId === sucursalIngreso) ?? tarifas.find(t => t.sucursalId === null);
+        if (tarifa) {
+          const cortesia = tarifa.minutosCortesia || 0;
+          const minutosFacturables = Math.max(0, tiempoMinutos - cortesia);
+          const horas = Math.ceil(minutosFacturables / 60);
+          valorFacturado = horas * tarifa.valor;
+        }
+        await tx.factura.create({
+          data: { numero: numeroFactura, ingresoId: ingresoActivo.id, origen: "INGRESO", valor: valorFacturado, metodoPago: "efectivo", sucursalId: sucursalIngreso },
+        });
       }
-      await tx.factura.create({
-        data: { numero: numeroFactura, ingresoId: ingresoActivo.id, origen: "INGRESO", valor: valorPagado, metodoPago: "efectivo", sucursalId: ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null },
-      });
+
       await tx.ingreso.update({
         where: { id: ingresoActivo.id },
-        data: { fechaSalida: ahora, estado: "FINALIZADO", tiempoMinutos, valorPagado },
+        data: { fechaSalida: ahora, estado: "FINALIZADO", tiempoMinutos, valorPagado: valorFacturado },
       });
       if (ingresoActivo.puestoId) {
         await tx.puesto.update({ where: { id: ingresoActivo.puestoId }, data: { estado: "AUSENCIA" } });

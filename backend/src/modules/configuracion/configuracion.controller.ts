@@ -63,12 +63,21 @@ export const formatearSistema = asyncHandler(async (req, res) => {
     "tarifa", "plan", "puesto", "vehiculo", "cliente", "configuracion",
   ] as const;
   const db = prisma as unknown as Record<string, { deleteMany: () => Promise<unknown> }>;
+  const errores: string[] = [];
   for (const modelo of orden) {
     try {
       await db[modelo].deleteMany();
-    } catch {
-      // El orden respeta las dependencias y se continúa para modelos opcionales.
+    } catch (e) {
+      // Se conserva el modelo con error y se reporta al final: no se oculta un fallo.
+      errores.push(`${modelo}: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+  if (errores.length > 0) {
+    return res.status(207).json({
+      ok: false,
+      message: "El formateo terminó con errores en algunos modelos. Revisa el detalle.",
+      errores,
+    });
   }
   res.json({ ok: true, message: "Sistema formateado correctamente. Todos los datos han sido eliminados excepto usuarios." });
 });

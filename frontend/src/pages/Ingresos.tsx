@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { LogIn, LogOut, Search, X, Clock, PenSquare, Trash2, CheckCircle, Ticket, Car } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useCaja } from "../context/CajaContext";
+import { useAuth } from "../context/AuthContext";
 import { useConfig } from "../context/ConfigContext";
 import api from "../services/api";
 import Select from "../components/ui/Select";
@@ -59,6 +60,7 @@ export default function Ingresos() {
   const [searchParams] = useSearchParams();
   const { config } = useConfig();
   const { requestAbrirCaja } = useCaja();
+  const { isAdmin } = useAuth();
   const [ingresos, setIngresos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [vehiculosDelCliente, setVehiculosDelCliente] = useState([]);
@@ -412,9 +414,11 @@ export default function Ingresos() {
                             <button onClick={() => window.open(`/api/ingresos/${ing.id}/ticket`, '_blank')} className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
                               Ticket
                             </button>
-                            <button onClick={() => setEliminarId(ing.id)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg">
-                              <IconTrash /> Eliminar
-                            </button>
+                            {isAdmin && (
+                              <button onClick={() => setEliminarId(ing.id)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg">
+                                <IconTrash /> Eliminar
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -523,7 +527,7 @@ export default function Ingresos() {
           <>
             <button onClick={() => { setMostrarModalSalida(false); setErrorSimulacion(""); }} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
             <button onClick={() => registrarSalida()} disabled={cargando || !!errorSimulacion || !simulacion} className="px-5 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-              {cargando ? "Registrando salida..." : simulacion?.plan ? "Registrar salida (sin cobro)" : "Registrar salida y cobrar"}
+              {cargando ? "Registrando salida..." : (simulacion?.plan && !simulacion?.excedente) ? "Registrar salida (sin cobro)" : "Registrar salida y cobrar"}
             </button>
           </>
         }
@@ -557,7 +561,7 @@ export default function Ingresos() {
               <p className="text-sm text-red-600 dark:text-red-300">{errorSimulacion}</p>
               <p className="text-xs text-red-500 dark:text-red-400 mt-2">Verificá que el vehículo tenga un tipo asignado (moto, carro, camioneta, bicicleta u otro) y que exista una tarifa activa para ese tipo.</p>
             </div>
-          ) : simulacion?.plan ? (
+          ) : (simulacion?.plan && !simulacion?.excedente) ? (
             <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-200 dark:border-purple-800 space-y-2">
               <p className="text-xs font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wider">Plan Activo</p>
               <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Plan:</span><span className="font-bold text-purple-700 dark:text-purple-400" style={{ textTransform: 'capitalize' }}>{simulacion.plan}</span></div>
@@ -567,6 +571,9 @@ export default function Ingresos() {
           ) : simulacion && (
             <div className="p-4 bg-teal-50 dark:bg-teal-900/20 rounded-xl border border-teal-200 dark:border-teal-800 space-y-2">
               <p className="text-xs font-semibold text-teal-700 dark:text-teal-400 uppercase tracking-wider">Desglose de Cobro</p>
+              {simulacion.excedente && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">El plan venció durante la estancia: solo se cobra el tiempo excedente desde el vencimiento.</p>
+              )}
               <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Tiempo total:</span><span className="font-medium dark:text-white">{`${simulacion.totalMinutos} min (${Math.floor(simulacion.totalMinutos/60)}h ${simulacion.totalMinutos%60}m)`}</span></div>
               <div className="flex justify-between text-sm"><span className="text-slate-600 dark:text-slate-400">Tarifa aplicada:</span><span className="font-medium dark:text-white">{`${simulacion.tarifa?.nombre} (${simulacion.tarifa?.modalidad})`}</span></div>
               {simulacion.minutosCortesia > 0 && (

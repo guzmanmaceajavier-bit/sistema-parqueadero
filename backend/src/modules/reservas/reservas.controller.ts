@@ -8,6 +8,18 @@ import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 const ESTADOS = ["PENDIENTE", "CONFIRMADA", "ACTIVA", "FINALIZADA", "CANCELADA", "NO_SHOW"];
 
+/** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
+function puestoAceptaTipo(puesto: { tipoPuesto?: string | null }, tipoVehiculo?: string | null): boolean {
+  const tipos = String(puesto?.tipoPuesto || "")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  if (tipos.length === 0) return true;
+  if (!tipoVehiculo) return false;
+  const tipo = tipoVehiculo.trim().toLowerCase();
+  return tipos.includes(tipo) || tipos.includes("todos");
+}
+
 async function ocuparPuesto(puestoId: number, usuario?: string) {
   await prisma.puesto.update({ where: { id: Number(puestoId) }, data: { estado: "RESERVADO" } });
   await registrarMovimiento("PUESTOS", "RESERVAR", `Puesto #${puestoId} reservado`, usuario);
@@ -57,6 +69,9 @@ export const crearReserva = asyncHandler(async (req, res) => {
 
   if (pid && vehiculo && vehiculo.sucursalId !== puesto?.sucursalId) {
     throw new AppError("El vehículo y el puesto deben pertenecer a la misma sucursal", 409);
+  }
+  if (pid && vehiculo && puesto && !puestoAceptaTipo(puesto, vehiculo.tipo)) {
+    throw new AppError(`El puesto ${puesto.codigo} no admite vehículos de tipo ${vehiculo.tipo || "desconocido"}`, 400);
   }
   const sucursalRegistro = sucursalId ?? vehiculo?.sucursalId ?? puesto?.sucursalId ?? null;
 

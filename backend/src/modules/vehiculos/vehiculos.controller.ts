@@ -4,12 +4,16 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
+/** Normaliza la placa: mayúsculas, sin espacios ni guiones. */
+const normalizarPlaca = (valor: string): string => String(valor).toUpperCase().replace(/[\s-]+/g, "").trim();
+
 export const crearVehiculo = asyncHandler(async (req, res) => {
   let { placa, marca, modelo, color, tipo, clase, observaciones, clienteId, tipoCobro, planId, tarifaId } = req.body;
   if (!placa) throw new AppError("Placa es requerida", 400);
   if (!clienteId) throw new AppError("Cliente es requerido", 400);
 
-  placa = placa.toUpperCase().trim();
+  placa = normalizarPlaca(placa);
+  if (!placa) throw new AppError("Placa es requerida", 400);
   const existente = await prisma.vehiculo.findUnique({
     where: { placa },
     include: { cliente: { select: { id: true, nombres: true, apellidos: true } } },
@@ -89,7 +93,7 @@ export const actualizarVehiculo = asyncHandler(async (req, res) => {
   const { placa, marca, modelo, color, tipo, clase, observaciones, clienteId, bloqueado, tipoCobro, planId, tarifaId } = req.body;
   const data: any = {};
   if (placa) {
-    const placaUpper = placa.toUpperCase().trim();
+    const placaUpper = normalizarPlaca(placa);
     if (placaUpper !== existe.placa) {
       const dup = await prisma.vehiculo.findUnique({
         where: { placa: placaUpper },

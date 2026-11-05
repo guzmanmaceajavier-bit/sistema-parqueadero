@@ -3,10 +3,10 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
-async function siguienteNumeroPuesto(prefijo = "Puesto") {
+async function siguienteNumeroPuesto(prefijo = "Puesto", sucursalId: number | null = null) {
   const pattern = `${prefijo} `;
   const existentes = await prisma.puesto.findMany({
-    where: { codigo: { startsWith: pattern } },
+    where: { codigo: { startsWith: pattern }, sucursalId },
     select: { codigo: true },
   });
   const nums = new Set(
@@ -24,10 +24,10 @@ export const crearPuesto = asyncHandler(async (req, res) => {
   let { codigo, tipoPuesto, zona } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!codigo) {
-    const n = await siguienteNumeroPuesto();
+    const n = await siguienteNumeroPuesto("Puesto", sucursalId ?? null);
     codigo = `Puesto ${n}`;
   }
-  const existe = await prisma.puesto.findUnique({ where: { codigo } });
+  const existe = await prisma.puesto.findFirst({ where: { codigo, sucursalId: sucursalId ?? null } });
   if (existe) throw new AppError("El puesto ya existe", 400);
 
   const puesto = await prisma.puesto.create({ data: { codigo, tipoPuesto, zona: zona || null, sucursalId: sucursalId ?? null } });
