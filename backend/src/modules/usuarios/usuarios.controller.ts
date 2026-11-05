@@ -316,8 +316,15 @@ export const refreshToken = asyncHandler(async (req, res) => {
     if (typeof payload === "string" || typeof payload.id !== "number" || typeof payload.tokenVersion !== "number") {
       throw new AppError("Token invalido", 401);
     }
+    // Límite absoluto de sesión: aunque el token se refresque, no puede superar
+    // MAX_SESSION_MS desde que se emitió originalmente (iat).
+    const MAX_SESSION_MS = 12 * 60 * 60 * 1000;
+    if (typeof payload.iat === "number" && Date.now() - payload.iat * 1000 > MAX_SESSION_MS) {
+      throw new AppError("Sesión expirada. Inicia sesión nuevamente.", 401);
+    }
     decoded = payload;
-  } catch {
+  } catch (e) {
+    if (e instanceof AppError) throw e;
     throw new AppError("Token invalido", 401);
   }
   const usuario = await prisma.usuario.findUnique({ where: { id: decoded.id } });

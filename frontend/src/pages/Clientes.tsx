@@ -712,9 +712,11 @@ export default function Clientes() {
                       <span className={`text-sm font-semibold ${cliente.saldo > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-slate-500"}`}>
                         ${(cliente.saldo || 0).toLocaleString()}
                       </span>
-                      <button onClick={() => { setRecargaCli(cliente); setRecargaMonto(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-emerald-600" title="Recargar saldo">
-                        <Plus className="w-3 h-3 inline" />
-                      </button>
+                      {isAdmin && (
+                        <button onClick={() => { setRecargaCli(cliente); setRecargaMonto(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-emerald-600" title="Recargar saldo">
+                          <Plus className="w-3 h-3 inline" />
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-4">
                       <EstadoBadge estado={cliente.estado} />

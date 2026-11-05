@@ -2,6 +2,7 @@ import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
+import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 export const crearCliente = asyncHandler(async (req, res) => {
   let { nombres, apellidos, documento, telefono, direccion, email, observaciones, estado, deseaReservar } = req.body;
@@ -104,6 +105,7 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
   if (!existe) throw new AppError("Cliente no encontrado", 404);
 
   const { nombres, apellidos, telefono, direccion, email, observaciones, estado, deseaReservar, bloqueado, saldo } = req.body;
+  const esAdmin = req.usuario?.rol === "admin";
   const data: any = {};
   if (nombres) data.nombres = nombres;
   if (apellidos) data.apellidos = apellidos;
@@ -113,8 +115,15 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
   if (observaciones !== undefined) data.observaciones = observaciones;
   if (estado) data.estado = estado;
   if (deseaReservar !== undefined) data.deseaReservar = deseaReservar;
-  if (bloqueado !== undefined) data.bloqueado = bloqueado;
-  if (saldo !== undefined) data.saldo = Number(saldo);
+  // Campos financieros y de bloqueo: solo el administrador puede modificarlos.
+  if (bloqueado !== undefined) {
+    if (!esAdmin) throw new AppError("Solo un administrador puede bloquear o desbloquear clientes", 403);
+    data.bloqueado = bloqueado;
+  }
+  if (saldo !== undefined) {
+    if (!esAdmin) throw new AppError("Solo un administrador puede modificar el saldo del cliente", 403);
+    data.saldo = Number(saldo);
+  }
 
   const cliente = await prisma.cliente.update({ where: { id: Number(id) }, data });
 
@@ -212,14 +221,13 @@ export const eliminarCliente = asyncHandler(async (req, res) => {
       });
       canceladas = { mensualidades: ms.count, reservas: rs.count };
 
-      // Liberar los puestos asociados a esas mensualidades/reservas si quedaron sin ocupantes.
-      const puestosAfectados = await tx.mensualidad.findMany({
-        where: { clienteId: Number(id), puestoId: { not: null } },
-        select: { puestoId: true },
-        distinct: ["puestoId"],
-      });
-      for (const { puestoId } of puestosAfectados) {
-        if (!puestoId) continue;
+      // Liberar los puestos asociados a esas mensualidades Y reservas si quedaron sin ocupantes.
+      const [puestosMensualidad, puestosReserva] = await Promise.all([
+        tx.mensualidad.findMany({ where: { clienteId: Number(id), puestoId: { not: null } }, select: { puestoId: true } }),
+        tx.reserva.findMany({ where: { clienteId: Number(id), puestoId: { not: null } }, select: { puestoId: true } }),
+      ]);
+      const puestosAfectados = [...new Set([...puestosMensualidad, ...puestosReserva].map(p => p.puestoId).filter((v): v is number => v !== null))];
+      for (const puestoId of puestosAfectados) {
         const [ing, men, res] = await Promise.all([
           tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
           tx.mensualidad.count({ where: { puestoId, estado: "ACTIVA" } }),
@@ -287,8 +295,10 @@ export const perfilCliente = asyncHandler(async (req, res) => {
   const totalVisitas = todosIngresos.length;
   const ultimaVisita = todosIngresos[0]?.fechaEntrada || null;
   const deudaPendiente = (cliente.vehiculos?.flatMap(v => v.mensualidades || []) || []).reduce((sum, m) => {
-    const pagado = (m.facturas || []).filter(f => new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + f.valor, 0);
-    return sum + (m.estado !== "pagado" ? Math.max(0, (m.valor || 0) - pagado) : 0);
+    // Solo las mensualidades ACTIVA/VENCIDA representan deuda; las CANCELADA no.
+    if (!["ACTIVA", "VENCIDA"].includes(m.estado)) return sum;
+    const pagado = (m.facturas || []).filter(f => f.metodoPago != null && new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + f.valor, 0);
+    return sum + Math.max(0, (m.valor || 0) - pagado);
   }, 0);
 
   const pagos = [
@@ -335,24 +345,30 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   const existe = await prisma.cliente.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Cliente no encontrado", 404);
 
-  const cliente = await prisma.cliente.update({
-    where: { id: Number(id) },
-    data: { saldo: { increment: Number(monto) } },
-  });
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
 
-  // opcional: crear el movimiento de caja de la recarga
-  const cajaAbierta = await prisma.caja.findFirst({ where: { estado: "ABIERTA" } });
-  if (cajaAbierta) {
-    await prisma.cajaMovimiento.create({
-      data: {
-        cajaId: cajaAbierta.id,
-        tipo: "INGRESO",
-        concepto: `Recarga de saldo — ${existe.nombres} ${existe.apellidos}`,
-        monto: Number(monto),
-        metodoPago: req.body.metodoPago || "efectivo",
-      },
+  // Saldo y movimiento de caja se crean en una sola transacción: nunca queda
+  // un saldo acreditado sin su ingreso correspondiente (ni al revés).
+  const cliente = await prisma.$transaction(async (tx) => {
+    const actualizado = await tx.cliente.update({
+      where: { id: Number(id) },
+      data: { saldo: { increment: Number(monto) } },
     });
-  }
+
+    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalId ?? null } });
+    if (cajaAbierta) {
+      await tx.cajaMovimiento.create({
+        data: {
+          cajaId: cajaAbierta.id,
+          tipo: "INGRESO",
+          concepto: `Recarga de saldo — ${existe.nombres} ${existe.apellidos}`,
+          monto: Number(monto),
+          metodoPago: req.body.metodoPago || "efectivo",
+        },
+      });
+    }
+    return actualizado;
+  });
 
   await registrarMovimiento("CLIENTES", "RECARGAR", `Saldo recargado a ${existe.nombres} ${existe.apellidos} por $${Number(monto)}`, req.usuario?.usuario || "admin");
 
@@ -391,13 +407,28 @@ export const importarClientes = asyncHandler(async (req, res) => {
         },
       });
 
+      const creadosVehiculo: string[] = [];
+      const erroresVehiculo: string[] = [];
       if (c.placa) {
-        await prisma.vehiculo.create({
-          data: { placa: String(c.placa).trim().toUpperCase(), marca: c.marca?.trim() || null, tipo: c.tipo?.trim() || null, color: c.color?.trim() || null, clienteId: cliente.id },
-        }).catch(() => {});
+        const placaNorm = String(c.placa).trim().toUpperCase().replace(/[\s-]+/g, "");
+        try {
+          const dup = await prisma.vehiculo.findUnique({ where: { placa: placaNorm } });
+          if (dup) {
+            erroresVehiculo.push(`Placa ${placaNorm} ya existe (otro cliente); el cliente se creó sin vehículo`);
+          } else {
+            await prisma.vehiculo.create({
+              data: { placa: placaNorm, marca: c.marca?.trim() || null, tipo: c.tipo?.trim() || null, color: c.color?.trim() || null, clienteId: cliente.id },
+            });
+            creadosVehiculo.push(placaNorm);
+          }
+        } catch (e) {
+          erroresVehiculo.push(`Placa ${placaNorm}: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
 
       creados.push(cliente);
+      // Se reportan también los vehículos que no se pudieron crear (antes se silenciaban).
+      if (erroresVehiculo.length) errores.push({ ...c, error: erroresVehiculo.join("; ") });
     } catch (err) {
       errores.push({ ...c, error: err instanceof Error ? err.message : String(err) });
     }

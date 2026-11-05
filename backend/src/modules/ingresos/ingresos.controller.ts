@@ -887,25 +887,14 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 export const ticketEntrada = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
-  const factura = await prisma.factura.findFirst({
-    where: { ingresoId: Number(id), ...(sucursalId ? { ingreso: { vehiculo: { sucursalId } } } : {}) },
-    include: { ingreso: { include: { vehiculo: { include: { cliente: true } }, puesto: true } } },
-    orderBy: { createdAt: 'desc' },
+  // El ticket de ENTRADA siempre usa su propio folio (ING-...), nunca el número de
+  // una factura de salida (evita duplicar folios entre documentos distintos).
+  const ing = await prisma.ingreso.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
+    include: { vehiculo: { include: { cliente: true } }, puesto: true },
   });
-
-  let ing;
-  let folio;
-  if (factura?.ingreso) {
-    ing = factura.ingreso;
-    folio = factura.numero;
-  } else {
-    ing = await prisma.ingreso.findFirst({
-      where: { id: Number(id), ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
-      include: { vehiculo: { include: { cliente: true } }, puesto: true },
-    });
-    if (!ing) throw new AppError('Ingreso no encontrado', 404);
-    folio = `ING-${String(ing.id).padStart(6, '0')}`;
-  }
+  if (!ing) throw new AppError('Ingreso no encontrado', 404);
+  const folio = `ING-${String(ing.id).padStart(6, '0')}`;
 
   const config = await prisma.configuracion.findFirst();
   const cliente = ing.vehiculo?.cliente;

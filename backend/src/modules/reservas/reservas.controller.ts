@@ -231,6 +231,12 @@ export const actualizarReserva = asyncHandler(async (req, res) => {
     if (!puesto) throw new AppError("Puesto no encontrado", 404);
     if (puesto.sucursalId !== sucursalOrigen) throw new AppError("No puedes mover la reserva a un puesto de otra sucursal", 403);
     if (!puesto.activo || puesto.estado === "MANTENIMIENTO") throw new AppError("El puesto está inactivo o en mantenimiento", 400);
+    if (nuevoVehiculoId) {
+      const vehiculoTipo = await prisma.vehiculo.findUnique({ where: { id: nuevoVehiculoId }, select: { tipo: true } });
+      if (!puestoAceptaTipo(puesto, vehiculoTipo?.tipo)) {
+        throw new AppError(`El puesto ${puesto.codigo} no admite vehículos de tipo ${vehiculoTipo?.tipo || "desconocido"}`, 400);
+      }
+    }
   }
 
   const reserva = await prisma.$transaction(async (tx) => {

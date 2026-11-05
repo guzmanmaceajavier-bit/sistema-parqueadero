@@ -677,26 +677,38 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
   for (const m of activas) {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
-    const tieneFacturaMes = m.facturas.some(f => {
-      const fDate = new Date(f.createdAt);
-      return fDate >= inicioMes && fDate <= finMes;
-    });
-    if (tieneFacturaMes) continue;
+
+    // Saldo real pendiente del período (pagado = facturas con metodoPago dentro del período).
+    const pagado = calcularPagadoMensualidad(m.facturas, m.fechaInicio);
+    const saldoPendiente = Math.max(0, m.valor - pagado);
+    if (saldoPendiente <= 0) continue;
 
     await prisma.$transaction(async (tx) => {
+      // Relectura + bloqueo por mensualidad: evita duplicar la factura del mes
+      // si dos usuarios generan pendientes a la vez.
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${m.id}::integer)) AS advisory_lock`;
+      const actual = await tx.mensualidad.findFirst({ where: { id: m.id }, include: { facturas: { select: { createdAt: true, origen: true } } } });
+      if (!actual) return;
+      const yaTieneMes = actual.facturas.some(f => {
+        const fDate = new Date(f.createdAt);
+        return fDate >= inicioMes && fDate <= finMes && f.origen === "MENSUALIDAD_AUTO";
+      });
+      if (yaTieneMes) return;
+
       const numeroFactura = await generarNumeroFactura("FACT-MEN");
       await tx.factura.create({
         data: {
           numero: numeroFactura,
           mensualidadId: m.id,
           origen: "MENSUALIDAD_AUTO",
-          valor: m.valor,
+          // Se factura el saldo pendiente real, no el valor total.
+          valor: saldoPendiente,
           metodoPago: null,
           sucursalId: m.sucursalId,
         },
       });
+      generadas++;
     });
-    generadas++;
   }
 
   await registrarMovimiento("FACTURACION", "GENERAR_AUTO", `${generadas} factura(s) generadas automáticamente`, req.usuario?.usuario || "admin");
