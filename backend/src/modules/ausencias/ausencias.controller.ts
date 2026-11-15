@@ -24,12 +24,18 @@ export const crearAusencia = asyncHandler(async (req, res) => {
   if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
 
-  const ingresoActivo = await prisma.ingreso.findFirst({
-    where: { vehiculoId: vid, estado: "ACTIVO" },
-    include: { puesto: true, vehiculo: true },
-  });
-
   const ausencia = await prisma.$transaction(async (tx) => {
+    // Serializa la ausencia con entradas y salidas para que el mismo vehículo
+    // no pueda cerrar dos veces su ingreso ni liberar el puesto por duplicado.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
+    const ingresoActivo = await tx.ingreso.findFirst({
+      where: { vehiculoId: vid, estado: "ACTIVO" },
+      include: { puesto: true, vehiculo: true },
+    });
+    if (ingresoActivo?.puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoActivo.puestoId}::integer)) AS advisory_lock`;
+    }
+
     const a = await tx.ausencia.create({
       data: {
         clienteId: cid, vehiculoId: vid, sucursalId: vehiculo.sucursalId ?? sucursalId ?? null,
