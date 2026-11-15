@@ -6,14 +6,13 @@ import { paginate } from "../../utils/pagination.js";
 import { calcularTotalesHelper } from "./caja.helpers.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
-import { redondearDinero, sumarDinero, restarDinero } from "../../utils/dinero.js";
+import { normalizarMonto, sumarDinero, restarDinero } from "../../utils/dinero.js";
 
 export const abrirCaja = asyncHandler(async (req, res) => {
   const { apertura, password, observacion } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
-  const aperturaIngresada = Number(apertura);
-  if (!Number.isFinite(aperturaIngresada) || aperturaIngresada < 0) throw new AppError("El fondo de apertura debe ser válido y no negativo", 400);
-  const aperturaNormalizada = redondearDinero(aperturaIngresada);
+  const aperturaNormalizada = normalizarMonto(apertura);
+  if (aperturaNormalizada === null || aperturaNormalizada < 0) throw new AppError("El fondo de apertura debe ser un importe válido, no negativo y con máximo dos decimales", 400);
 
   const caja = await prisma.$transaction(async (tx) => {
     // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
@@ -64,7 +63,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
       for (const [denom, count] of Object.entries(conteo.billetes || {})) {
         const denominacion = Number(denom);
         const cantidad = Number(count);
-        if (!billetesValidos.has(denominacion) || !Number.isInteger(cantidad) || cantidad < 0) {
+        if (!billetesValidos.has(denominacion) || !Number.isSafeInteger(cantidad) || cantidad < 0) {
           throw new AppError("El conteo contiene una denominación de billete o cantidad no válida", 400);
         }
         totalConteo += denominacion * cantidad;
@@ -72,11 +71,12 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
       for (const [denom, count] of Object.entries(conteo.monedas || {})) {
         const denominacion = Number(denom);
         const cantidad = Number(count);
-        if (!monedasValidas.has(denominacion) || !Number.isInteger(cantidad) || cantidad < 0) {
+        if (!monedasValidas.has(denominacion) || !Number.isSafeInteger(cantidad) || cantidad < 0) {
           throw new AppError("El conteo contiene una denominación de moneda o cantidad no válida", 400);
         }
         totalConteo += denominacion * cantidad;
       }
+      if (!Number.isSafeInteger(totalConteo)) throw new AppError("El total del arqueo excede el rango numérico seguro", 400);
       diferencia = restarDinero(totalConteo, esperado);
       const arqueoData = { conteo, totalConteo, esperado, diferencia };
       obsFinal = obsFinal ? obsFinal + "\n" + JSON.stringify(arqueoData) : JSON.stringify(arqueoData);
@@ -171,11 +171,10 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
 
     const data: any = {};
     if (apertura !== undefined) {
-      const aperturaIngresada = Number(apertura);
-      if (!Number.isFinite(aperturaIngresada) || aperturaIngresada < 0) {
-        throw new AppError("El fondo de apertura debe ser un valor válido y no negativo", 400);
+      const aperturaNormalizada = normalizarMonto(apertura);
+      if (aperturaNormalizada === null || aperturaNormalizada < 0) {
+        throw new AppError("El fondo de apertura debe ser un importe válido, no negativo y con máximo dos decimales", 400);
       }
-      const aperturaNormalizada = redondearDinero(aperturaIngresada);
       if (existente.estado !== "ABIERTA") {
         throw new AppError("No se puede modificar el fondo de apertura de una caja cerrada", 409);
       }
@@ -324,8 +323,8 @@ export const actualizarMovimientoCaja = asyncHandler(async (req, res) => {
       data.concepto = concepto.trim();
     }
     if (monto !== undefined) {
-      const montoNormalizado = Number(monto);
-      if (!Number.isFinite(montoNormalizado) || montoNormalizado <= 0) throw new AppError("El monto debe ser un número mayor que cero", 400);
+      const montoNormalizado = normalizarMonto(monto);
+      if (montoNormalizado === null || montoNormalizado <= 0) throw new AppError("El monto debe ser un importe válido y mayor que cero, con máximo dos decimales", 400);
       data.monto = montoNormalizado;
     }
     if (metodoPago !== undefined) {

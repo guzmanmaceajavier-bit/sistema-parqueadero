@@ -6,15 +6,14 @@ import { emitirEvento } from "../../services/socket.js";
 import { getCajaOError } from "../../helpers/caja.js";
 import { calcularProximaGeneracion } from "./gastos.utils.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
-import { redondearDinero } from "../../utils/dinero.js";
+import { normalizarMonto } from "../../utils/dinero.js";
 
 export const crearGasto = asyncHandler(async (req, res) => {
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!concepto) throw new AppError("Concepto es requerido", 400);
-  const valorIngresado = Number(valor);
-  if (!Number.isFinite(valorIngresado) || valorIngresado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
-  const valorNormalizado = redondearDinero(valorIngresado);
+  const valorNormalizado = normalizarMonto(valor);
+  if (valorNormalizado === null || valorNormalizado <= 0) throw new AppError("El valor del gasto debe ser un importe válido y mayor que cero, con máximo dos decimales", 400);
 
   await getCajaOError(sucursalId ?? null);
 
@@ -79,9 +78,9 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   if (descripcion !== undefined) data.descripcion = descripcion;
   if (categoria !== undefined) data.categoria = categoria;
   if (valor !== undefined) {
-    const valorIngresado = Number(valor);
-    if (!Number.isFinite(valorIngresado) || valorIngresado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
-    data.valor = redondearDinero(valorIngresado);
+    const valorNormalizado = normalizarMonto(valor);
+    if (valorNormalizado === null || valorNormalizado <= 0) throw new AppError("El valor del gasto debe ser un importe válido y mayor que cero, con máximo dos decimales", 400);
+    data.valor = valorNormalizado;
   }
   if (recurrente !== undefined) data.recurrente = recurrente;
   if (periodicidad !== undefined) data.periodicidad = periodicidad;
