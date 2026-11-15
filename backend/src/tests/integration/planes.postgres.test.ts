@@ -74,25 +74,32 @@ const auth = () => ({ "Content-Type": "application/json", Cookie: cookie });
 
 describe("Planes y cobro", () => {
   it("el plan vigente ampara al vehículo (no se cobra)", async () => {
-    const hoy = new Date();
+    const hoy = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     const fin = new Date();
     fin.setDate(fin.getDate() + 30);
     const mensualidad = await prisma.mensualidad.create({
       data: { clienteId, vehiculoId, planId, puestoId: puestoPlanId, fechaInicio: hoy, fechaFin: fin, valor: 150000 },
     });
-    await prisma.factura.create({
-      data: {
-        numero: `TEST-PLAN-${Date.now()}`,
-        mensualidadId: mensualidad.id,
-        origen: "MENSUALIDAD",
-        valor: 150000,
-        metodoPago: "efectivo",
-      },
-    });
     const planActivo = await prisma.mensualidad.findFirst({
       where: { vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
     });
     expect(planActivo).not.toBeNull();
+  });
+
+  it("persiste el puesto y la mensualidad vinculados a una ausencia", async () => {
+    const inicio = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const fin = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
+    const mensualidad = await prisma.mensualidad.create({
+      data: { clienteId, vehiculoId, planId, puestoId: puestoPlanId, fechaInicio: inicio, fechaFin: fin, valor: 150000 },
+    });
+    const ausencia = await prisma.ausencia.create({
+      data: { clienteId, vehiculoId, puestoId: puestoPlanId, mensualidadId: mensualidad.id, fechaSalida: new Date(), opcion: "CONGELAR" },
+    });
+    expect(ausencia.puestoId).toBe(puestoPlanId);
+    expect(ausencia.mensualidadId).toBe(mensualidad.id);
+    expect(ausencia.diasCompensados).toBe(0);
+    await prisma.ausencia.delete({ where: { id: ausencia.id } });
+    await prisma.mensualidad.delete({ where: { id: mensualidad.id } });
   });
 
   it("el plan vencido se marca VENCIDA solo y libera el puesto", async () => {
@@ -129,6 +136,57 @@ describe("Planes y cobro", () => {
     const puesto = await prisma.puesto.findUnique({ where: { id: puestoPlanId } });
     expect(puesto?.estado).toBe("RESERVADO");
     await prisma.ingreso.delete({ where: { id: ingreso.id } });
+  });
+
+  it("congela la mensualidad durante la ausencia y recupera el mismo puesto al regresar", async () => {
+    if (!serverUp) return;
+    const mensualidad = await prisma.mensualidad.findFirst({ where: { vehiculoId, puestoId: puestoPlanId, estado: "ACTIVA" } });
+    expect(mensualidad).not.toBeNull();
+    const fechaFinOriginal = mensualidad!.fechaFin;
+
+    const entrada = await http("/api/ingresos", {
+      method: "POST", headers: auth(), body: JSON.stringify({ clienteId, vehiculoId }),
+    });
+    expect(entrada?.status).toBe(201);
+    const ingresoId = (await entrada!.json()).ingreso.id;
+
+    const ausenciaResp = await http("/api/ausencias", {
+      method: "POST", headers: auth(),
+      body: JSON.stringify({ clienteId, vehiculoId, fechaSalida: new Date().toISOString(), opcion: "CONGELAR" }),
+    });
+    expect(ausenciaResp?.status).toBe(201);
+    const ausencia = (await ausenciaResp!.json()).ausencia;
+    expect(ausencia.puestoId).toBe(puestoPlanId);
+    expect(ausencia.mensualidadId).toBe(mensualidad!.id);
+
+    const fechaSalidaSimulada = new Date(Date.now() - 3 * 86400000 - 1000);
+    await prisma.ausencia.update({ where: { id: ausencia.id }, data: { fechaSalida: fechaSalidaSimulada } });
+    const finalizar = await http(`/api/ausencias/finalizar/${ausencia.id}`, { method: "PUT", headers: auth() });
+    expect(finalizar?.status).toBe(200);
+    const finalizada = (await finalizar!.json()).ausencia;
+    expect(finalizada.diasCompensados).toBeGreaterThan(0);
+
+    const mensualidadActual = await prisma.mensualidad.findUniqueOrThrow({ where: { id: mensualidad!.id } });
+    expect(mensualidadActual.fechaFin.getTime()).toBeGreaterThan(fechaFinOriginal.getTime());
+    expect((await prisma.puesto.findUniqueOrThrow({ where: { id: puestoPlanId } })).estado).toBe("RESERVADO");
+
+    const reingreso = await http("/api/ingresos", {
+      method: "POST", headers: auth(), body: JSON.stringify({ clienteId, vehiculoId }),
+    });
+    expect(reingreso?.status).toBe(201);
+    const reingresoBody = await reingreso!.json();
+    expect(reingresoBody.ingreso.puestoId).toBe(puestoPlanId);
+    expect(reingresoBody.planAsignado.saldoPendiente).toBeGreaterThan(0);
+
+    const salida = await http(`/api/ingresos/salida-con-cobro/${reingresoBody.ingreso.id}`, {
+      method: "POST", headers: auth(), body: JSON.stringify({ metodoPago: "efectivo" }),
+    });
+    expect(salida?.status).toBe(200);
+    expect((await salida!.json()).cobro.total).toBe(0);
+
+    await prisma.ingreso.deleteMany({ where: { id: { in: [ingresoId, reingresoBody.ingreso.id] } } });
+    await prisma.ausencia.delete({ where: { id: ausencia.id } });
+    await prisma.puesto.update({ where: { id: puestoPlanId }, data: { estado: "RESERVADO" } });
   });
 
   it("entrada duplicada del mismo vehículo se rechaza (HTTP)", async () => {

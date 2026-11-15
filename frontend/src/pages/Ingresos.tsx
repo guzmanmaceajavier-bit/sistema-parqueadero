@@ -162,8 +162,11 @@ export default function Ingresos() {
           vehiculoId: parseInt(formEntrada.vehiculoId),
           puestoId: formEntrada.puestoId ? parseInt(formEntrada.puestoId) : undefined,
         });
+        const saldoPendientePlan = Number(res.data.planAsignado?.saldoPendiente || 0);
         mostrarToast(
           res.data.reservaAsignada ? "Entrada registrada — puesto por reserva"
+          : res.data.tipoIngreso === "plan_mensual" && saldoPendientePlan > 0
+            ? `Entrada registrada — plan vigente; saldo pendiente ${saldoPendientePlan.toLocaleString("es-CO")}`
           : res.data.tipoIngreso === "plan_mensual" ? "Entrada registrada — cubierta por el plan"
           : "Entrada registrada correctamente",
           "success"

@@ -29,6 +29,8 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     // Serializa la ausencia con entradas y salidas para que el mismo vehículo
     // no pueda cerrar dos veces su ingreso ni liberar el puesto por duplicado.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
+    const ausenciaPreviaActiva = await tx.ausencia.findFirst({ where: { vehiculoId: vid, estado: "ACTIVA" }, select: { id: true } });
+    if (ausenciaPreviaActiva) throw new AppError("El vehículo ya tiene una ausencia activa. Finalízala antes de registrar otra.", 409);
     const ingresoActivo = await tx.ingreso.findFirst({
       where: { vehiculoId: vid, estado: "ACTIVO" },
       include: { puesto: true, vehiculo: true },
@@ -36,48 +38,70 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     if (ingresoActivo?.puestoId) {
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoActivo.puestoId}::integer)) AS advisory_lock`;
     }
+    const ahora = new Date();
+    const sucursalIngreso = ingresoActivo?.vehiculo.sucursalId ?? vehiculo.sucursalId ?? sucursalId ?? null;
+    const fechaSalidaEfectiva = fechaSalida ? new Date(fechaSalida) : ahora;
+    if (!Number.isFinite(fechaSalidaEfectiva.getTime()) || fechaSalidaEfectiva > ahora) throw new AppError("La fecha de salida no es válida o está en el futuro", 400);
+    if (fechaRegreso) {
+      const regresoInicial = new Date(fechaRegreso);
+      if (!Number.isFinite(regresoInicial.getTime()) || regresoInicial < fechaSalidaEfectiva || regresoInicial > ahora) throw new AppError("La fecha de regreso inicial no es válida", 400);
+    }
+    if (ingresoActivo && fechaSalidaEfectiva < ingresoActivo.fechaEntrada) throw new AppError("La salida no puede ser anterior al ingreso del vehículo", 400);
+    const planActivo = await tx.mensualidad.findFirst({
+      where: {
+        vehiculoId: vid, sucursalId: sucursalIngreso, estado: "ACTIVA",
+        fechaInicio: { lte: ahora }, fechaFin: { gte: ahora },
+        ...(ingresoActivo?.puestoId ? { OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }] } : {}),
+      },
+      include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
+      orderBy: { fechaInicio: "desc" },
+    });
+    if (planActivo?.puestoId && ingresoActivo?.puestoId && planActivo.puestoId !== ingresoActivo.puestoId) {
+      throw new AppError("El puesto del ingreso no coincide con el puesto asignado por la mensualidad. Corrige la asignación antes de registrar la ausencia.", 409);
+    }
+    const planQueCubriaEntrada = ingresoActivo && !planActivo ? await tx.mensualidad.findFirst({
+      where: {
+        vehiculoId: vid, sucursalId: sucursalIngreso, estado: { in: ["ACTIVA", "VENCIDA"] },
+        fechaInicio: { lte: ingresoActivo.fechaEntrada },
+        fechaFin: { gte: ingresoActivo.fechaEntrada, lt: fechaSalidaEfectiva },
+        ...(ingresoActivo.puestoId ? { OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }] } : {}),
+      },
+      orderBy: { fechaFin: "desc" },
+    }) : null;
 
     const a = await tx.ausencia.create({
       data: {
-        clienteId: cid, vehiculoId: vid, sucursalId: vehiculo.sucursalId ?? sucursalId ?? null,
-        fechaSalida: fechaSalida ? new Date(fechaSalida) : new Date(), fechaRegreso: fechaRegreso ? new Date(fechaRegreso) : null, motivo, opcion: opcion || "HISTORIAL",
+        clienteId: cid, vehiculoId: vid, sucursalId: sucursalIngreso,
+        puestoId: ingresoActivo?.puestoId ?? planActivo?.puestoId ?? null,
+        mensualidadId: planActivo?.id ?? null,
+        fechaSalida: fechaSalidaEfectiva, fechaRegreso: fechaRegreso ? new Date(fechaRegreso) : null,
+        motivo, opcion: opcion || "CONGELAR",
       },
-      include: { cliente: true, vehiculo: true },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     });
 
     if (ingresoActivo) {
-      const ahora = new Date();
-      const tiempoMinutos = Math.ceil((ahora.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
-      const sucursalIngreso = ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null;
-
-      // La ausencia aplica exactamente la misma regla de cobertura que una salida
-      // normal: solo una mensualidad totalmente pagada y vigente evita el cobro.
-      const planActivo = await tx.mensualidad.findFirst({
-        where: {
-          vehiculoId: vid,
-          sucursalId: sucursalIngreso,
-          estado: "ACTIVA",
-          fechaInicio: { lte: ahora },
-          fechaFin: { gte: ahora },
-          OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }],
-        },
-        include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
-      });
-      const coberturaPagada = !!planActivo
-        && calcularPagadoMensualidad(planActivo.facturas, planActivo.fechaInicio) >= planActivo.valor;
+      let tiempoMinutos = Math.max(0, Math.ceil((fechaSalidaEfectiva.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60)));
+      // La mensualidad vigente cubre el uso del puesto aunque tenga saldo pendiente.
+      // El saldo sigue pendiente en la cuenta del cliente; no se genera un segundo cobro diario.
+      const cubiertoPorPlan = !!planActivo;
 
       let valorFacturado = 0;
-      if (!coberturaPagada) {
+      if (!cubiertoPorPlan) {
         // No duplicar una fórmula simplificada: reutilizar el calculador central
         // para respetar modalidad, cortesías, minutos gratis, progresivas y topes.
+        const ingresoFacturable = planQueCubriaEntrada
+          ? { ...ingresoActivo, fechaEntrada: planQueCubriaEntrada.fechaFin }
+          : ingresoActivo;
         const cobro = await calcularCobro({
-          ingreso: ingresoActivo,
+          ingreso: ingresoFacturable,
           tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
-          fechaSalida: ahora,
+          fechaSalida: fechaSalidaEfectiva,
           tarifaId: ingresoActivo.vehiculo.tarifaId ?? undefined,
         });
         if (cobro.error) throw new AppError(cobro.error, 400);
         valorFacturado = cobro.total;
+        tiempoMinutos = cobro.totalMinutos ?? tiempoMinutos;
 
         await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
         const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalIngreso } });
@@ -112,11 +136,15 @@ export const crearAusencia = asyncHandler(async (req, res) => {
 
       await tx.ingreso.update({
         where: { id: ingresoActivo.id },
-        data: { fechaSalida: ahora, estado: "FINALIZADO", tiempoMinutos, valorPagado: valorFacturado },
+        data: { fechaSalida: fechaSalidaEfectiva, estado: "FINALIZADO", tiempoMinutos, valorPagado: valorFacturado },
       });
       if (ingresoActivo.puestoId) {
         await tx.puesto.update({ where: { id: ingresoActivo.puestoId }, data: { estado: "AUSENCIA" } });
       }
+    } else if (a.puestoId) {
+      // Si se registra la ausencia cuando el vehículo ya está fuera, igualmente
+      // se conserva el puesto contractual para su regreso.
+      await tx.puesto.updateMany({ where: { id: a.puestoId, estado: "LIBRE" }, data: { estado: "RESERVADO" } });
     }
 
     return a;
@@ -143,7 +171,7 @@ export const obtenerAusencias = asyncHandler(async (req, res) => {
 
   const { data: ausencias, pagination } = await paginate(prisma, "ausencia", {
     page, limit, where,
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     orderBy: { fechaSalida: "desc" },
   });
   res.json({ ok: true, ausencias, pagination });
@@ -154,7 +182,7 @@ export const obtenerAusencia = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const ausencia = await prisma.ausencia.findFirst({
     where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
   });
   if (!ausencia) throw new AppError("Ausencia no encontrada", 404);
   res.json({ ok: true, ausencia });
@@ -198,7 +226,7 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
 
   const ausencia = await prisma.ausencia.update({
     where: { id: Number(id) }, data,
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
   });
   res.json({ ok: true, ausencia });
 });
@@ -206,9 +234,13 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
 export const finalizarAusencia = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
+  const diasCompensacionSolicitados = req.body?.diasCompensacion === undefined ? null : Number(req.body.diasCompensacion);
+  if (diasCompensacionSolicitados !== null && (!Number.isInteger(diasCompensacionSolicitados) || diasCompensacionSolicitados < 0 || diasCompensacionSolicitados > 365)) {
+    throw new AppError("Los días de compensación deben ser un entero entre 0 y 365", 400);
+  }
   const existente = await prisma.ausencia.findFirst({
     where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
   });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
   if (existente.estado === "FINALIZADA") throw new AppError("La ausencia ya está finalizada", 400);
@@ -224,8 +256,13 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       orderBy: { fechaSalida: "desc" },
       select: { puestoId: true },
     });
-    if (ingresoParaBloqueo?.puestoId) {
-      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoParaBloqueo.puestoId}::integer)) AS advisory_lock`;
+    const puestoParaBloqueo = existente.puestoId ?? ingresoParaBloqueo?.puestoId;
+    if (puestoParaBloqueo) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoParaBloqueo}::integer)) AS advisory_lock`;
+    }
+    const ausenciaActual = await tx.ausencia.findFirst({ where: { id: Number(id) } });
+    if (!ausenciaActual || ausenciaActual.estado !== "ACTIVA") {
+      throw new AppError("La ausencia ya fue finalizada por otra operación", 409);
     }
     const fechaRegreso = new Date();
     const diasAusente = Math.max(1, Math.ceil((fechaRegreso.getTime() - existente.fechaSalida.getTime()) / 86400000));
@@ -233,7 +270,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     const a = await tx.ausencia.update({
       where: { id: Number(id) },
       data: { estado: "FINALIZADA", fechaRegreso },
-      include: { cliente: true, vehiculo: true },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     });
 
     const otrasAusenciasActivas = await tx.ausencia.count({
@@ -243,67 +280,120 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       await tx.cliente.update({ where: { id: a.clienteId }, data: { estado: "ACTIVO" } });
     }
 
-    const ingresoAusencia = await tx.ingreso.findFirst({
-      where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { vehiculo: { sucursalId } } : {}), estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
-      orderBy: { fechaSalida: "desc" },
+    const ingresoAusencia = a.puestoId ? null : await tx.ingreso.findFirst({
+      where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { vehiculo: { sucursalId } } : {}), estado: "FINALIZADO", fechaSalida: { gte: existente.createdAt } },
+      orderBy: { fechaSalida: "asc" },
     });
-    if (ingresoAusencia?.puestoId) {
+    const puestoAusenciaId = a.puestoId ?? ingresoAusencia?.puestoId ?? null;
+    // Solo se compensa la mensualidad que cubría el puesto/vehículo al salir.
+    // Nunca se alteran todas las mensualidades históricas del mismo vehículo.
+    const mensualidadAusencia = await tx.mensualidad.findFirst({
+      where: {
+        vehiculoId: a.vehiculoId,
+        ...(sucursalId ? { sucursalId } : {}),
+        estado: a.mensualidadId ? { in: ["ACTIVA", "VENCIDA"] } : "ACTIVA",
+        fechaInicio: { lte: existente.fechaSalida },
+        fechaFin: { gte: existente.fechaSalida },
+        ...(a.mensualidadId ? { id: a.mensualidadId } : { ...(puestoAusenciaId ? { OR: [{ puestoId: null }, { puestoId: puestoAusenciaId }] } : {}) }),
+      },
+      include: { plan: { select: { duracionDias: true } }, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
+      orderBy: { fechaInicio: "desc" },
+    });
+
+    let diasCompensados = 0;
+    let valorCompensado = 0;
+    if (mensualidadAusencia && (existente.opcion === "CONGELAR" || existente.opcion === "EXTENDER")) {
+      const diasAplicados = existente.opcion === "EXTENDER" && diasCompensacionSolicitados !== null
+        ? diasCompensacionSolicitados
+        : diasAusente;
+      if (diasAplicados > 0) {
+        const nuevaFechaFin = new Date(mensualidadAusencia.fechaFin.getTime() + diasAplicados * 86400000);
+        diasCompensados = diasAplicados;
+        const detalle = `Ausencia #${id}: ${existente.opcion.toLowerCase()} de ${diasAplicados} día(s), ${fechaRegreso.toISOString()}`;
+        await tx.mensualidad.update({
+          where: { id: mensualidadAusencia.id },
+          data: {
+            fechaFin: nuevaFechaFin,
+            estado: "ACTIVA",
+            observacion: [mensualidadAusencia.observacion, detalle].filter(Boolean).join("\n").slice(0, 2000),
+          },
+        });
+        mensaje = `${existente.opcion === "CONGELAR" ? "Mensualidad congelada" : "Vencimiento extendido"} ${diasAplicados} día(s) — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
+      } else {
+        mensaje = "Ausencia finalizada sin días adicionales de compensación";
+      }
+    } else if (mensualidadAusencia && existente.opcion === "DESCONTAR") {
+      // El descuento primero reduce la deuda pendiente. Si ya estaba pagada,
+      // o sobra compensación después de cubrir la deuda, el excedente va al saldo
+      // a favor del cliente con un movimiento trazable (no se altera la factura).
+      const pagado = calcularPagadoMensualidad(mensualidadAusencia.facturas, mensualidadAusencia.fechaInicio);
+      const duracionPlan = Math.max(1, mensualidadAusencia.plan?.duracionDias ?? 30);
+      const descuentoSolicitado = redondearDinero((mensualidadAusencia.valor / duracionPlan) * diasAusente);
+      diasCompensados = diasAusente;
+      valorCompensado = descuentoSolicitado;
+      const deudaPendiente = Math.max(0, restarDinero(mensualidadAusencia.valor, pagado));
+      const reduccionDeuda = Math.min(descuentoSolicitado, deudaPendiente);
+      const creditoCliente = Math.max(0, restarDinero(descuentoSolicitado, reduccionDeuda));
+      if (reduccionDeuda > 0) {
+        await tx.mensualidad.update({
+          where: { id: mensualidadAusencia.id },
+          data: {
+            valor: Math.max(pagado, restarDinero(mensualidadAusencia.valor, reduccionDeuda)),
+            observacion: [mensualidadAusencia.observacion, `Ausencia #${id}: descuento de deuda por $${reduccionDeuda.toLocaleString("es-CO")}`].filter(Boolean).join("\n").slice(0, 2000),
+          },
+        });
+      }
+      if (creditoCliente > 0) {
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${a.clienteId} FOR UPDATE`;
+        const clienteActual = await tx.cliente.findUnique({ where: { id: a.clienteId }, select: { saldo: true } });
+        const saldoAntes = redondearDinero(clienteActual?.saldo ?? 0);
+        const saldoDespues = redondearDinero(saldoAntes + creditoCliente);
+        await tx.cliente.update({ where: { id: a.clienteId }, data: { saldo: saldoDespues } });
+        await tx.clienteSaldoMovimiento.create({
+          data: {
+            clienteId: a.clienteId, tipo: "DEVOLUCION", monto: creditoCliente,
+            saldoAntes, saldoDespues,
+            concepto: `Compensación por ausencia #${id} — vehículo ${a.vehiculo?.placa || a.vehiculoId}`,
+            usuario: req.usuario?.usuario || "admin",
+          },
+        });
+      }
+      mensaje = `Compensación aplicada: $${descuentoSolicitado.toLocaleString("es-CO")} por ${diasAusente} día(s). Deuda reducida: $${reduccionDeuda.toLocaleString("es-CO")}; saldo a favor: $${creditoCliente.toLocaleString("es-CO")}.`;
+    } else if (existente.opcion === "MANTENER") {
+      mensaje = "Ausencia finalizada — mensualidad sin cambios";
+    } else if (existente.opcion === "HISTORIAL") {
+      mensaje = "Ausencia registrada únicamente en el historial; no se modificó la mensualidad";
+    } else if (!mensualidadAusencia) {
+      mensaje = "Ausencia finalizada; no se encontró una mensualidad que cubriera la fecha de salida para compensar";
+    }
+
+    // Se actualiza el estado del puesto después de aplicar la compensación, para
+    // que una mensualidad extendida conserve la reserva aunque su fecha original
+    // haya vencido durante la ausencia.
+    if (puestoAusenciaId) {
       const ahora = new Date();
       const [ingresoActivoPuesto, mensualidadActivaPuesto, reservaActivaPuesto] = await Promise.all([
-        tx.ingreso.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVO" } }),
+        tx.ingreso.count({ where: { puestoId: puestoAusenciaId, estado: "ACTIVO" } }),
         tx.mensualidad.count({
           where: {
-            puestoId: ingresoAusencia.puestoId,
-            estado: "ACTIVA",
-            fechaFin: { gte: ahora },
+            estado: "ACTIVA", fechaFin: { gte: ahora },
+            OR: [
+              { puestoId: puestoAusenciaId },
+              ...(a.mensualidadId ? [{ id: a.mensualidadId, puestoId: null }] : []),
+            ],
           },
         }),
-        tx.reserva.count({
-          where: {
-            puestoId: ingresoAusencia.puestoId,
-            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
-          },
-        }),
+        tx.reserva.count({ where: { puestoId: puestoAusenciaId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
       ]);
-      // Un plan o reserva conserva el puesto reservado, pero no ocupado:
-      // el vehículo todavía no ha reingresado físicamente.
-      const nuevoEstado = ingresoActivoPuesto > 0
-        ? "OCUPADO"
-        : mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0
-          ? "RESERVADO"
-          : "LIBRE";
-      await tx.puesto.update({ where: { id: ingresoAusencia.puestoId }, data: { estado: nuevoEstado } });
+      const nuevoEstado = ingresoActivoPuesto > 0 ? "OCUPADO" : mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0 ? "RESERVADO" : "LIBRE";
+      await tx.puesto.update({ where: { id: puestoAusenciaId }, data: { estado: nuevoEstado } });
     }
 
-    if (existente.opcion === "CONGELAR") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
-      for (const m of mensualidades) {
-        const nuevaFechaFin = new Date(m.fechaFin.getTime() + diasAusente * 86400000);
-        await tx.mensualidad.update({ where: { id: m.id }, data: { fechaFin: nuevaFechaFin } });
-        mensaje = `Mensualidad congelada — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
-      }
-    } else if (existente.opcion === "EXTENDER") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
-      for (const m of mensualidades) {
-        const nuevaFechaFin = new Date(m.fechaFin.getTime() + diasAusente * 86400000);
-        await tx.mensualidad.update({ where: { id: m.id }, data: { fechaFin: nuevaFechaFin } });
-        mensaje = `Vencimiento extendido ${diasAusente} día(s) — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
-      }
-    } else if (existente.opcion === "DESCONTAR") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
-      for (const m of mensualidades) {
-        const valorDia = redondearDinero(m.valor / 30);
-        const descuento = redondearDinero(valorDia * diasAusente);
-        const nuevoValor = Math.max(0, restarDinero(m.valor, descuento));
-        await tx.mensualidad.update({ where: { id: m.id }, data: { valor: nuevoValor } });
-        mensaje = `Descontados $${descuento.toLocaleString()} — nuevo valor mensualidad: $${nuevoValor.toLocaleString()}`;
-      }
-    } else if (existente.opcion === "MANTENER") {
-      mensaje = "Ausencia finalizada — cobro normal (sin cambios en mensualidad)";
-    }
-
-    return a;
+    return tx.ausencia.update({
+      where: { id: Number(id) },
+      data: { diasCompensados, valorCompensado, compensacionDetalle: mensaje, compensacionAplicadaAt: new Date() },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
+    });
   });
 
   await registrarMovimiento("AUSENCIAS", "FINALIZAR", `Ausencia #${id} finalizada — ${existente.cliente?.nombres} (${existente.opcion})`, req.usuario?.usuario || "admin");
