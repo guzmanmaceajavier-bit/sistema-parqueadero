@@ -236,7 +236,10 @@ export default function Ausencias() {
                         )}
                       </div>
                     </td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{a.vehiculo?.placa}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                    <div className="font-medium">{a.vehiculo?.placa}</div>
+                    {a.puesto?.codigo && <div className="text-[11px] text-teal-700 dark:text-teal-400 mt-0.5">Puesto reservado: {a.puesto.codigo}</div>}
+                  </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{formatFecha(a.fechaSalida)}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{formatFecha(a.fechaRegreso)}</td>
                   <td className="px-4 py-3 text-center">
