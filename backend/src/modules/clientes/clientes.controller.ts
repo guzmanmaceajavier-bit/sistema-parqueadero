@@ -63,13 +63,16 @@ export const obtenerClientes = asyncHandler(async (req, res) => {
   }
 
   const { data: clientes, pagination } = await paginate(prisma, "cliente", {
-    page, limit, where, include: { vehiculos: true, reservas: { where: { estado: "ACTIVA" } } }, orderBy: { id: "desc" },
+    page, limit, where, include: {
+      vehiculos: { where: sucursalId ? { sucursalId } : undefined },
+      reservas: { where: { estado: "ACTIVA", ...(sucursalId ? { sucursalId } : {}) } },
+    }, orderBy: { id: "desc" },
   });
 
   const hoy = new Date();
   const clienteIds = clientes.map(c => c.id);
   const vencidas = await prisma.mensualidad.findMany({
-    where: { clienteId: { in: clienteIds }, fechaFin: { lt: hoy }, estado: "ACTIVA" },
+    where: { clienteId: { in: clienteIds }, fechaFin: { lt: hoy }, estado: "ACTIVA", ...(sucursalId ? { sucursalId } : {}) },
     select: { clienteId: true },
     distinct: ["clienteId"],
   });
@@ -83,7 +86,7 @@ export const obtenerClientes = asyncHandler(async (req, res) => {
   }
 
   const activas = await prisma.mensualidad.findMany({
-    where: { clienteId: { in: clienteIds }, fechaFin: { gte: hoy }, estado: "ACTIVA" },
+    where: { clienteId: { in: clienteIds }, fechaFin: { gte: hoy }, estado: "ACTIVA", ...(sucursalId ? { sucursalId } : {}) },
     select: { clienteId: true, plan: { select: { nombre: true } } },
   });
   const planMap = new Map<number, string>();
@@ -353,6 +356,7 @@ export const perfilCliente = asyncHandler(async (req, res) => {
             take: 50,
           },
           mensualidades: {
+            where: sucursalId ? { sucursalId } : undefined,
             include: { plan: true, facturas: true },
             orderBy: { createdAt: "desc" },
             take: 20,
