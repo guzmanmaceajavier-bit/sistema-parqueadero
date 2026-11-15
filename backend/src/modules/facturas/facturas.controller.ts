@@ -83,20 +83,24 @@ export const anularFactura = asyncHandler(async (req, res) => {
       });
       if (ingreso?.clienteId) {
         await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
-        const referenciaFactura = `factura ${factura.numero}`;
         const [consumos, devolucionExistente] = await Promise.all([
           tx.clienteSaldoMovimiento.findMany({
             where: {
               clienteId: ingreso.clienteId,
               tipo: "CONSUMO",
-              concepto: { contains: referenciaFactura },
+              OR: [
+                { facturaId: factura.id },
+                // Compatibilidad con movimientos históricos anteriores a la FK.
+                // El sufijo exacto evita confundir FACT-12 con FACT-123.
+                { facturaId: null, concepto: { endsWith: `— factura ${factura.numero}` } },
+              ],
             },
           }),
           tx.clienteSaldoMovimiento.findFirst({
             where: {
               clienteId: ingreso.clienteId,
               tipo: "DEVOLUCION",
-              concepto: { contains: `anulación de factura ${factura.numero}` },
+              facturaId: factura.id,
             },
             select: { id: true },
           }),
@@ -120,6 +124,7 @@ export const anularFactura = asyncHandler(async (req, res) => {
               saldoAntes: saldoPrevio,
               saldoDespues: saldoPrevio + consumido,
               concepto: `Devolución de saldo por anulación de factura ${factura.numero}`,
+              facturaId: factura.id,
               usuario,
             },
           });
