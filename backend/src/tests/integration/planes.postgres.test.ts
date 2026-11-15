@@ -189,6 +189,56 @@ describe("Planes y cobro", () => {
     await prisma.puesto.update({ where: { id: puestoPlanId }, data: { estado: "RESERVADO" } });
   });
 
+
+  it("registra el regreso, compensa y crea el ingreso en una sola operación (HTTP)", async () => {
+    if (!serverUp) {
+      console.warn("Sin backend en 3001, se omite prueba HTTP de regreso atómico");
+      return;
+    }
+
+    const inicio = new Date(Date.now() - 5 * 86400000);
+    const fin = new Date(Date.now() + 25 * 86400000);
+    const mensualidad = await prisma.mensualidad.create({
+      data: { clienteId, vehiculoId, planId, puestoId: puestoPlanId, fechaInicio: inicio, fechaFin: fin, valor: 150000 },
+    });
+
+    const ausenciaResp = await http("/api/ausencias", {
+      method: "POST", headers: auth(),
+      body: JSON.stringify({ clienteId, vehiculoId, fechaSalida: new Date().toISOString(), opcion: "CONGELAR" }),
+    });
+    expect(ausenciaResp?.status).toBe(201);
+    const ausencia = (await ausenciaResp!.json()).ausencia;
+    expect(ausencia.puestoId).toBe(puestoPlanId);
+
+    await prisma.ausencia.update({
+      where: { id: ausencia.id },
+      data: { fechaSalida: new Date(Date.now() - 2 * 86400000 - 1000) },
+    });
+
+    const regreso = await http(`/api/ausencias/regresar/${ausencia.id}`, {
+      method: "POST", headers: auth(), body: JSON.stringify({}),
+    });
+    expect(regreso?.status).toBe(201);
+    const body = await regreso!.json();
+    expect(body.ingreso.puestoId).toBe(puestoPlanId);
+    expect(body.ausencia.estado).toBe("FINALIZADA");
+    expect(body.ausencia.diasCompensados).toBeGreaterThan(0);
+
+    const ingresoActivo = await prisma.ingreso.findFirst({ where: { vehiculoId, estado: "ACTIVO" } });
+    expect(ingresoActivo?.id).toBe(body.ingreso.id);
+    expect((await prisma.puesto.findUniqueOrThrow({ where: { id: puestoPlanId } })).estado).toBe("OCUPADO");
+
+    const duplicado = await http(`/api/ausencias/regresar/${ausencia.id}`, {
+      method: "POST", headers: auth(), body: JSON.stringify({}),
+    });
+    expect(duplicado?.status).toBe(409);
+
+    await prisma.ingreso.deleteMany({ where: { id: body.ingreso.id } });
+    await prisma.ausencia.delete({ where: { id: ausencia.id } });
+    await prisma.mensualidad.delete({ where: { id: mensualidad.id } });
+    await prisma.puesto.update({ where: { id: puestoPlanId }, data: { estado: "RESERVADO" } });
+  });
+
   it("entrada duplicada del mismo vehículo se rechaza (HTTP)", async () => {
     if (!serverUp) {
       console.warn("Sin backend en 3001, se omite prueba HTTP de duplicada");
