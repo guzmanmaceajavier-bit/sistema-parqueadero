@@ -78,12 +78,8 @@ export const obtenerClientes = asyncHandler(async (req, res) => {
   });
   const vencidosSet = new Set(vencidas.map(v => v.clienteId));
 
-  if (vencidosSet.size > 0) {
-    await prisma.cliente.updateMany({
-      where: { id: { in: [...vencidosSet] }, estado: { notIn: ["VENCIDO", "MOROSO"] } },
-      data: { estado: "VENCIDO" },
-    });
-  }
+  // Una consulta de listado no debe modificar fichas globales: el estado de
+  // vencimiento se devuelve como indicador calculado para esta sucursal.
 
   const activas = await prisma.mensualidad.findMany({
     where: { clienteId: { in: clienteIds }, fechaFin: { gte: hoy }, estado: "ACTIVA", ...(sucursalId ? { sucursalId } : {}) },
