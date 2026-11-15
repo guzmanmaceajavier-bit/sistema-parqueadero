@@ -49,6 +49,11 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     });
     const fechaSalidaEfectiva = fechaSalida ? new Date(fechaSalida) : ahora;
     if (!Number.isFinite(fechaSalidaEfectiva.getTime()) || fechaSalidaEfectiva > ahora) throw new AppError("La fecha de salida no es válida o está en el futuro", 400);
+    if (fechaRegreso) {
+      const regresoInicial = new Date(fechaRegreso);
+      if (!Number.isFinite(regresoInicial.getTime()) || regresoInicial < fechaSalidaEfectiva || regresoInicial > ahora) throw new AppError("La fecha de regreso inicial no es válida", 400);
+    }
+    if (ingresoActivo && fechaSalidaEfectiva < ingresoActivo.fechaEntrada) throw new AppError("La salida no puede ser anterior al ingreso del vehículo", 400);
 
     const a = await tx.ausencia.create({
       data: {
@@ -229,8 +234,9 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       orderBy: { fechaSalida: "desc" },
       select: { puestoId: true },
     });
-    if (ingresoParaBloqueo?.puestoId) {
-      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoParaBloqueo.puestoId}::integer)) AS advisory_lock`;
+    const puestoParaBloqueo = existente.puestoId ?? ingresoParaBloqueo?.puestoId;
+    if (puestoParaBloqueo) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoParaBloqueo}::integer)) AS advisory_lock`;
     }
     const ausenciaActual = await tx.ausencia.findFirst({ where: { id: Number(id) } });
     if (!ausenciaActual || ausenciaActual.estado !== "ACTIVA") {
@@ -286,7 +292,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
           where: { id: mensualidadAusencia.id },
           data: {
             fechaFin: nuevaFechaFin,
-            observacion: [mensualidadAusencia.observacion, detalle].filter(Boolean).join("\\n").slice(0, 2000),
+            observacion: [mensualidadAusencia.observacion, detalle].filter(Boolean).join("\n").slice(0, 2000),
           },
         });
         mensaje = `${existente.opcion === "CONGELAR" ? "Mensualidad congelada" : "Vencimiento extendido"} ${diasAplicados} día(s) — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
@@ -299,6 +305,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       // a favor del cliente con un movimiento trazable (no se altera la factura).
       const pagado = calcularPagadoMensualidad(mensualidadAusencia.facturas, mensualidadAusencia.fechaInicio);
       const descuentoSolicitado = redondearDinero((mensualidadAusencia.valor / 30) * diasAusente);
+      diasCompensados = diasAusente;
       valorCompensado = descuentoSolicitado;
       const deudaPendiente = Math.max(0, restarDinero(mensualidadAusencia.valor, pagado));
       const reduccionDeuda = Math.min(descuentoSolicitado, deudaPendiente);
@@ -308,7 +315,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
           where: { id: mensualidadAusencia.id },
           data: {
             valor: Math.max(pagado, restarDinero(mensualidadAusencia.valor, reduccionDeuda)),
-            observacion: [mensualidadAusencia.observacion, `Ausencia #${id}: descuento de deuda por $${reduccionDeuda.toLocaleString("es-CO")}`].filter(Boolean).join("\\n").slice(0, 2000),
+            observacion: [mensualidadAusencia.observacion, `Ausencia #${id}: descuento de deuda por $${reduccionDeuda.toLocaleString("es-CO")}`].filter(Boolean).join("\n").slice(0, 2000),
           },
         });
       }
@@ -339,7 +346,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     // Se actualiza el estado del puesto después de aplicar la compensación, para
     // que una mensualidad extendida conserve la reserva aunque su fecha original
     // haya vencido durante la ausencia.
-    if (ingresoAusencia?.puestoId) {
+    if (puestoAusenciaId) {
       const ahora = new Date();
       const [ingresoActivoPuesto, mensualidadActivaPuesto, reservaActivaPuesto] = await Promise.all([
         tx.ingreso.count({ where: { puestoId: puestoAusenciaId, estado: "ACTIVO" } }),
