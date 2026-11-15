@@ -48,7 +48,7 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
   if (planId) {
     plan = await prisma.plan.findUnique({ where: { id: Number(planId) } });
     if (!plan || !plan.activo) throw new AppError("Plan no encontrado o inactivo", 400);
-    monto = plan.valor;
+    monto = Number(plan.valor);
   }
   if (!Number.isFinite(monto) || monto <= 0) throw new AppError("El valor de la mensualidad debe ser mayor que cero", 400);
 
@@ -313,7 +313,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const nuevoPuestoId = puestoId !== undefined ? (puestoId ? Number(puestoId) : null) : existente.puestoId;
   const inicio = fechaInicio !== undefined ? new Date(fechaInicio) : existente.fechaInicio;
   const fin = fechaFin !== undefined ? new Date(fechaFin) : existente.fechaFin;
-  const monto = valor !== undefined ? Number(valor) : existente.valor;
+  const monto = valor !== undefined ? Number(valor) : Number(existente.valor);
   if (!Number.isFinite(inicio.getTime()) || !Number.isFinite(fin.getTime()) || fin <= inicio) {
     throw new AppError("El periodo de la mensualidad no es válido", 400);
   }
@@ -331,7 +331,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
     vid !== existente.vehiculoId ||
     inicio.getTime() !== existente.fechaInicio.getTime() ||
     fin.getTime() !== existente.fechaFin.getTime() ||
-    montoFinal !== existente.valor ||
+    montoFinal !== Number(existente.valor) ||
     nuevoPlanId !== existente.planId
   )) {
     throw new AppError("No se pueden cambiar vehículo, periodo, plan o valor de una mensualidad con facturas emitidas. Cree una renovación para conservar el historial.", 409);
@@ -339,7 +339,7 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
   if (planId) {
     const plan = await prisma.plan.findUnique({ where: { id: Number(planId) } });
     if (!plan?.activo) throw new AppError("El plan no existe o está inactivo", 400);
-    montoFinal = plan.valor;
+    montoFinal = Number(plan.valor);
   }
 
   const actualizada = await prisma.$transaction(async (tx) => {
@@ -700,7 +700,7 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
 
     // Saldo real pendiente del período (pagado = facturas con metodoPago dentro del período).
     const pagado = calcularPagadoMensualidad(m.facturas, m.fechaInicio);
-    const saldoPendiente = Math.max(0, m.valor - pagado);
+    const saldoPendiente = Math.max(0, Number(m.valor) - pagado);
     if (saldoPendiente <= 0) continue;
 
     await prisma.$transaction(async (tx) => {
