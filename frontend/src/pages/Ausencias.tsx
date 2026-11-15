@@ -129,28 +129,6 @@ export default function Ausencias() {
     }
   };
 
-  const handleFinalizar = async (ausencia) => {
-    try {
-      let datosCompensacion = {};
-      if (ausencia.opcion === "EXTENDER") {
-        const dias = window.prompt("¿Cuántos días deseas agregar al vencimiento?", String(calcDias(ausencia)));
-        if (dias === null) return;
-        const numeroDias = Number(dias);
-        if (!Number.isInteger(numeroDias) || numeroDias < 0 || numeroDias > 365) {
-          mostrarToast("Ingresa un número entero entre 0 y 365", "error");
-          return;
-        }
-        datosCompensacion = { diasCompensacion: numeroDias };
-      }
-      const res = await api.put(`/ausencias/finalizar/${ausencia.id}`, datosCompensacion);
-      cargarDatos();
-      mostrarToast(res.data?.mensaje || "Ausencia finalizada", "success");
-    } catch (error) {
-      mostrarToast(error.response?.data?.message || "Error al finalizar ausencia", "error");
-    }
-  };
-
-
   const handleRegresar = async (ausencia) => {
     let datosCompensacion = {};
     if (ausencia.opcion === "EXTENDER") {
