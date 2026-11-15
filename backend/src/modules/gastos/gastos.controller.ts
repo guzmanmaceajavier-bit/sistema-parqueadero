@@ -12,8 +12,9 @@ export const crearGasto = asyncHandler(async (req, res) => {
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!concepto) throw new AppError("Concepto es requerido", 400);
-  const valorNormalizado = redondearDinero(Number(valor));
-  if (!Number.isFinite(valorNormalizado) || valorNormalizado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
+  const valorIngresado = Number(valor);
+  if (!Number.isFinite(valorIngresado) || valorIngresado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
+  const valorNormalizado = redondearDinero(valorIngresado);
 
   await getCajaOError(sucursalId ?? null);
 
