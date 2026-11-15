@@ -482,6 +482,51 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   res.json({ ok: true, message: "Saldo recargado correctamente", cliente });
 });
 
+/**
+ * Ajuste contable del saldo. No representa entrada ni salida de efectivo:
+ * por eso no mueve caja, pero siempre deja saldo anterior/nuevo y motivo.
+ * Solo el administrador puede ejecutarlo.
+ */
+export const ajustarSaldo = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const diferencia = Number(req.body?.monto);
+  const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
+  if (!Number.isSafeInteger(id) || id <= 0) throw new AppError("Cliente no válido", 400);
+  if (!Number.isFinite(diferencia) || diferencia === 0) throw new AppError("El ajuste debe ser un valor numérico distinto de cero", 400);
+  if (motivo.length < 3 || motivo.length > 255) throw new AppError("Indica un motivo de ajuste entre 3 y 255 caracteres", 400);
+
+  const resultado = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${id} FOR UPDATE`;
+    const cliente = await tx.cliente.findUnique({ where: { id }, select: { id: true, nombres: true, apellidos: true, saldo: true } });
+    if (!cliente) throw new AppError("Cliente no encontrado", 404);
+    const saldoAntes = cliente.saldo ?? 0;
+    const saldoDespues = saldoAntes + diferencia;
+    if (saldoDespues < 0) throw new AppError("El ajuste no puede dejar el saldo del cliente por debajo de cero", 409);
+
+    const actualizado = await tx.cliente.update({ where: { id }, data: { saldo: saldoDespues } });
+    await tx.clienteSaldoMovimiento.create({
+      data: {
+        clienteId: id,
+        tipo: "AJUSTE",
+        monto: Math.abs(diferencia),
+        saldoAntes,
+        saldoDespues,
+        concepto: motivo,
+        usuario: req.usuario?.usuario || "admin",
+      },
+    });
+    return { cliente: actualizado, saldoAntes, saldoDespues };
+  });
+
+  await registrarMovimiento(
+    "CLIENTES",
+    "AJUSTAR_SALDO",
+    `Ajuste de saldo a ${resultado.cliente.nombres} ${resultado.cliente.apellidos}: ${resultado.saldoAntes} → ${resultado.saldoDespues}. Motivo: ${motivo}`,
+    req.usuario?.usuario || "admin",
+  );
+  res.json({ ok: true, message: "Ajuste registrado en el historial financiero", ...resultado });
+});
+
 export const importarClientes = asyncHandler(async (req, res) => {
   const { clientes } = req.body;
   if (!Array.isArray(clientes) || clientes.length === 0) throw new AppError("Envíe un array de clientes", 400);
