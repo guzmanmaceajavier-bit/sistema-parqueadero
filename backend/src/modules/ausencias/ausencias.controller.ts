@@ -56,6 +56,9 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       orderBy: { fechaInicio: "desc" },
     });
+    if (planActivo?.puestoId && ingresoActivo?.puestoId && planActivo.puestoId !== ingresoActivo.puestoId) {
+      throw new AppError("El puesto del ingreso no coincide con el puesto asignado por la mensualidad. Corrige la asignación antes de registrar la ausencia.", 409);
+    }
     const planQueCubriaEntrada = ingresoActivo && !planActivo ? await tx.mensualidad.findFirst({
       where: {
         vehiculoId: vid, sucursalId: sucursalIngreso, estado: { in: ["ACTIVA", "VENCIDA"] },
