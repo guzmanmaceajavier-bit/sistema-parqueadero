@@ -400,6 +400,163 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
   res.json({ ok: true, ausencia, mensaje });
 });
 
+
+/**
+ * Registra el regreso completo en una sola transacción:
+ * compensa la mensualidad, finaliza la ausencia, recupera el puesto
+ * y crea el nuevo ingreso. Si cualquier validación falla, nada se guarda.
+ */
+export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const id = Number(req.params.id);
+  const diasSolicitados = req.body?.diasCompensacion === undefined ? null : Number(req.body.diasCompensacion);
+  if (diasSolicitados !== null && (!Number.isInteger(diasSolicitados) || diasSolicitados < 0 || diasSolicitados > 365)) {
+    throw new AppError("Los días de compensación deben ser un entero entre 0 y 365", 400);
+  }
+
+  let mensaje = "Regreso registrado correctamente";
+  const resultado = await prisma.$transaction(async (tx) => {
+    const ausenciaInicial = await tx.ausencia.findFirst({
+      where: { id, ...(sucursalId ? { sucursalId } : {}) },
+      include: { cliente: true, vehiculo: true, puesto: true },
+    });
+    if (!ausenciaInicial) throw new AppError("Ausencia no encontrada", 404);
+    if (ausenciaInicial.estado !== "ACTIVA") throw new AppError("Esta ausencia ya fue finalizada", 409);
+    if (!ausenciaInicial.puestoId) throw new AppError("La ausencia no tiene un puesto reservado. Asigna un puesto antes de registrar el regreso.", 409);
+
+    const vehiculoId = ausenciaInicial.vehiculoId;
+    const puestoId = ausenciaInicial.puestoId;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+
+    const [ausencia, cliente, vehiculo, puesto, ingresoActivo] = await Promise.all([
+      tx.ausencia.findUnique({ where: { id } }),
+      tx.cliente.findUnique({ where: { id: ausenciaInicial.clienteId } }),
+      tx.vehiculo.findUnique({ where: { id: vehiculoId } }),
+      tx.puesto.findUnique({ where: { id: puestoId } }),
+      tx.ingreso.findFirst({ where: { vehiculoId, estado: "ACTIVO" }, select: { id: true } }),
+    ]);
+    if (!ausencia || ausencia.estado !== "ACTIVA") throw new AppError("La ausencia cambió mientras se procesaba. Actualiza e inténtalo de nuevo.", 409);
+    if (!cliente || !vehiculo) throw new AppError("No se encontró el cliente o vehículo asociado", 404);
+    if (cliente.bloqueado || vehiculo.bloqueado || !vehiculo.estado) throw new AppError("El cliente o vehículo está bloqueado o inactivo", 409);
+    if (vehiculo.clienteId !== cliente.id) throw new AppError("El vehículo ya no pertenece al cliente registrado en la ausencia", 409);
+    if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
+    if (!puesto || !puesto.activo || puesto.sucursalId !== vehiculo.sucursalId) throw new AppError("El puesto reservado ya no está disponible o no pertenece a la sucursal del vehículo", 409);
+    if (ingresoActivo) throw new AppError("El vehículo ya tiene un ingreso activo", 409);
+
+    const tiposPuesto = String(puesto.tipoPuesto || "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const tipoVehiculo = String(vehiculo.tipo || "").trim().toLowerCase();
+    if (tiposPuesto.length && (!tipoVehiculo || (!tiposPuesto.includes(tipoVehiculo) && !tiposPuesto.includes("todos")))) {
+      throw new AppError(`El puesto ${puesto.codigo} no admite vehículos de tipo ${vehiculo.tipo || "desconocido"}`, 409);
+    }
+
+    const ahora = new Date();
+    const [otrosIngresos, otrasMensualidades, otrasReservas] = await Promise.all([
+      tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
+      tx.mensualidad.count({ where: { puestoId, vehiculoId: { not: vehiculoId }, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
+      tx.reserva.count({ where: { puestoId, vehiculoId: { not: vehiculoId }, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+    ]);
+    if (otrosIngresos || otrasMensualidades || otrasReservas || puesto.estado === "OCUPADO") {
+      throw new AppError("El puesto reservado está ocupado o fue asignado a otro vehículo. No se registró el regreso.", 409);
+    }
+
+    const diasAusente = Math.max(1, Math.ceil((ahora.getTime() - ausencia.fechaSalida.getTime()) / 86400000));
+    const mensualidad = await tx.mensualidad.findFirst({
+      where: {
+        ...(ausencia.mensualidadId ? { id: ausencia.mensualidadId } : { vehiculoId }),
+        vehiculoId,
+        estado: { in: ["ACTIVA", "VENCIDA"] },
+        fechaInicio: { lte: ausencia.fechaSalida },
+        fechaFin: { gte: ausencia.fechaSalida },
+      },
+      include: { plan: { select: { duracionDias: true } }, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
+      orderBy: { fechaInicio: "desc" },
+    });
+
+    let diasCompensados = 0;
+    let valorCompensado = 0;
+    if (mensualidad && (ausencia.opcion === "CONGELAR" || ausencia.opcion === "EXTENDER")) {
+      const dias = ausencia.opcion === "EXTENDER" && diasSolicitados !== null ? diasSolicitados : diasAusente;
+      if (dias > 0) {
+        const nuevaFechaFin = new Date(mensualidad.fechaFin.getTime() + dias * 86400000);
+        diasCompensados = dias;
+        await tx.mensualidad.update({
+          where: { id: mensualidad.id },
+          data: {
+            fechaFin: nuevaFechaFin,
+            estado: "ACTIVA",
+            observacion: [mensualidad.observacion, `Ausencia #${id}: ${ausencia.opcion.toLowerCase()} de ${dias} día(s), ${ahora.toISOString()}`].filter(Boolean).join("\\n").slice(0, 2000),
+          },
+        });
+        mensaje = `Regreso registrado. Mensualidad compensada ${dias} día(s); nueva fecha de vencimiento: ${nuevaFechaFin.toLocaleDateString("es-CO")}.`;
+      } else {
+        mensaje = "Regreso registrado sin días adicionales de compensación.";
+      }
+    } else if (mensualidad && ausencia.opcion === "DESCONTAR") {
+      const pagado = calcularPagadoMensualidad(mensualidad.facturas, mensualidad.fechaInicio);
+      const duracion = Math.max(1, mensualidad.plan?.duracionDias ?? 30);
+      const descuento = redondearDinero((mensualidad.valor / duracion) * diasAusente);
+      const deuda = Math.max(0, restarDinero(mensualidad.valor, pagado));
+      const reduccion = Math.min(descuento, deuda);
+      const credito = Math.max(0, restarDinero(descuento, reduccion));
+      diasCompensados = diasAusente;
+      valorCompensado = descuento;
+      if (reduccion > 0) {
+        await tx.mensualidad.update({
+          where: { id: mensualidad.id },
+          data: {
+            valor: Math.max(pagado, restarDinero(mensualidad.valor, reduccion)),
+            observacion: [mensualidad.observacion, `Ausencia #${id}: descuento de deuda por ${reduccion.toLocaleString("es-CO")}`].filter(Boolean).join("\\n").slice(0, 2000),
+          },
+        });
+      }
+      if (credito > 0) {
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${cliente.id} FOR UPDATE`;
+        const actual = await tx.cliente.findUnique({ where: { id: cliente.id }, select: { saldo: true } });
+        const antes = redondearDinero(actual?.saldo ?? 0);
+        const despues = redondearDinero(antes + credito);
+        await tx.cliente.update({ where: { id: cliente.id }, data: { saldo: despues } });
+        await tx.clienteSaldoMovimiento.create({
+          data: { clienteId: cliente.id, tipo: "DEVOLUCION", monto: credito, saldoAntes: antes, saldoDespues: despues, concepto: `Compensación por ausencia #${id} — vehículo ${vehiculo.placa}`, usuario: req.usuario?.usuario || "admin" },
+        });
+      }
+      mensaje = `Regreso registrado. Compensación: ${descuento.toLocaleString("es-CO")}; deuda reducida: ${reduccion.toLocaleString("es-CO")}; saldo a favor: ${credito.toLocaleString("es-CO")}.`;
+    } else if (ausencia.opcion === "MANTENER") {
+      mensaje = "Regreso registrado. La mensualidad se mantuvo sin cambios.";
+    } else if (ausencia.opcion === "HISTORIAL") {
+      mensaje = "Regreso registrado. La ausencia quedó únicamente en el historial.";
+    } else if (!mensualidad) {
+      mensaje = "Regreso registrado. No se encontró una mensualidad vigente en la fecha de salida para compensar.";
+    }
+
+    const puestoActualizado = await tx.puesto.updateMany({
+      where: { id: puestoId, estado: { in: ["AUSENCIA", "RESERVADO", "LIBRE"] }, activo: true },
+      data: { estado: "OCUPADO" },
+    });
+    if (puestoActualizado.count !== 1) throw new AppError("No se pudo recuperar el puesto reservado. No se registró el regreso.", 409);
+
+    const ingreso = await tx.ingreso.create({
+      data: { clienteId: cliente.id, vehiculoId, puestoId },
+      include: { cliente: true, vehiculo: true, puesto: true },
+    });
+    const ausenciaFinalizada = await tx.ausencia.update({
+      where: { id },
+      data: {
+        estado: "FINALIZADA", fechaRegreso: ahora,
+        diasCompensados, valorCompensado,
+        compensacionDetalle: mensaje,
+        compensacionAplicadaAt: ahora,
+      },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
+    });
+    await tx.cliente.update({ where: { id: cliente.id }, data: { estado: "ACTIVO" } });
+    return { ausencia: ausenciaFinalizada, ingreso };
+  });
+
+  await registrarMovimiento("AUSENCIAS", "REGRESO", `Regreso de ausencia #${id} — vehículo ${resultado.ingreso.vehiculo.placa}, puesto ${resultado.ingreso.puesto.codigo}`, req.usuario?.usuario || "admin");
+  res.status(201).json({ ok: true, ...resultado, mensaje });
+});
+
 export const eliminarAusencia = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const { id } = req.params;
