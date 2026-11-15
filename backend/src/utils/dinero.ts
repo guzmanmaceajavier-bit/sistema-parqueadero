@@ -45,7 +45,7 @@ export function normalizarMonto(valor: unknown): number | null {
 }
 
 export function sumarDinero(...valores: Importe[]): number {
-  return desdeCentavos(valores.reduce((total, valor) => total + aCentavos(valor), 0));
+  return desdeCentavos(valores.reduce<number>((total, valor) => total + aCentavos(valor), 0));
 }
 
 export function restarDinero(minuendo: Importe, sustraendo: Importe): number {
