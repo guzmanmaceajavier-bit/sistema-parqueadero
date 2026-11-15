@@ -594,6 +594,8 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
       throw new AppError(`El monto excede el saldo pendiente ($${saldoPendiente.toLocaleString()})`, 400);
     }
 
+    // Serializa el pago con el cierre de caja para que no se registre en una caja cerrada.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: mensualidad.sucursalId ?? sucursalId ?? null } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el pago. Abre una caja e inténtalo de nuevo.", 409);
 
