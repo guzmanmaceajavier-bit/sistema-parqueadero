@@ -491,6 +491,7 @@ export const perfilCliente = asyncHandler(async (req, res) => {
         const registros = v.propietarios || [];
         return registros.length ? registros.map(p => ({ ...p, placa: v.placa })) : [{
           id: 0, vehiculoId: v.id, clienteId: v.clienteId, desde: v.createdAt, hasta: null,
+          createdAt: v.createdAt,
           placa: v.placa, cliente: { id: cliente.id, nombres: cliente.nombres, apellidos: cliente.apellidos, documento: cliente.documento },
         }];
       }),
