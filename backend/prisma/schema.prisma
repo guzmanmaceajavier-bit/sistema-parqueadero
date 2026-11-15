@@ -339,6 +339,7 @@ model Factura {
   motivoAnulacion  String?
   createdAt       DateTime         @default(now())
   cajaMovimientos CajaMovimiento[]
+  saldoMovimientos ClienteSaldoMovimiento[]
   ingreso         Ingreso?         @relation(fields: [ingresoId], references: [id])
   mensualidad     Mensualidad?     @relation(fields: [mensualidadId], references: [id])
   sucursal        Sucursal?        @relation(fields: [sucursalId], references: [id])
@@ -432,8 +433,11 @@ model ClienteSaldoMovimiento {
   saldoDespues Float
   concepto   String?
   usuario    String?
+  facturaId  Int?
   createdAt  DateTime @default(now())
   cliente    Cliente  @relation(fields: [clienteId], references: [id])
+  factura    Factura? @relation(fields: [facturaId], references: [id])
 
   @@index([clienteId])
+  @@index([facturaId])
 }
