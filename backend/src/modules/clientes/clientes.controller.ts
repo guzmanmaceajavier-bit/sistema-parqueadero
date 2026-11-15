@@ -430,6 +430,9 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   const cliente = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${Number(id)} FOR UPDATE`;
 
+    // El mismo bloqueo que usa el cierre de caja impide acreditar saldo
+    // después de que otra operación haya cerrado la caja.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const cajaAbierta = await tx.caja.findFirst({
       where: { estado: "ABIERTA", sucursalId: sucursalId ?? null },
     });
