@@ -84,7 +84,7 @@ model Configuracion {
   horarioApertura              String?  @default("06:00")
   horarioCierre                String?  @default("22:00")
   paginacionPorDefecto         Int?     @default(15)
-  iva                          Float?   @default(0)
+  iva                          Decimal?                          @default(0) @db.Decimal(5, 2)
   createdAt                    DateTime @default(now())
   /// ─── Seguridad ───
   intentosMaximos              Int?     @default(10)
@@ -111,7 +111,7 @@ model Cliente {
   estado        String        @default("ACTIVO")
   createdAt     DateTime      @default(now())
   bloqueado     Boolean       @default(false)
-  saldo         Float?        @default(0)
+  saldo         Decimal?         @default(0) @db.Decimal(14, 2)
   ausencias     Ausencia[]
   ingresos      Ingreso[]
   mensualidades Mensualidad[]
@@ -181,7 +181,7 @@ model Ingreso {
   estado           String    @default("ACTIVO")
   createdAt        DateTime  @default(now())
   tiempoMinutos    Int?
-  valorPagado      Float?
+  valorPagado      Decimal?       @db.Decimal(14, 2)
   ticketExtraviado Boolean   @default(false)
   facturas         Factura[]
   cliente          Cliente   @relation(fields: [clienteId], references: [id])
@@ -195,7 +195,7 @@ model Tarifa {
   nombre              String
   tipoVehiculo        String
   modalidad           String
-  valor               Float
+  valor               Decimal                @db.Decimal(14, 2)
   minutosCortesia     Int?       @default(0)
   descripcion         String?
   activa              Boolean    @default(true)
@@ -203,22 +203,22 @@ model Tarifa {
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   minutosGratis       Int?       @default(0)
-  precioHoraAdicional Float?
+  precioHoraAdicional Decimal?  @db.Decimal(14, 2)
   /// ─── Tarifas progresivas ───
-  precioPrimeraHora   Float?
-  tarifaMaximaDiaria  Float?
+  precioPrimeraHora   Decimal?    @db.Decimal(14, 2)
+  tarifaMaximaDiaria  Decimal?   @db.Decimal(14, 2)
   sucursal            Sucursal?  @relation(fields: [sucursalId], references: [id])
   vehiculos           Vehiculo[]
 }
 
 model Caja {
   id              Int              @id @default(autoincrement())
-  apertura        Float
-  cierre          Float?
+  apertura        Decimal         @db.Decimal(14, 2)
+  cierre          Decimal?           @db.Decimal(14, 2)
   /// ─── Arqueo real (conteo) vs esperado ───
-  conteoEfectivo  Float?
-  esperadoEfectivo Float?
-  diferenciaArqueo Float?
+  conteoEfectivo  Decimal?   @db.Decimal(14, 2)
+  esperadoEfectivo Decimal?  @db.Decimal(14, 2)
+  diferenciaArqueo Decimal?  @db.Decimal(14, 2)
   estado          String           @default("ABIERTA")
   usuarioId       Int
   observacion     String?
@@ -235,7 +235,7 @@ model CajaMovimiento {
   cajaId     Int
   tipo       String
   concepto   String
-  monto      Float
+  monto      Decimal       @db.Decimal(14, 2)
   metodoPago String?
   facturaId  Int?
   gastoId          Int?
@@ -257,7 +257,7 @@ model Plan {
   nombre        String
   descripcion   String?
   duracionDias  Int
-  valor         Float
+  valor         Decimal          @db.Decimal(14, 2)
   tipoVehiculo  String        @default("todos")
   activo        Boolean       @default(true)
   createdAt     DateTime      @default(now())
@@ -274,7 +274,7 @@ model Mensualidad {
   puestoId    Int?
   fechaInicio DateTime
   fechaFin    DateTime
-  valor       Float
+  valor       Decimal        @db.Decimal(14, 2)
   estado      String    @default("ACTIVA")
   observacion String?
   sucursalId  Int?
@@ -294,7 +294,7 @@ model Gasto {
   concepto          String
   categoria         String           @default("otros")
   descripcion       String?
-  valor             Float
+  valor             Decimal              @db.Decimal(14, 2)
   fecha             DateTime         @default(now())
   sucursalId        Int?
   createdAt         DateTime         @default(now())
@@ -328,7 +328,7 @@ model Factura {
   ingresoId       Int?
   mensualidadId   Int?
   origen          String           @default("INGRESO")
-  valor           Float
+  valor           Decimal            @db.Decimal(14, 2)
   metodoPago      String?
   sucursalId      Int?
   /// ─── Snapshot del cálculo (para reconstruir el cobro) ───
@@ -337,9 +337,9 @@ model Factura {
   tiempoMinutos   Int?
   desglose        Json?
   /// ─── IVA (opcional; 0 = sin IVA) ───
-  subtotal        Float?
-  ivaPorcentaje   Float?
-  ivaValor        Float?
+  subtotal        Decimal?         @db.Decimal(14, 2)
+  ivaPorcentaje   Decimal?    @db.Decimal(5, 2)
+  ivaValor        Decimal?         @db.Decimal(14, 2)
   /// ─── Anulación con contrapartida y auditoría ───
   anulada          Boolean   @default(false)
   anuladaEn        DateTime?
@@ -396,7 +396,7 @@ model Ausencia {
   updatedAt              DateTime     @updatedAt
   opcion                 String       @default("HISTORIAL")
   diasCompensados        Int          @default(0)
-  valorCompensado        Float        @default(0)
+  valorCompensado        Decimal        @default(0) @db.Decimal(14, 2)
   compensacionDetalle    String?
   compensacionAplicadaAt DateTime?
   cliente                Cliente      @relation(fields: [clienteId], references: [id])
@@ -447,9 +447,9 @@ model ClienteSaldoMovimiento {
   id         Int      @id @default(autoincrement())
   clienteId  Int
   tipo       String   // RECARGA | CONSUMO | AJUSTE | DEVOLUCION
-  monto      Float
-  saldoAntes Float
-  saldoDespues Float
+  monto      Decimal       @db.Decimal(14, 2)
+  saldoAntes Decimal  @db.Decimal(14, 2)
+  saldoDespues Decimal  @db.Decimal(14, 2)
   concepto   String?
   usuario    String?
   facturaId  Int?
