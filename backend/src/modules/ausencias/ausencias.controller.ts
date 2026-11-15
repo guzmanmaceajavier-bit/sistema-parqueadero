@@ -4,6 +4,8 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { calcularCobro } from "../../services/calculadorCobros.js";
+import { calcularPagadoMensualidad } from "../../utils/saldos.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, fechaSalida, fechaRegreso, motivo, opcion } = req.body;
@@ -41,8 +43,8 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       const tiempoMinutos = Math.ceil((ahora.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
       const sucursalIngreso = ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null;
 
-      // Si el vehículo está cubierto por una mensualidad vigente, la salida por
-      // ausencia NO genera cobro (mismo criterio que la salida normal).
+      // La ausencia aplica exactamente la misma regla de cobertura que una salida
+      // normal: solo una mensualidad totalmente pagada y vigente evita el cobro.
       const planActivo = await tx.mensualidad.findFirst({
         where: {
           vehiculoId: vid,
@@ -52,31 +54,52 @@ export const crearAusencia = asyncHandler(async (req, res) => {
           fechaFin: { gte: ahora },
           OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }],
         },
+        include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       });
+      const coberturaPagada = !!planActivo
+        && calcularPagadoMensualidad(planActivo.facturas, planActivo.fechaInicio) >= planActivo.valor;
 
       let valorFacturado = 0;
-      if (!planActivo) {
+      if (!coberturaPagada) {
+        // No duplicar una fórmula simplificada: reutilizar el calculador central
+        // para respetar modalidad, cortesías, minutos gratis, progresivas y topes.
+        const cobro = await calcularCobro({
+          ingreso: ingresoActivo,
+          tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
+          fechaSalida: ahora,
+          tarifaId: ingresoActivo.vehiculo.tarifaId ?? undefined,
+        });
+        if (cobro.error) throw new AppError(cobro.error, 400);
+        valorFacturado = cobro.total;
+
+        await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
         const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalIngreso } });
         if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
 
         const numeroFactura = await generarNumeroFactura("FACT");
-        const tarifas = await tx.tarifa.findMany({
-          where: {
-            tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
-            activa: true,
-            OR: [{ sucursalId: sucursalIngreso }, { sucursalId: null }],
+        const factura = await tx.factura.create({
+          data: {
+            numero: numeroFactura,
+            ingresoId: ingresoActivo.id,
+            origen: "INGRESO",
+            valor: valorFacturado,
+            metodoPago: "efectivo",
+            sucursalId: sucursalIngreso,
+            tarifaId: cobro.tarifa?.id,
+            modalidad: cobro.tarifa?.modalidad,
+            tiempoMinutos: cobro.totalMinutos,
+            desglose: { ...cobro.desglose, detalle: cobro.detalle, salidaPorAusencia: true },
           },
-          orderBy: { valor: "asc" },
         });
-        const tarifa = tarifas.find(t => t.sucursalId === sucursalIngreso) ?? tarifas.find(t => t.sucursalId === null);
-        if (tarifa) {
-          const cortesia = tarifa.minutosCortesia || 0;
-          const minutosFacturables = Math.max(0, tiempoMinutos - cortesia);
-          const horas = Math.ceil(minutosFacturables / 60);
-          valorFacturado = horas * tarifa.valor;
-        }
-        await tx.factura.create({
-          data: { numero: numeroFactura, ingresoId: ingresoActivo.id, origen: "INGRESO", valor: valorFacturado, metodoPago: "efectivo", sucursalId: sucursalIngreso },
+        await tx.cajaMovimiento.create({
+          data: {
+            cajaId: cajaAbierta.id,
+            tipo: "INGRESO",
+            concepto: `Factura ${numeroFactura} — Salida por ausencia ${ingresoActivo.vehiculo.placa}`,
+            monto: valorFacturado,
+            metodoPago: "efectivo",
+            facturaId: factura.id,
+          },
         });
       }
 
