@@ -134,11 +134,28 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
             continue;
           }
 
+          // Las secciones del JSON usan nombres plurales; Prisma expone delegates singulares.
+          // Este mapa explícito evita invocar propiedades inexistentes como tx.clientes o tx.facturas.
           const delegates: Record<string, string> = {
+            sucursales: "sucursal",
+            configuracion: "configuracion",
+            planes: "plan",
+            tarifas: "tarifa",
+            clientes: "cliente",
+            puestos: "puesto",
+            vehiculos: "vehiculo",
+            reservas: "reserva",
+            ingresos: "ingreso",
+            mensualidades: "mensualidad",
+            ausencias: "ausencia",
+            facturas: "factura",
+            caja: "caja",
+            gastos: "gasto",
             movimientos: "cajaMovimiento",
             registrosMovimientos: "movimiento",
             vehiculoPropietarios: "vehiculoPropietario",
             clienteSaldoMovimientos: "clienteSaldoMovimiento",
+            accesos: "acceso",
             pushSubscriptions: "pushSubscription",
           };
           const delegate = (tx as any)[delegates[modelo] || modelo];
