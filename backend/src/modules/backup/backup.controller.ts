@@ -15,7 +15,7 @@ export const generarBackup = asyncHandler(async (req, res) => {
     prisma.mensualidad.findMany({ include: { cliente: true, vehiculo: true, plan: true, puesto: true, facturas: true } }),
     prisma.reserva.findMany({ include: { cliente: true, vehiculo: true, puesto: true, ingreso: true } }),
     prisma.factura.findMany({ include: { ingreso: true, mensualidad: true, cajaMovimientos: true } }),
-    prisma.caja.findMany({ include: { movimientos: true, usuario: true } }),
+    prisma.caja.findMany({ include: { movimientos: true, usuario: { select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true } } } }),
     prisma.cajaMovimiento.findMany({ include: { factura: true, gasto: true } }),
     prisma.gasto.findMany(),
   ]);
@@ -56,7 +56,7 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
   const { data } = req.body;
   if (!data) throw new AppError("No hay datos para restaurar", 400);
 
-  const modelos = ["configuracion", "planes", "tarifas", "puestos", "vehiculos", "clientes", "usuarios", "ingresos", "mensualidades", "reservas", "facturas", "caja", "movimientos", "gastos"];
+  const modelos = ["configuracion", "planes", "tarifas", "puestos", "vehiculos", "clientes", "usuarios", "ingresos", "mensualidades", "reservas", "facturas", "caja", "gastos", "movimientos"];
   const omitidas: Record<string, number> = {};
   const creadosConClaveTemp: string[] = [];
   const bcrypt = (await import("bcrypt")).default;
@@ -99,7 +99,7 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
             continue;
           }
 
-          const delegate = (tx as any)[modelo];
+          const delegate = modelo === "movimientos" ? tx.cajaMovimiento : (tx as any)[modelo];
           await delegate.upsert({
             where: { id: Number(id) },
             create: { id: Number(id), ...rest },
