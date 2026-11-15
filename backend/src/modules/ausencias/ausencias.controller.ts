@@ -215,10 +215,31 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       orderBy: { fechaSalida: "desc" },
     });
     if (ingresoAusencia?.puestoId) {
-      const ingresoActivoPuesto = await tx.ingreso.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVO" } });
-      const mensualidadActivaPuesto = await tx.mensualidad.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVA" } });
-      const reservaActivaPuesto = await tx.reserva.count({ where: { puestoId: ingresoAusencia.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
-      const nuevoEstado = (ingresoActivoPuesto > 0 || mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0) ? "OCUPADO" : "LIBRE";
+      const ahora = new Date();
+      const [ingresoActivoPuesto, mensualidadActivaPuesto, reservaActivaPuesto] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({
+          where: {
+            puestoId: ingresoAusencia.puestoId,
+            estado: "ACTIVA",
+            fechaFin: { gte: ahora },
+          },
+        }),
+        tx.reserva.count({
+          where: {
+            puestoId: ingresoAusencia.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+        }),
+      ]);
+      // Un plan o reserva conserva el puesto reservado, pero no ocupado:
+      // el vehículo todavía no ha reingresado físicamente.
+      const nuevoEstado = ingresoActivoPuesto > 0
+        ? "OCUPADO"
+        : mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0
+          ? "RESERVADO"
+          : "LIBRE";
       await tx.puesto.update({ where: { id: ingresoAusencia.puestoId }, data: { estado: nuevoEstado } });
     }
 
@@ -230,14 +251,14 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
         mensaje = `Mensualidad congelada — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
       }
     } else if (existente.opcion === "EXTENDER") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, estado: "ACTIVA" } });
+      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
       for (const m of mensualidades) {
         const nuevaFechaFin = new Date(m.fechaFin.getTime() + diasAusente * 86400000);
         await tx.mensualidad.update({ where: { id: m.id }, data: { fechaFin: nuevaFechaFin } });
         mensaje = `Vencimiento extendido ${diasAusente} día(s) — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
       }
     } else if (existente.opcion === "DESCONTAR") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, estado: "ACTIVA" } });
+      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
       for (const m of mensualidades) {
         const valorDia = m.valor / 30;
         const descuento = Math.round(valorDia * diasAusente * 100) / 100;
