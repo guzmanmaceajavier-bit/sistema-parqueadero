@@ -242,7 +242,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   });
 
   const saldoPendientePlan = planDetectado
-    ? Math.max(0, redondearDinero(planDetectado.valor - calcularPagadoMensualidad(planDetectado.facturas || [], planDetectado.fechaInicio)))
+    ? Math.max(0, redondearDinero(Number(planDetectado.valor) - calcularPagadoMensualidad(planDetectado.facturas || [], planDetectado.fechaInicio)))
     : 0;
   const tipoIngreso = planDetectado ? "plan_mensual" : (reservaVinculada ? "reserva" : "normal");
   await registrarMovimiento("INGRESOS", "ENTRADA", `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}${planDetectado ? ` — plan ${planDetectado.plan?.nombre}` : reservaVinculada ? " (reserva)" : ""}`, req.usuario?.usuario || "admin");
@@ -626,7 +626,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
 
   if (cobro.error) throw new AppError(cobro.error, 400);
 
-  const saldoDisponible = Math.max(0, ingreso.cliente?.saldo ?? 0);
+  const saldoDisponible = Math.max(0, Number(ingreso.cliente?.saldo ?? 0));
   const saldoUsado = redondearDinero(Math.min(saldoDisponible, cobro.total));
   const totalPorPagar = Math.max(0, restarDinero(cobro.total, saldoUsado));
 
@@ -815,7 +815,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       if (ingreso.clienteId) {
         await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
         const clienteActual = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-        saldoUsado = redondearDinero(Math.min(Math.max(0, clienteActual?.saldo ?? 0), cobroTotal));
+        saldoUsado = redondearDinero(Math.min(Math.max(0, Number(clienteActual?.saldo ?? 0)), cobroTotal));
       }
       valorFinal = Math.max(0, restarDinero(cobroTotal, saldoUsado));
     } else if (!cubiertoPorPlan) {
@@ -838,7 +838,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
           where: { id: ingreso.clienteId },
           select: { saldo: true },
         });
-        const saldoDisponible = clienteActual?.saldo ?? 0;
+        const saldoDisponible = Number(clienteActual?.saldo ?? 0);
         saldoUsado = Math.min(Math.max(0, saldoDisponible), cobroTotal);
       }
       valorFinal = Math.max(0, cobroTotal - saldoUsado);
@@ -952,7 +952,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
   } else {
     await registrarMovimiento("INGRESOS", "SALIDA", `Salida ${ingreso.vehiculo.placa} — mensualidad vigente, sin cobro adicional`, req.usuario?.usuario || "admin");
     const saldoPendientePlan = mensualidadVigente
-      ? Math.max(0, redondearDinero(mensualidadVigente.valor - calcularPagadoMensualidad(mensualidadVigente.facturas || [], mensualidadVigente.fechaInicio)))
+      ? Math.max(0, redondearDinero(Number(mensualidadVigente.valor) - calcularPagadoMensualidad(mensualidadVigente.facturas || [], mensualidadVigente.fechaInicio)))
       : 0;
     res.json({
       ok: true,
