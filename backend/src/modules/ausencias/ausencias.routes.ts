@@ -5,7 +5,7 @@ import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearAusenciaSchema, actualizarAusenciaSchema } from "../../schemas/ausencia.schema.js";
 import {
-  crearAusencia, obtenerAusencias, obtenerAusencia, actualizarAusencia, finalizarAusencia, eliminarAusencia,
+  crearAusencia, obtenerAusencias, obtenerAusencia, actualizarAusencia, finalizarAusencia, registrarRegresoAusencia, eliminarAusencia,
 } from "./ausencias.controller.js";
 
 const router = express.Router();
@@ -91,6 +91,7 @@ router.put("/:id", verificarToken, verificarRol("admin", "supervisor"), validate
  *         description: Ausencia finalizada
  */
 router.put("/finalizar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, finalizarAusencia);
+router.post("/regresar/:id", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, registrarRegresoAusencia);
 
 /**
  * @swagger
