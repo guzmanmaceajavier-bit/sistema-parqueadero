@@ -74,7 +74,7 @@ const auth = () => ({ "Content-Type": "application/json", Cookie: cookie });
 
 describe("Planes y cobro", () => {
   it("el plan vigente ampara al vehículo (no se cobra)", async () => {
-    const hoy = new Date();
+    const hoy = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     const fin = new Date();
     fin.setDate(fin.getDate() + 30);
     const mensualidad = await prisma.mensualidad.create({
