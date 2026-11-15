@@ -91,7 +91,7 @@ describe("Respaldo y restauración PostgreSQL", () => {
       },
       body: JSON.stringify({ data: datos }),
     });
-    expect(restauracion.status).toBe(200);
+    expect(restauracion.status, await restauracion.clone().text()).toBe(200);
 
     const restaurado = await prisma.clienteSaldoMovimiento.findUnique({
       where: { id: movimientoId },
