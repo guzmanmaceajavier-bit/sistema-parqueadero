@@ -86,7 +86,7 @@ export const formatearSistema = asyncHandler(async (req, res) => {
     for (const modelo of orden) {
       await db[modelo].deleteMany();
     }
-  });
+  }, { maxWait: 10000, timeout: 60000 });
 
   res.json({
     ok: true,
