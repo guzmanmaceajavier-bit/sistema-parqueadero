@@ -108,9 +108,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     },
     include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
-  if (planDetectado && !mensualidadPagada(planDetectado)) {
-    throw new AppError("El plan tiene saldo pendiente. Registra el pago completo antes de ingresar con cobertura de plan.", 402);
-  }
+  // La vigencia contractual y el estado de pago son conceptos distintos:
+  // el plan conserva puesto/cobertura mientras esté vigente; la deuda sigue visible.
 
   if (reservaVinculada?.puestoId && planDetectado?.puestoId && reservaVinculada.puestoId !== planDetectado.puestoId) {
     throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
@@ -176,9 +175,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       }),
     ]);
 
-    if (mensualidadActual && !mensualidadPagada(mensualidadActual)) {
-      throw new AppError("El plan tiene saldo pendiente. Registra el pago completo antes de ingresar con cobertura de plan.", 402);
-    }
+    // No bloqueamos el reingreso por saldo pendiente: se conserva la deuda
+    // del plan, pero no se genera una tarifa diaria adicional por el mismo servicio.
     if (reservaVinculada && !reservaActual) {
       throw new AppError("La reserva seleccionada cambió o dejó de estar vigente. Actualiza la información antes de registrar la entrada.", 409);
     }
@@ -221,11 +219,14 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     });
   });
 
+  const saldoPendientePlan = planDetectado
+    ? Math.max(0, redondearDinero(planDetectado.valor - calcularPagadoMensualidad(planDetectado.facturas || [], planDetectado.fechaInicio)))
+    : 0;
   const tipoIngreso = planDetectado ? "plan_mensual" : (reservaVinculada ? "reserva" : "normal");
   await registrarMovimiento("INGRESOS", "ENTRADA", `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}${planDetectado ? ` — plan ${planDetectado.plan?.nombre}` : reservaVinculada ? " (reserva)" : ""}`, req.usuario?.usuario || "admin");
   emitirEvento("ingreso:entrada", { mensaje: `Vehículo ${ingreso.vehiculo.placa} ingresó al puesto ${puesto.codigo}`, cliente: ingreso.cliente, vehiculo: ingreso.vehiculo, puesto: ingreso.puesto, fecha: ingreso.fechaEntrada, tipoIngreso, plan: planDetectado?.plan });
 
-  res.status(201).json({ ok: true, ingreso, reservaAsignada: !!reservaVinculada, planAsignado: planDetectado ? { id: planDetectado.id, nombre: planDetectado.plan?.nombre, fechaFin: planDetectado.fechaFin } : null, tipoIngreso });
+  res.status(201).json({ ok: true, ingreso, reservaAsignada: !!reservaVinculada, planAsignado: planDetectado ? { id: planDetectado.id, nombre: planDetectado.plan?.nombre, fechaFin: planDetectado.fechaFin, saldoPendiente: saldoPendientePlan } : null, tipoIngreso });
 });
 
 export const obtenerIngresos = asyncHandler(async (req, res) => {
@@ -573,7 +574,6 @@ export const simularCobro = asyncHandler(async (req, res) => {
     },
     include: { plan: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
-  if (planActivo && !mensualidadPagada(planActivo)) planActivo = null;
   if (planActivo) {
     const totalMinutos = Math.ceil((Date.now() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
     return res.json({ ok: true, cobro: { total: 0, totalMinutos, error: null, plan: planActivo.plan?.nombre || "Plan activo" }, ingreso });
@@ -592,7 +592,6 @@ export const simularCobro = asyncHandler(async (req, res) => {
     include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
     orderBy: { fechaFin: "desc" },
   });
-  if (planQueCubriaEntrada && !mensualidadPagada(planQueCubriaEntrada)) planQueCubriaEntrada = null;
 
   await getCajaOError(ingreso.vehiculo.sucursalId ?? sucursalId ?? null);
 
@@ -653,7 +652,6 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     },
     include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
-  if (mensualidadVigente && !mensualidadPagada(mensualidadVigente)) mensualidadVigente = null;
 
   // Política de excedente: si la mensualidad venció DURANTE la estancia (cubría la
   // entrada pero ya no el momento de salida), se cubre hasta su fechaFin y solo se
@@ -672,7 +670,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       orderBy: { fechaFin: "desc" },
     });
-    if (mensualidadQueCubriaEntrada && mensualidadPagada(mensualidadQueCubriaEntrada)) {
+    if (mensualidadQueCubriaEntrada) {
       mensualidadVigente = mensualidadQueCubriaEntrada;
       coberturaHasta = mensualidadQueCubriaEntrada.fechaFin;
     }
@@ -768,9 +766,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
           include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
         })
       : [];
-    const existeCoberturaPagada = planesActivosBloqueados.some(mensualidadPagada);
-    if (existeCoberturaPagada !== cubiertoPorPlan) {
-      throw new AppError("La cobertura pagada cambió durante la operación. Vuelve a simular el cobro.", 409);
+    const existeCoberturaVigente = planesActivosBloqueados.length > 0;
+    if (existeCoberturaVigente !== cubiertoPorPlan) {
+      throw new AppError("La vigencia del plan cambió durante la operación. Vuelve a simular la salida.", 409);
     }
 
     // Orden financiero común: vehículo -> puesto -> mensualidad -> caja -> cliente.
