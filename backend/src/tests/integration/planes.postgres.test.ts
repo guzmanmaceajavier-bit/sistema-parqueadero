@@ -28,6 +28,7 @@ async function http(path: string, opts: RequestInit = {}) {
 beforeAll(async () => {
   // Limpieza previa por si un run anterior quedó a medias.
   await prisma.ingreso.deleteMany({ where: { vehiculo: { placa: PLACA } } }).catch(() => {});
+  await prisma.factura.deleteMany({ where: { mensualidad: { cliente: { documento: DOC } } } }).catch(() => {});
   await prisma.mensualidad.deleteMany({ where: { cliente: { documento: DOC } } }).catch(() => {});
   await prisma.vehiculo.deleteMany({ where: { placa: PLACA } }).catch(() => {});
   await prisma.cliente.deleteMany({ where: { documento: DOC } }).catch(() => {});
@@ -75,8 +76,17 @@ describe("Planes y cobro", () => {
     const hoy = new Date();
     const fin = new Date();
     fin.setDate(fin.getDate() + 30);
-    await prisma.mensualidad.create({
+    const mensualidad = await prisma.mensualidad.create({
       data: { clienteId, vehiculoId, planId, puestoId: puestoPlanId, fechaInicio: hoy, fechaFin: fin, valor: 150000 },
+    });
+    await prisma.factura.create({
+      data: {
+        numero: `TEST-PLAN-${Date.now()}`,
+        mensualidadId: mensualidad.id,
+        origen: "MENSUALIDAD",
+        valor: 150000,
+        metodoPago: "efectivo",
+      },
     });
     const planActivo = await prisma.mensualidad.findFirst({
       where: { vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
@@ -140,6 +150,7 @@ describe("Planes y cobro", () => {
       console.warn("Sin backend en 3001, se omite prueba HTTP de liberar");
       return;
     }
+    await prisma.factura.deleteMany({ where: { mensualidad: { vehiculoId } } });
     await prisma.mensualidad.deleteMany({ where: { vehiculoId } });
     const ingreso = await prisma.ingreso.create({ data: { clienteId, vehiculoId, puestoId: puestoSoloId } });
     const r = await http(`/api/ingresos/liberar/${ingreso.id}`, { method: "PUT", headers: auth() });
