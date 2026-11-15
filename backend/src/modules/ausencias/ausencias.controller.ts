@@ -6,7 +6,7 @@ import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { calcularCobro } from "../../services/calculadorCobros.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
-import { redondearDinero, restarDinero } from "../../utils/dinero.js";
+import { redondearDinero, restarDinero, sumarDinero } from "../../utils/dinero.js";
 import { emitirEvento } from "../../services/socket.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
