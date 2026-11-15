@@ -122,7 +122,13 @@ export const obtenerCliente = asyncHandler(async (req, res) => {
         { ausencias: { some: { sucursalId } } },
       ] } : {}),
     },
-    include: { vehiculos: true, mensualidades: { include: { vehiculo: true, plan: true, puesto: true } }, reservas: true, ausencias: true, ingresos: { where: { estado: "ACTIVO" }, take: 1 } },
+    include: {
+      vehiculos: { where: sucursalId ? { sucursalId } : undefined },
+      mensualidades: { where: sucursalId ? { sucursalId } : undefined, include: { vehiculo: true, plan: true, puesto: true } },
+      reservas: { where: sucursalId ? { sucursalId } : undefined },
+      ausencias: { where: sucursalId ? { sucursalId } : undefined },
+      ingresos: { where: { estado: "ACTIVO", ...(sucursalId ? { vehiculo: { sucursalId } } : {}) }, take: 1 },
+    },
   });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
   res.json({ ok: true, cliente });
@@ -172,17 +178,20 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
 
   if (deseaReservar === true) {
     const existente = await prisma.reserva.findFirst({
-      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA"] } },
+      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA"] }, ...(sucursalId ? { sucursalId } : {}) },
     });
     if (!existente) {
-      const vehiculo = await prisma.vehiculo.findFirst({ where: { clienteId: Number(id) }, orderBy: { id: "asc" } });
+      const vehiculo = await prisma.vehiculo.findFirst({
+        where: { clienteId: Number(id), ...(sucursalId ? { sucursalId } : {}) },
+        orderBy: { id: "asc" },
+      });
       await prisma.reserva.create({
-        data: { clienteId: Number(id), vehiculoId: vehiculo?.id ?? null, puestoId: null, fechaInicio: new Date() },
-      }).catch(() => {});
+        data: { clienteId: Number(id), vehiculoId: vehiculo?.id ?? null, puestoId: null, fechaInicio: new Date(), sucursalId: sucursalId ?? null },
+      });
     }
   } else if (deseaReservar === false) {
     await prisma.reserva.updateMany({
-      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA"] } },
+      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA"] }, ...(sucursalId ? { sucursalId } : {}) },
       data: { estado: "CANCELADA" },
     });
   }
