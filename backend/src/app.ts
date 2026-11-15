@@ -64,7 +64,7 @@ const limiter = rateLimit({
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 // CORS también rechaza la petición: no basta con ocultar la respuesta,
 // porque las cookies SameSite=None pueden viajar en solicitudes CSRF.
-app.use(corsSeguro(CORS_ORIGINS_RAW, NODE_ENV));
+app.use(corsSeguro(process.env.CORS_ORIGINS || "", NODE_ENV));
 app.use(limiter);
 app.use(cookieParser());
 app.use(express.json({ limit: "25mb" }));
