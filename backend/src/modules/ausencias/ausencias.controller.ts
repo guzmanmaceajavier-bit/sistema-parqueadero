@@ -451,11 +451,18 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
     }
 
     const ahora = new Date();
-    const [otrosIngresos, otrasMensualidades, otrasReservas] = await Promise.all([
+    const [otrosIngresos, otrasMensualidades, otrasReservas, reservaPropia] = await Promise.all([
       tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
       tx.mensualidad.count({ where: { puestoId, vehiculoId: { not: vehiculoId }, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
       tx.reserva.count({ where: { puestoId, OR: [{ vehiculoId: null }, { vehiculoId: { not: vehiculoId } }], estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, AND: [{ OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] }] } }),
+      tx.reserva.findFirst({
+        where: { vehiculoId, sucursalId: vehiculo.sucursalId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] },
+        orderBy: { fechaInicio: "asc" },
+      }),
     ]);
+    if (reservaPropia?.puestoId && reservaPropia.puestoId !== puestoId) {
+      throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Corrige la asignación antes de registrar el regreso.", 409);
+    }
     if (otrosIngresos || otrasMensualidades || otrasReservas || puesto.estado === "OCUPADO") {
       throw new AppError("El puesto reservado está ocupado o fue asignado a otro vehículo. No se registró el regreso.", 409);
     }
@@ -535,8 +542,11 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
     });
     if (puestoActualizado.count !== 1) throw new AppError("No se pudo recuperar el puesto reservado. No se registró el regreso.", 409);
 
+    if (reservaPropia) {
+      await tx.reserva.update({ where: { id: reservaPropia.id }, data: { estado: "ACTIVA" } });
+    }
     const ingreso = await tx.ingreso.create({
-      data: { clienteId: cliente.id, vehiculoId, puestoId },
+      data: { clienteId: cliente.id, vehiculoId, puestoId, ...(reservaPropia ? { reservaId: reservaPropia.id } : {}) },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
     const ausenciaFinalizada = await tx.ausencia.update({
