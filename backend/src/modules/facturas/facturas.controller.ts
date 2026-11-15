@@ -74,33 +74,58 @@ export const anularFactura = asyncHandler(async (req, res) => {
       }
     }
 
-    // D1-b — devolver al cliente el saldo que esa factura consumió.
+    // Devolver únicamente el consumo asociado a ESTA factura.
+    // El bloqueo del cliente y la comprobación de devolución hacen la operación idempotente.
     if (factura.ingresoId) {
       const ingreso = await tx.ingreso.findUnique({
         where: { id: factura.ingresoId },
-        select: { clienteId: true, vehiculo: { select: { placa: true } } },
+        select: { clienteId: true },
       });
       if (ingreso?.clienteId) {
-        const consumos = await tx.clienteSaldoMovimiento.findMany({
-          where: { clienteId: ingreso.clienteId, tipo: "CONSUMO", concepto: { contains: `salida ${ingreso.vehiculo?.placa || ""}` } },
-          orderBy: { createdAt: "desc" },
-        });
-        const consumido = consumos.reduce((s, m) => s + m.monto, 0);
-        if (consumido > 0) {
-          const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-          await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { increment: consumido } } });
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
+        const referenciaFactura = `factura ${factura.numero}`;
+        const [consumos, devolucionExistente] = await Promise.all([
+          tx.clienteSaldoMovimiento.findMany({
+            where: {
+              clienteId: ingreso.clienteId,
+              tipo: "CONSUMO",
+              concepto: { contains: referenciaFactura },
+            },
+          }),
+          tx.clienteSaldoMovimiento.findFirst({
+            where: {
+              clienteId: ingreso.clienteId,
+              tipo: "DEVOLUCION",
+              concepto: { contains: `anulación de factura ${factura.numero}` },
+            },
+            select: { id: true },
+          }),
+        ]);
+        const consumido = consumos.reduce((s, movimiento) => s + movimiento.monto, 0);
+        if (consumido > 0 && !devolucionExistente) {
+          const saldoAntes = await tx.cliente.findUnique({
+            where: { id: ingreso.clienteId },
+            select: { saldo: true },
+          });
+          const saldoPrevio = saldoAntes?.saldo ?? 0;
+          await tx.cliente.update({
+            where: { id: ingreso.clienteId },
+            data: { saldo: { increment: consumido } },
+          });
           await tx.clienteSaldoMovimiento.create({
             data: {
               clienteId: ingreso.clienteId,
               tipo: "DEVOLUCION",
               monto: consumido,
-              saldoAntes: saldoAntes?.saldo ?? 0,
-              saldoDespues: (saldoAntes?.saldo ?? 0) + consumido,
+              saldoAntes: saldoPrevio,
+              saldoDespues: saldoPrevio + consumido,
               concepto: `Devolución de saldo por anulación de factura ${factura.numero}`,
               usuario,
             },
           });
         }
+        // Los consumos históricos anteriores a esta referencia no se devuelven
+        // automáticamente: no se puede demostrar a qué factura pertenecían.
       }
     }
 
