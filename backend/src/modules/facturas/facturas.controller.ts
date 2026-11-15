@@ -3,6 +3,7 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { redondearDinero, sumarDinero } from "../../utils/dinero.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 
 /**
@@ -27,37 +28,50 @@ export const anularFactura = asyncHandler(async (req, res) => {
   if (factura.anulada) throw new AppError("Esta factura ya está anulada", 409);
 
   const usuario = req.usuario?.usuario || "admin";
-  const ahora = new Date();
 
   await prisma.$transaction(async (tx) => {
-    // Serializa la anulación con cierres de caja y evita anular dos veces la misma factura.
+    // Orden de bloqueo común con cobros y salidas: vehículo -> puesto ->
+    // mensualidad -> caja -> cliente. Evita deadlocks entre pagos y anulaciones.
+    const vehiculoId = factura.ingreso?.vehiculoId ?? factura.mensualidad?.vehiculoId;
+    const puestoId = factura.ingreso?.puestoId ?? factura.mensualidad?.puestoId;
+    if (vehiculoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+    }
+    if (puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+    }
+    if (factura.mensualidadId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${factura.mensualidadId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT "id" FROM "Mensualidad" WHERE "id" = ${factura.mensualidadId} FOR UPDATE`;
+    }
+
+    // El bloqueo de caja se toma después de los bloqueos operativos anteriores.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const facturaActual = await tx.factura.findUnique({
       where: { id: factura.id },
-      select: { anulada: true },
+      include: { cajaMovimientos: { include: { caja: true } }, mensualidad: true, ingreso: true },
     });
     if (!facturaActual || facturaActual.anulada) {
       throw new AppError("Esta factura ya fue anulada por otra operación", 409);
     }
+    const ahora = new Date();
 
     await tx.factura.update({
-      where: { id: factura.id },
+      where: { id: facturaActual.id },
       data: { anulada: true, anuladaEn: ahora, anuladoPor: usuario, motivoAnulacion: motivo },
     });
 
-    // Reverso en caja
-    if (factura.metodoPago) {
-      const movOriginal = factura.cajaMovimientos[0];
+    // Reverso en caja: solo se altera el movimiento de esta factura.
+    if (facturaActual.metodoPago) {
+      const movOriginal = facturaActual.cajaMovimientos.find((movimiento) => !movimiento.anulado);
       const cajaOriginalAbierta = movOriginal?.caja?.estado === "ABIERTA";
       if (movOriginal && cajaOriginalAbierta) {
-        // Se anula el movimiento original (soft) — los totales lo excluyen.
         await tx.cajaMovimiento.update({
           where: { id: movOriginal.id },
-          data: { anulado: true, anuladoEn: ahora, anuladoPor: usuario, motivoAnulacion: `Anulado por factura ${factura.numero}` },
+          data: { anulado: true, anuladoEn: ahora, anuladoPor: usuario, motivoAnulacion: `Anulado por factura ${facturaActual.numero}` },
         });
       } else {
-        // La caja original está cerrada o no existe: se registra el reverso en la caja abierta actual.
-        const cajaActual = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: factura.sucursalId ?? sucursalId ?? null } });
+        const cajaActual = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: facturaActual.sucursalId ?? sucursalId ?? null } });
         if (!cajaActual) {
           throw new AppError("No hay una caja abierta en esta sucursal para registrar el reverso. Abre la caja y vuelve a anular la factura.", 409);
         }
@@ -65,9 +79,9 @@ export const anularFactura = asyncHandler(async (req, res) => {
           data: {
             cajaId: cajaActual.id,
             tipo: "EGRESO",
-            concepto: `Ajuste por anulación factura ${factura.numero} (motivo: ${motivo})`,
-            monto: factura.valor,
-            metodoPago: factura.metodoPago,
+            concepto: `Ajuste por anulación factura ${facturaActual.numero} (motivo: ${motivo})`,
+            monto: redondearDinero(facturaActual.valor),
+            metodoPago: facturaActual.metodoPago,
             facturaId: null,
           },
         });
@@ -75,10 +89,9 @@ export const anularFactura = asyncHandler(async (req, res) => {
     }
 
     // Devolver únicamente el consumo asociado a ESTA factura.
-    // El bloqueo del cliente y la comprobación de devolución hacen la operación idempotente.
-    if (factura.ingresoId) {
+    if (facturaActual.ingresoId) {
       const ingreso = await tx.ingreso.findUnique({
-        where: { id: factura.ingresoId },
+        where: { id: facturaActual.ingresoId },
         select: { clienteId: true },
       });
       if (ingreso?.clienteId) {
@@ -89,10 +102,10 @@ export const anularFactura = asyncHandler(async (req, res) => {
               clienteId: ingreso.clienteId,
               tipo: "CONSUMO",
               OR: [
-                { facturaId: factura.id },
+                { facturaId: facturaActual.id },
                 // Compatibilidad con movimientos históricos anteriores a la FK.
                 // El sufijo exacto evita confundir FACT-12 con FACT-123.
-                { facturaId: null, concepto: { endsWith: `— factura ${factura.numero}` } },
+                { facturaId: null, concepto: { endsWith: `— factura ${facturaActual.numero}` } },
               ],
             },
           }),
@@ -100,21 +113,22 @@ export const anularFactura = asyncHandler(async (req, res) => {
             where: {
               clienteId: ingreso.clienteId,
               tipo: "DEVOLUCION",
-              facturaId: factura.id,
+              facturaId: facturaActual.id,
             },
             select: { id: true },
           }),
         ]);
-        const consumido = consumos.reduce((s, movimiento) => s + movimiento.monto, 0);
+        const consumido = sumarDinero(...consumos.map((movimiento) => movimiento.monto));
         if (consumido > 0 && !devolucionExistente) {
           const saldoAntes = await tx.cliente.findUnique({
             where: { id: ingreso.clienteId },
             select: { saldo: true },
           });
-          const saldoPrevio = saldoAntes?.saldo ?? 0;
+          const saldoPrevio = redondearDinero(saldoAntes?.saldo ?? 0);
+          const saldoDespues = sumarDinero(saldoPrevio, consumido);
           await tx.cliente.update({
             where: { id: ingreso.clienteId },
-            data: { saldo: { increment: consumido } },
+            data: { saldo: saldoDespues },
           });
           await tx.clienteSaldoMovimiento.create({
             data: {
@@ -122,24 +136,21 @@ export const anularFactura = asyncHandler(async (req, res) => {
               tipo: "DEVOLUCION",
               monto: consumido,
               saldoAntes: saldoPrevio,
-              saldoDespues: saldoPrevio + consumido,
-              concepto: `Devolución de saldo por anulación de factura ${factura.numero}`,
-              facturaId: factura.id,
+              saldoDespues,
+              concepto: `Devolución de saldo por anulación de factura ${facturaActual.numero}`,
+              facturaId: facturaActual.id,
               usuario,
             },
           });
         }
-        // Los consumos históricos anteriores a esta referencia no se devuelven
-        // automáticamente: no se puede demostrar a qué factura pertenecían.
       }
     }
 
     // D1-c: revertir renovación automática si la factura saldó una mensualidad.
-    if (factura.mensualidadId && factura.origen === "MENSUALIDAD" && factura.mensualidad) {
-      const m = factura.mensualidad;
-      // Si el período fue renovado (fechaInicio posterior al pago), se marca VENCIDA para revisión.
-      if (new Date(m.fechaInicio) >= new Date(factura.createdAt)) {
-        await tx.mensualidad.update({ where: { id: m.id }, data: { estado: "VENCIDA" } });
+    if (facturaActual.mensualidadId && facturaActual.origen === "MENSUALIDAD" && facturaActual.mensualidad) {
+      const mensualidad = facturaActual.mensualidad;
+      if (new Date(mensualidad.fechaInicio) >= new Date(facturaActual.createdAt)) {
+        await tx.mensualidad.update({ where: { id: mensualidad.id }, data: { estado: "VENCIDA" } });
       }
     }
   });
