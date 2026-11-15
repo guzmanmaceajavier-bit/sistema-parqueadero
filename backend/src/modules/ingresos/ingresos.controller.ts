@@ -773,6 +773,12 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       throw new AppError("La cobertura pagada cambió durante la operación. Vuelve a simular el cobro.", 409);
     }
 
+    // Orden financiero común: vehículo -> puesto -> mensualidad -> caja -> cliente.
+    // Se toma caja antes de bloquear el saldo para no invertir el orden de recargas/anulaciones.
+    if (!cubiertoPorPlan) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+    }
+
     // Recalcula con la hora efectiva de salida tras esperar los bloqueos.
     if (modoSalida === "EXCEDENTE" && coberturaHasta) {
       const cobroExcedente = await calcularCobro({
@@ -858,10 +864,6 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     }
 
     if (!cubiertoPorPlan) {
-      // Orden de bloqueos financiero: vehículo -> puesto -> caja -> cliente.
-      // La recarga y la anulación usan caja -> cliente; tomar primero la caja
-      // evita lecturas de saldo y movimientos de libro auxiliar inconsistentes.
-      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
       const f = await tx.factura.create({
         data: {
           numero: String(numeroFactura),
@@ -899,7 +901,6 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         });
       }
 
-      // El bloqueo de caja ya se tomó antes de leer/modificar saldos del cliente.
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingreso.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
       const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";
