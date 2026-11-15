@@ -454,7 +454,7 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
     const [otrosIngresos, otrasMensualidades, otrasReservas] = await Promise.all([
       tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
       tx.mensualidad.count({ where: { puestoId, vehiculoId: { not: vehiculoId }, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } } }),
-      tx.reserva.count({ where: { puestoId, vehiculoId: { not: vehiculoId }, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
+      tx.reserva.count({ where: { puestoId, OR: [{ vehiculoId: null }, { vehiculoId: { not: vehiculoId } }], estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, AND: [{ OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] }] } }),
     ]);
     if (otrosIngresos || otrasMensualidades || otrasReservas || puesto.estado === "OCUPADO") {
       throw new AppError("El puesto reservado está ocupado o fue asignado a otro vehículo. No se registró el regreso.", 409);
