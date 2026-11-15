@@ -129,7 +129,6 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
     if (puesto) {
       const puestoActual = await tx.puesto.findUnique({ where: { id: puesto.id } });
       if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto dejó de estar disponible", 409);
-      const mensualidadVigente = inicio <= ahora && fin >= ahora;
       const ingresoExistente = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true } });
       await tx.puesto.update({
         where: { id: puesto.id },
