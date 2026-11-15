@@ -10,8 +10,19 @@ export function corsSeguro(originsRaw = "", nodeEnv = "development"): RequestHan
 
   return (req, res, next) => {
     const origin = req.headers.origin;
+    let sameOrigin = false;
+    if (origin && req.headers.host) {
+      try {
+        const parsed = new URL(origin);
+        sameOrigin = parsed.host === req.headers.host
+          && (nodeEnv !== "production" || parsed.protocol === "https:");
+      } catch {
+        sameOrigin = false;
+      }
+    }
     const allowed = !origin
       || origins.includes(origin)
+      || sameOrigin
       || (nodeEnv !== "production" && origins.length === 0);
 
     res.header("Vary", "Origin");
