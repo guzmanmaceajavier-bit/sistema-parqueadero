@@ -43,10 +43,8 @@ export const obtenerAlertas = asyncHandler(async (req, res) => {
     }),
     prisma.mensualidad.findMany({
       where: {
-        OR: [
-          { estado: "VENCIDA" },
-          { estado: "ACTIVA", fechaFin: { lt: hoy } },
-        ],
+        fechaFin: { lt: hoy },
+        estado: { in: ["ACTIVA", "VENCIDA"] },
         ...sucursal,
       },
       include: { cliente: { select: { nombres: true, apellidos: true } } },
