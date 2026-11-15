@@ -20,7 +20,7 @@ const OPCIONES_AUSENCIA = [
   { value: "EXTENDER", label: "Extender vencimiento", desc: "Permite indicar cuántos días adicionales se reconocen al regresar", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" },
   { value: "DESCONTAR", label: "Descontar días", desc: "Reduce primero la deuda pendiente y acredita el excedente al saldo a favor; no realiza devolución en efectivo", color: "bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400" },
   { value: "CONGELAR", label: "Congelar mensualidad", desc: "Reconoce automáticamente todos los días de ausencia y extiende el vencimiento", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400" },
-  { value: "MANTENER", label: "Mantener cobro normal", desc: "El cliente sigue pagando normal", color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" },
+  { value: "MANTENER", label: "Sin compensación", desc: "No modifica la fecha de vencimiento ni el valor de la mensualidad", color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" },
   { value: "HISTORIAL", label: "Solo historial", desc: "Solo se registra, sin cambios en mensualidad", color: "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300" },
 ];
 
