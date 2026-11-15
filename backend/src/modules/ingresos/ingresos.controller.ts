@@ -218,7 +218,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     reservaVinculada = reservaActual;
     planDetectado = mensualidadActual;
 
-    if (puestoId && Number(puestoId) !== Number(puestoAsignado ?? puestoId)) {
+    const puestoEsperadoActual = reservaActual?.puestoId ?? puestoMensualidadActual;
+    if (puestoEsperadoActual && Number(puestoId) !== Number(puestoEsperadoActual)) {
       throw new AppError("La asignación de puesto cambió mientras se procesaba la entrada. Actualiza e inténtalo de nuevo.", 409);
     }
     const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId), { vehiculoId, reservaId: reservaVinculada?.id });
