@@ -196,20 +196,28 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
  */
 export const obtenerBloqueosCliente = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const cliente = await prisma.cliente.findUnique({ where: { id: Number(id) } });
-  if (!cliente) throw new AppError("Cliente no encontrado", 404);
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const alcance = sucursalId ? { OR: [
+    { vehiculos: { some: { sucursalId } } },
+    { ingresos: { some: { vehiculo: { sucursalId } } } },
+    { mensualidades: { some: { sucursalId } } },
+    { reservas: { some: { sucursalId } } },
+    { ausencias: { some: { sucursalId } } },
+  ] } : {};
+  const cliente = await prisma.cliente.findFirst({ where: { id: Number(id), ...alcance } });
+  if (!cliente) throw new AppError("Cliente no encontrado en esta sucursal", 404);
 
   const [ingresos, mensualidades, reservas] = await Promise.all([
     prisma.ingreso.findMany({
-      where: { clienteId: Number(id), estado: "ACTIVO" },
+      where: { clienteId: Number(id), estado: "ACTIVO", ...(sucursalId ? { vehiculo: { sucursalId } } : {}) },
       select: { id: true, puesto: { select: { codigo: true } }, vehiculo: { select: { placa: true } }, fechaEntrada: true },
     }),
     prisma.mensualidad.findMany({
-      where: { clienteId: Number(id), estado: "ACTIVA" },
+      where: { clienteId: Number(id), estado: "ACTIVA", ...(sucursalId ? { sucursalId } : {}) },
       select: { id: true, plan: { select: { nombre: true } }, vehiculo: { select: { placa: true } }, fechaFin: true },
     }),
     prisma.reserva.findMany({
-      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } },
+      where: { clienteId: Number(id), estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, ...(sucursalId ? { sucursalId } : {}) },
       select: { id: true, estado: true, fechaInicio: true, puesto: { select: { codigo: true } }, vehiculo: { select: { placa: true } } },
     }),
   ]);
@@ -223,6 +231,10 @@ export const obtenerBloqueosCliente = asyncHandler(async (req, res) => {
 
 export const eliminarCliente = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  // La ficha del cliente y sus vehículos pueden relacionarse con varias sedes.
+  // El cierre es una acción global y se reserva al administrador global.
+  if (sucursalId) throw new AppError("El cierre de la cuenta completa debe realizarlo el administrador global", 403);
   const forzar = req.body?.forzar === true || req.query?.forzar === "true";
   const cliente = await prisma.cliente.findUnique({ where: { id: Number(id) } });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
@@ -310,10 +322,21 @@ export const eliminarCliente = asyncHandler(async (req, res) => {
 
 export const perfilCliente = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const cliente = await prisma.cliente.findFirst({
+    where: {
+      id: Number(id),
+      ...(sucursalId ? { OR: [
+        { vehiculos: { some: { sucursalId } } },
+        { ingresos: { some: { vehiculo: { sucursalId } } } },
+        { mensualidades: { some: { sucursalId } } },
+        { reservas: { some: { sucursalId } } },
+        { ausencias: { some: { sucursalId } } },
+      ] } : {}),
+    },
     include: {
       vehiculos: {
+        where: sucursalId ? { sucursalId } : undefined,
         include: {
           ingresos: {
             include: { facturas: true, puesto: true },
