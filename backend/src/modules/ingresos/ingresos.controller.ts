@@ -57,7 +57,13 @@ async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asigna
     }),
     asignacion.vehiculoId
       ? tx.mensualidad.count({
-          where: { puestoId, vehiculoId: asignacion.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora } },
+          where: {
+            vehiculoId: asignacion.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora },
+            OR: [
+              { puestoId },
+              { puestoId: null, ausencias: { some: { puestoId, estado: "FINALIZADA" } } },
+            ],
+          },
         })
       : 0,
     asignacion.reservaId
@@ -114,7 +120,14 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (reservaVinculada?.puestoId && planDetectado?.puestoId && reservaVinculada.puestoId !== planDetectado.puestoId) {
     throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
   }
-  const puestoAsignado = reservaVinculada?.puestoId ?? planDetectado?.puestoId;
+  const ausenciaConPuesto = await prisma.ausencia.findFirst({
+    where: {
+      vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null },
+      ...(planDetectado ? { OR: [{ mensualidadId: planDetectado.id }, { mensualidadId: null }] } : {}),
+    },
+    orderBy: { fechaRegreso: "desc" },
+  });
+  const puestoAsignado = reservaVinculada?.puestoId ?? planDetectado?.puestoId ?? ausenciaConPuesto?.puestoId;
   if (puestoAsignado) {
     if (puestoId && Number(puestoId) !== puestoAsignado) {
       throw new AppError("El vehículo tiene un puesto asignado por su reserva o mensualidad. Utiliza el puesto indicado.", 409);
@@ -150,7 +163,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     // Relee reservas y mensualidades dentro del bloqueo: los datos consultados antes
     // de abrir la transacción podrían haber cambiado mientras se esperaba el puesto.
     const ahora = new Date();
-    const [reservaActual, mensualidadActual] = await Promise.all([
+    const [reservaActual, mensualidadActual, ausenciaActualConPuesto] = await Promise.all([
       tx.reserva.findFirst({
         where: {
           clienteId,
@@ -173,6 +186,13 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
         },
         include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       }),
+      tx.ausencia.findFirst({
+        where: {
+          vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null },
+          ...(mensualidadActual ? { OR: [{ mensualidadId: mensualidadActual.id }, { mensualidadId: null }] } : {}),
+        },
+        orderBy: { fechaRegreso: "desc" },
+      }),
     ]);
 
     // No bloqueamos el reingreso por saldo pendiente: se conserva la deuda
@@ -183,19 +203,23 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     if (reservaActual?.puestoId && Number(puestoId) !== reservaActual.puestoId) {
       throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Actualiza la disponibilidad.", 409);
     }
-    if (mensualidadActual?.puestoId && Number(puestoId) !== mensualidadActual.puestoId) {
-      throw new AppError("El vehículo tiene un puesto asignado por su mensualidad. Actualiza la disponibilidad.", 409);
+    const puestoMensualidadActual = mensualidadActual?.puestoId ?? ausenciaActualConPuesto?.puestoId ?? null;
+    if (puestoMensualidadActual && Number(puestoId) !== puestoMensualidadActual) {
+      throw new AppError("El vehículo tiene un puesto asignado por su mensualidad o ausencia anterior. Utiliza el puesto indicado.", 409);
     }
     if (
       reservaActual?.puestoId &&
-      mensualidadActual?.puestoId &&
-      reservaActual.puestoId !== mensualidadActual.puestoId
+      puestoMensualidadActual &&
+      reservaActual.puestoId !== puestoMensualidadActual
     ) {
       throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
     }
     reservaVinculada = reservaActual;
     planDetectado = mensualidadActual;
 
+    if (puestoId && Number(puestoId) !== Number(puestoAsignado ?? puestoId)) {
+      throw new AppError("La asignación de puesto cambió mientras se procesaba la entrada. Actualiza e inténtalo de nuevo.", 409);
+    }
     const disponible = await puestoEstaDisponibleParaAsignar(tx, Number(puestoId), { vehiculoId, reservaId: reservaVinculada?.id });
     if (!disponible) throw new AppError("El puesto no está disponible para asignar", 409);
 
