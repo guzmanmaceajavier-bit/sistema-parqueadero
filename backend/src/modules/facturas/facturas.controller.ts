@@ -151,7 +151,7 @@ export const anularFactura = asyncHandler(async (req, res) => {
 export const obtenerFacturas = asyncHandler(async (req, res) => {
   const { page, limit, q, desde, hasta, origen } = req.query;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
-  const where: any = sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
+  const where: any = sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
   if (desde || hasta) {
     where.createdAt = {};
     if (desde) where.createdAt.gte = new Date(String(desde));
@@ -185,7 +185,7 @@ export const obtenerFactura = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
     prisma.factura.findFirst({
-      where: { id: Number(id), ...(sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true, puesto: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),
