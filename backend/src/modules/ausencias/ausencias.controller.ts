@@ -298,6 +298,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
           where: { id: mensualidadAusencia.id },
           data: {
             fechaFin: nuevaFechaFin,
+            estado: "ACTIVA",
             observacion: [mensualidadAusencia.observacion, detalle].filter(Boolean).join("\n").slice(0, 2000),
           },
         });
