@@ -420,10 +420,20 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
     throw new AppError("El monto debe ser un número válido mayor a 0", 400);
   }
 
-  const existe = await prisma.cliente.findUnique({ where: { id: Number(id) } });
-  if (!existe) throw new AppError("Cliente no encontrado", 404);
-
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
+  const existe = await prisma.cliente.findFirst({
+    where: {
+      id: Number(id),
+      ...(sucursalId ? { OR: [
+        { vehiculos: { some: { sucursalId } } },
+        { ingresos: { some: { vehiculo: { sucursalId } } } },
+        { mensualidades: { some: { sucursalId } } },
+        { reservas: { some: { sucursalId } } },
+        { ausencias: { some: { sucursalId } } },
+      ] } : {}),
+    },
+  });
+  if (!existe) throw new AppError("Cliente no encontrado en esta sucursal", 404);
 
   // Saldo y caja se registran en una sola transacción: sin caja abierta
   // no se acredita dinero que no haya quedado contabilizado.
