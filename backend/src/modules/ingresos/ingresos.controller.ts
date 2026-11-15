@@ -98,7 +98,6 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       estado: "ACTIVA",
       fechaInicio: { lte: new Date() },
       fechaFin: { gte: new Date() },
-      puestoId: { not: null },
     },
     include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
@@ -169,7 +168,6 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
           estado: "ACTIVA",
           fechaInicio: { lte: ahora },
           fechaFin: { gte: ahora },
-          puestoId: { not: null },
         },
         include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       }),
@@ -561,7 +559,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
 
   const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
   const ahoraSim = new Date();
-  const planActivo = await prisma.mensualidad.findFirst({
+  let planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
       sucursalId: sucursalOperativa,
