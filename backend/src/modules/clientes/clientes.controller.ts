@@ -124,15 +124,49 @@ export const obtenerCliente = asyncHandler(async (req, res) => {
       ] } : {}),
     },
     include: {
-      vehiculos: { where: sucursalId ? { sucursalId } : undefined },
-      mensualidades: { where: sucursalId ? { sucursalId } : undefined, include: { vehiculo: true, plan: true, puesto: true } },
-      reservas: { where: sucursalId ? { sucursalId } : undefined },
-      ausencias: { where: sucursalId ? { sucursalId } : undefined },
-      ingresos: { where: { estado: "ACTIVO", ...(sucursalId ? { vehiculo: { sucursalId } } : {}) }, take: 1 },
+      vehiculos: {
+        where: sucursalId ? { sucursalId } : undefined,
+        select: { id: true, placa: true, marca: true, modelo: true, tipo: true, estado: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      },
+      mensualidades: {
+        where: sucursalId ? { sucursalId } : undefined,
+        include: { vehiculo: true, plan: true, puesto: true },
+        orderBy: { fechaInicio: "desc" },
+        take: 50,
+      },
+      reservas: {
+        where: sucursalId ? { sucursalId } : undefined,
+        include: { vehiculo: { select: { id: true, placa: true } }, puesto: { select: { id: true, codigo: true } } },
+        orderBy: { fechaInicio: "desc" },
+        take: 50,
+      },
+      ausencias: {
+        where: sucursalId ? { sucursalId } : undefined,
+        include: { vehiculo: { select: { id: true, placa: true } }, puesto: { select: { id: true, codigo: true } }, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true } } },
+        orderBy: { fechaSalida: "desc" },
+        take: 50,
+      },
+      ingresos: {
+        where: sucursalId ? { vehiculo: { sucursalId } } : {},
+        include: { vehiculo: { select: { id: true, placa: true } }, puesto: { select: { id: true, codigo: true } } },
+        orderBy: { fechaEntrada: "desc" },
+        take: 50,
+      },
     },
   });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
-  res.json({ ok: true, cliente });
+  res.json({
+    ok: true,
+    cliente,
+    historial: {
+      vehiculos: cliente.vehiculos,
+      ingresos: cliente.ingresos,
+      mensualidades: cliente.mensualidades,
+      reservas: cliente.reservas,
+      ausencias: cliente.ausencias,
+    },
+  });
 });
 
 export const actualizarCliente = asyncHandler(async (req, res) => {
