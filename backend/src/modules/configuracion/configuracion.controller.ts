@@ -57,27 +57,39 @@ export const formatearSistema = asyncHandler(async (req, res) => {
     throw new AppError("Debes escribir FORMATEAR para confirmar la operación", 400);
   }
 
+  // Orden de borrado según las claves foráneas. Todo se ejecuta en una sola
+  // transacción: si un modelo falla, PostgreSQL revierte el formateo completo.
+  // Se conservan usuarios, sucursales y configuración del parqueadero.
   const orden = [
-    "factura", "ingreso", "mensualidad", "reserva", "ausencia",
-    "gasto", "movimiento", "caja", "acceso",
-    "tarifa", "plan", "puesto", "vehiculo", "cliente", "configuracion",
+    "cajaMovimiento",
+    "clienteSaldoMovimiento",
+    "vehiculoPropietario",
+    "pushSubscription",
+    "acceso",
+    "factura",
+    "ingreso",
+    "mensualidad",
+    "reserva",
+    "ausencia",
+    "gasto",
+    "movimiento",
+    "caja",
+    "vehiculo",
+    "cliente",
+    "puesto",
+    "tarifa",
+    "plan",
   ] as const;
-  const db = prisma as unknown as Record<string, { deleteMany: () => Promise<unknown> }>;
-  const errores: string[] = [];
-  for (const modelo of orden) {
-    try {
+
+  await prisma.$transaction(async (tx) => {
+    const db = tx as unknown as Record<string, { deleteMany: () => Promise<unknown> }>;
+    for (const modelo of orden) {
       await db[modelo].deleteMany();
-    } catch (e) {
-      // Se conserva el modelo con error y se reporta al final: no se oculta un fallo.
-      errores.push(`${modelo}: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }
-  if (errores.length > 0) {
-    return res.status(207).json({
-      ok: false,
-      message: "El formateo terminó con errores en algunos modelos. Revisa el detalle.",
-      errores,
-    });
-  }
-  res.json({ ok: true, message: "Sistema formateado correctamente. Todos los datos han sido eliminados excepto usuarios." });
+  });
+
+  res.json({
+    ok: true,
+    message: "Sistema formateado correctamente. Se conservaron usuarios, sucursales y configuración.",
+  });
 });
