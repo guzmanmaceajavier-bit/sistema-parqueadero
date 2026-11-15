@@ -69,8 +69,8 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
   const resumenPuestos = resumirEstadosPuestos(puestos);
 
   const facturasPagadas = facturas.filter(f => f.metodoPago !== null);
-  const totalIngresos = facturasPagadas.reduce((s, f) => s + f.valor, 0);
-  const totalGastos = gastos.reduce((s, g) => s + g.valor, 0);
+  const totalIngresos = facturasPagadas.reduce((s, f) => s + Number(f.valor), 0);
+  const totalGastos = gastos.reduce((s, g) => s + Number(g.valor), 0);
   const utilidad = totalIngresos - totalGastos;
 
   const ingresosPorDia = [];
@@ -81,8 +81,8 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
   while (iter < finIter) {
     const key = iter.toISOString().slice(0, 10);
     const label = iter.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", timeZone: "UTC" });
-    const ing = facturasPagadas.filter(f => obtenerFechaClaveEnZona(f.createdAt, zonaHoraria) === key).reduce((s, f) => s + f.valor, 0);
-    const gas = gastos.filter(g => obtenerFechaClaveEnZona(new Date(g.fecha), zonaHoraria) === key).reduce((s, g) => s + g.valor, 0);
+    const ing = facturasPagadas.filter(f => obtenerFechaClaveEnZona(f.createdAt, zonaHoraria) === key).reduce((s, f) => s + Number(f.valor), 0);
+    const gas = gastos.filter(g => obtenerFechaClaveEnZona(new Date(g.fecha), zonaHoraria) === key).reduce((s, g) => s + Number(g.valor), 0);
     ingresosPorDia.push({ label, fecha: key, ingresos: ing, gastos: gas });
     iter.setUTCDate(iter.getUTCDate() + 1);
   }
@@ -134,6 +134,6 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
       valor: g.valor,
       fecha: g.fecha,
     })),
-    metodosPago: metodosPago.reduce((acc, m) => ({ ...acc, [m.metodoPago || "otros"]: { count: m._count, total: m._sum.valor || 0 } }), {}),
+    metodosPago: metodosPago.reduce((acc, m) => ({ ...acc, [m.metodoPago || "otros"]: { count: m._count, total: Number(m._sum.valor || 0) } }), {}),
   });
 });
