@@ -359,51 +359,65 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { monto } = req.body;
 
-  if (!monto || Number(monto) <= 0) throw new AppError("Monto debe ser mayor a 0", 400);
+  const montoNormalizado = Number(monto);
+  if (!Number.isFinite(montoNormalizado) || montoNormalizado <= 0) {
+    throw new AppError("El monto debe ser un número válido mayor a 0", 400);
+  }
 
   const existe = await prisma.cliente.findUnique({ where: { id: Number(id) } });
   if (!existe) throw new AppError("Cliente no encontrado", 404);
 
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
 
-  // Saldo y movimiento de caja se crean en una sola transacción: nunca queda
-  // un saldo acreditado sin su ingreso correspondiente (ni al revés).
+  // Saldo y caja se registran en una sola transacción: sin caja abierta
+  // no se acredita dinero que no haya quedado contabilizado.
   const cliente = await prisma.$transaction(async (tx) => {
-    const saldoAntes = await tx.cliente.findUnique({ where: { id: Number(id) }, select: { saldo: true } });
+    await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${Number(id)} FOR UPDATE`;
+
+    const cajaAbierta = await tx.caja.findFirst({
+      where: { estado: "ABIERTA", sucursalId: sucursalId ?? null },
+    });
+    if (!cajaAbierta) {
+      throw new AppError("No hay una caja abierta en esta sucursal. Abre la caja antes de registrar una recarga.", 409);
+    }
+
+    const saldoAntes = await tx.cliente.findUnique({
+      where: { id: Number(id) },
+      select: { saldo: true },
+    });
+    if (!saldoAntes) throw new AppError("Cliente no encontrado", 404);
+
     const actualizado = await tx.cliente.update({
       where: { id: Number(id) },
-      data: { saldo: { increment: Number(monto) } },
+      data: { saldo: { increment: montoNormalizado } },
     });
 
-    // D6 — libro de movimientos de saldo (trazabilidad de recargas y consumos).
     await tx.clienteSaldoMovimiento.create({
       data: {
         clienteId: Number(id),
         tipo: "RECARGA",
-        monto: Number(monto),
-        saldoAntes: saldoAntes?.saldo ?? 0,
-        saldoDespues: (saldoAntes?.saldo ?? 0) + Number(monto),
-        concepto: `Recarga de saldo`,
+        monto: montoNormalizado,
+        saldoAntes: saldoAntes.saldo,
+        saldoDespues: saldoAntes.saldo + montoNormalizado,
+        concepto: "Recarga de saldo",
         usuario: req.usuario?.usuario || "admin",
       },
     });
 
-    const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalId ?? null } });
-    if (cajaAbierta) {
-      await tx.cajaMovimiento.create({
-        data: {
-          cajaId: cajaAbierta.id,
-          tipo: "INGRESO",
-          concepto: `Recarga de saldo — ${existe.nombres} ${existe.apellidos}`,
-          monto: Number(monto),
-          metodoPago: req.body.metodoPago || "efectivo",
-        },
-      });
-    }
+    await tx.cajaMovimiento.create({
+      data: {
+        cajaId: cajaAbierta.id,
+        tipo: "INGRESO",
+        concepto: `Recarga de saldo — ${existe.nombres} ${existe.apellidos}`,
+        monto: montoNormalizado,
+        metodoPago: req.body.metodoPago || "efectivo",
+      },
+    });
+
     return actualizado;
   });
 
-  await registrarMovimiento("CLIENTES", "RECARGAR", `Saldo recargado a ${existe.nombres} ${existe.apellidos} por $${Number(monto)}`, req.usuario?.usuario || "admin");
+  await registrarMovimiento("CLIENTES", "RECARGAR", `Saldo recargado a ${existe.nombres} ${existe.apellidos} por ${montoNormalizado}`, req.usuario?.usuario || "admin");
 
   res.json({ ok: true, message: "Saldo recargado correctamente", cliente });
 });
