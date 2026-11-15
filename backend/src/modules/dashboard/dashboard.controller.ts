@@ -128,6 +128,15 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   const puestosMantenimiento = resumenPuestos.mantenimiento;
   const puestosAusencia = resumenPuestos.ausencias;
   const ocupacion = totalPuestos > 0 ? Math.round((puestosOcupados / totalPuestos) * 100) : 0;
+  // Distingue ocupación física de capacidad comprometida: las ausencias
+  // conservan el puesto y las reservas reducen la disponibilidad comercial.
+  const capacidadOperativa = Math.max(0, totalPuestos - puestosMantenimiento);
+  const puestosComprometidos = puestosOcupados + puestosReservados + puestosAusencia;
+  const ocupacionComprometida = capacidadOperativa > 0
+    ? Math.round((puestosComprometidos / capacidadOperativa) * 100)
+    : 0;
+  const disponibilidadReal = Math.max(0, capacidadOperativa - puestosComprometidos);
+
 
   const mensualidadActiva = mensualidades.find(m => m.estado === "ACTIVA");
   const mensualidadesActivas = mensualidadActiva?._count || 0;
@@ -197,7 +206,14 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     totalPuestos, puestosLibres, puestosOcupados, puestosReservados, puestosMantenimiento, puestosAusencia,
     ingresosActivos, ingresosHoy,
     ingresosDia, ingresosSemana, ingresosMes,
-    gastosDia, utilidadDia: ingresosDia - gastosDia,
+    gastosDia,
+    utilidadDia: ingresosDia - gastosDia,
+    margenUtilidadDia: ingresosDia > 0 ? Number((((ingresosDia - gastosDia) / ingresosDia) * 100).toFixed(2)) : 0,
+    ingresoPromedioPorPuesto: capacidadOperativa > 0 ? Number((ingresosDia / capacidadOperativa).toFixed(2)) : 0,
+    capacidadOperativa,
+    puestosComprometidos,
+    disponibilidadReal,
+    ocupacionComprometida,
     mensualidadesActivas, mensualidadesVencidas, mensualidadesProximas,
     totalClientes, clientesMorosos, clientesActivos, totalVehiculos,
     ocupacion,
