@@ -32,6 +32,7 @@ import sucursalesRoutes from "./modules/sucursales/sucursales.routes.js";
 import reportesRoutes from "./modules/reportes/reportes.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
+import { corsSeguro } from "./middlewares/cors.middleware.js";
 import { initSocket } from "./services/socket.js";
 import { iniciarScheduler } from "./services/scheduler.js";
 import { crearUsuarioAdmin } from "./modules/usuarios/usuarios.service.js";
@@ -50,6 +51,12 @@ if (isWeak) {
 }
 
 const app = express();
+// Render termina TLS y reenvía la IP del cliente mediante X-Forwarded-For.
+// Ajusta TRUST_PROXY_HOPS si el backend usa otra topología de proxies.
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? (NODE_ENV === "production" ? 1 : 0));
+if (Number.isInteger(trustProxyHops) && trustProxyHops >= 0 && trustProxyHops <= 5) {
+  app.set("trust proxy", trustProxyHops);
+}
 
 // En desarrollo se dispara el límite con nada, por eso va más alto.
 const limiter = rateLimit({
@@ -60,29 +67,10 @@ const limiter = rateLimit({
   message: { ok: false, message: "Demasiadas peticiones, intente de nuevo en 1 minuto" },
 });
 
-const CORS_ORIGINS_RAW = process.env.CORS_ORIGINS || "";
-const CORS_ORIGINS = CORS_ORIGINS_RAW.split(",").map(o => o.trim()).filter(Boolean);
-
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  // En producción solo se aceptan los orígenes declarados en CORS_ORIGINS.
-  // En desarrollo se permite el origen local cuando no hay lista configurada.
-  const allowed = !origin || CORS_ORIGINS.includes(origin) || (NODE_ENV !== "production" && CORS_ORIGINS.length === 0);
-  if (origin) res.header("Vary", "Origin");
-  if (allowed && origin) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
-  if (allowed) {
-    res.header("Access-Control-Allow-Credentials", "true");
-    res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  }
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(allowed ? 204 : 403);
-  }
-  next();
-});
+// CORS también rechaza la petición: no basta con ocultar la respuesta,
+// porque las cookies SameSite=None pueden viajar en solicitudes CSRF.
+app.use(corsSeguro(process.env.CORS_ORIGINS || "", NODE_ENV));
 app.use(limiter);
 app.use(cookieParser());
 app.use(express.json({ limit: "25mb" }));

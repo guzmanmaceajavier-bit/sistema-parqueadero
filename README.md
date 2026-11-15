@@ -80,9 +80,12 @@ iniciar-parqueadero.bat   # abre el sistema (o se auto-arranca con Windows)
 2. Backend = Web Service Docker (`Dockerfile` de la raíz), con estas variables:
    - `DATABASE_URL` → cadena de Neon **directa** (no `-pooler`).
    - `JWT_SECRET` → aleatoria y larga (`openssl rand -hex 32`).
-   - `NODE_ENV=production`, `CORS_ORIGINS` → URL del frontend.
+   - `NODE_ENV=production`, `CORS_ORIGINS` → URL exacta del frontend (por ejemplo, `https://sistema-parqueadero-mu.vercel.app`).
+   - `TRUST_PROXY_HOPS=1` si el backend está detrás del proxy de Render.
    - `ADMIN_PASSWORD`.
    El arranque ejecuta `prisma migrate deploy` automáticamente.
+   El middleware CORS rechaza solicitudes web desde orígenes no incluidos en `CORS_ORIGINS`.
+   Configura `VITE_API_URL` en el Static Site con el origen del backend, sin añadir `/api`.
 3. Frontend = Static Site: `cd frontend && npm install && npm run build`,
    publicar `frontend/dist`, definir `VITE_API_URL` = URL del backend y
    redirección `/* -> /index.html` (Rewrite).

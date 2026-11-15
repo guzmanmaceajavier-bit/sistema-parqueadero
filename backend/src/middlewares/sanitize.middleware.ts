@@ -1,5 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 
+const CAMPOS_SENSIBLES = new Set([
+  "password",
+  "currentPassword",
+  "newPassword",
+  "confirmPassword",
+  "token",
+  "resetToken",
+  "refreshToken",
+  "authorization",
+]);
+
 function stripHtml(str: string): string {
   return str
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
@@ -13,13 +24,16 @@ function stripHtml(str: string): string {
     .trim();
 }
 
-function sanitizeValue(val: any): any {
+function sanitizeValue(val: any, key?: string): any {
+  // Las credenciales y tokens deben conservarse byte a byte: limpiarlos cambia
+  // contraseñas legítimas que contienen caracteres como <, > o espacios.
+  if (key && CAMPOS_SENSIBLES.has(key)) return val;
   if (typeof val === "string") return stripHtml(val.trim());
-  if (Array.isArray(val)) return val.map(sanitizeValue);
+  if (Array.isArray(val)) return val.map(item => sanitizeValue(item));
   if (val && typeof val === "object") {
     const clean: Record<string, any> = {};
     for (const [k, v] of Object.entries(val)) {
-      clean[k] = sanitizeValue(v);
+      clean[k] = sanitizeValue(v, k);
     }
     return clean;
   }

@@ -155,6 +155,10 @@ export default function DashboardPage() {
   const totalPuestos = (d.totalPuestos as number) || 0;
   const puestosLibres = (d.puestosLibres as number) || 0;
   const pctOcupacion = totalPuestos > 0 ? Math.round((puestosOcupados / totalPuestos) * 100) : 0;
+  const ocupacionComprometida = (d.ocupacionComprometida as number) || 0;
+  const disponibilidadReal = (d.disponibilidadReal as number) ?? puestosLibres;
+  const ingresoPromedioPorPuesto = (d.ingresoPromedioPorPuesto as number) || 0;
+  const margenUtilidadDia = (d.margenUtilidadDia as number) || 0;
   const vehiculosActivos = (d.ingresosActivos as number) || 0;
   const ingresosHoy = (d.ingresosHoy as number) || 0;
   const cajaAbierta = (d.cajaAbierta as boolean) || false;
@@ -259,6 +263,24 @@ export default function DashboardPage() {
         <KpiCard label="Vehiculos" icon={Car} bg="amber" route="/vehiculos" value={n(vehiculosActivos)} subtitle={`${n(ingresosHoy)} entradas hoy`} />
         <KpiCard label="Caja" icon={Wallet} bg={cajaAbierta ? "teal" : "slate"} route="/caja" value={cajaAbierta ? "Abierta" : "Cerrada"} subtitle={cajaAbierta ? `Inicial: ${$(cajaMontoInicial)}` : "Presiona para abrir"} />
         <KpiCard label="Alertas" icon={AlertTriangle} bg={mensualidadesVencidas > 0 || clientesMorosos > 0 ? "red" : "slate"} route="/mensualidades" value={mensualidadesVencidas + clientesMorosos + ausenciasActivas > 0 ? n(mensualidadesVencidas + clientesMorosos + ausenciasActivas) : "0"} subtitle={ausenciasActivas > 0 ? `${ausenciasActivas} ausencias` : mensualidadesVencidas > 0 ? `${n(mensualidadesVencidas)} vencidas` : mensualidadesProximas > 0 ? `${mensualidadesProximas} próximas` : "Sin novedades"} />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Capacidad comprometida</p>
+          <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{ocupacionComprometida}%</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Incluye ocupados, reservas y puestos conservados por ausencias</p>
+        </Card>
+        <Card>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Disponibilidad real</p>
+          <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{n(disponibilidadReal)} puestos</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Excluye puestos ocupados, reservados, en ausencia o mantenimiento</p>
+        </Card>
+        <Card>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Rendimiento por puesto</p>
+          <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-white">{$(ingresoPromedioPorPuesto)}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Margen neto del día: {margenUtilidadDia.toFixed(1)}%</p>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-7 gap-5">

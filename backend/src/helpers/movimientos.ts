@@ -1,5 +1,11 @@
 import prisma from "../config/prisma.js";
 
+/**
+ * Registra el actor por ID además del nombre histórico.
+ * Los registros automáticos o antiguos pueden no tener usuario asociado.
+ * La escritura de auditoría nunca debe convertir una operación principal
+ * exitosa en un error para el usuario.
+ */
 export const registrarMovimiento = async (
   modulo: string,
   accion: string,
@@ -8,18 +14,23 @@ export const registrarMovimiento = async (
   sucursalId?: number | null,
 ) => {
   try {
-    // Si el módulo no pasa una sucursal explícita, toma la asignación actual
-    // del usuario que ejecuta la acción. Los eventos de sistema quedan globales.
-    let sucursalRegistro = sucursalId;
-    if (sucursalRegistro === undefined) {
-      const actor = await prisma.usuario.findUnique({
-        where: { usuario },
-        select: { sucursalId: true },
-      });
-      sucursalRegistro = actor?.sucursalId ?? null;
-    }
+    const actor = await prisma.usuario.findUnique({
+      where: { usuario },
+      select: { id: true, sucursalId: true },
+    });
+    const sucursalRegistro = sucursalId === undefined
+      ? actor?.sucursalId ?? null
+      : sucursalId;
+
     await prisma.movimiento.create({
-      data: { modulo, accion, descripcion, usuario, sucursalId: sucursalRegistro },
+      data: {
+        modulo,
+        accion,
+        descripcion,
+        usuario,
+        usuarioId: actor?.id ?? null,
+        sucursalId: sucursalRegistro,
+      },
     });
   } catch (error) {
     console.error("Error registrando movimiento:", error);

@@ -78,6 +78,26 @@ describe("obtenerDashboard", () => {
     }));
   });
 
+  it("calcula capacidad comprometida y rendimiento por puesto", async () => {
+    prismaMock.puesto.groupBy.mockResolvedValue([
+      { estado: "LIBRE", _count: 2 },
+      { estado: "OCUPADO", _count: 3 },
+      { estado: "RESERVADO", _count: 1 },
+      { estado: "AUSENCIA", _count: 1 },
+      { estado: "MANTENIMIENTO", _count: 1 },
+    ]);
+    prismaMock.factura.aggregate.mockResolvedValue({ _sum: { valor: 1000 } });
+    prismaMock.gasto.aggregate.mockResolvedValue({ _sum: { valor: 250 } });
+
+    const data = await consultar("hoy") as Record<string, unknown>;
+    expect(data.ocupacionComprometida).toBe(71);
+    expect(data.puestosComprometidos).toBe(5);
+    expect(data.disponibilidadReal).toBe(2);
+    expect(data.capacidadOperativa).toBe(7);
+    expect(data.ingresoPromedioPorPuesto).toBe(142.86);
+    expect(data.margenUtilidadDia).toBe(75);
+  });
+
   it("rechaza una sucursal inválida antes de consultar los indicadores", async () => {
     const error = await new Promise((resolve) => {
       const req = { usuario: { id: 1, rol: "admin" }, query: { filtro: "hoy", sucursalId: "0" } };

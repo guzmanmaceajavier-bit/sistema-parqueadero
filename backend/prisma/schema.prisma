@@ -26,6 +26,7 @@ model Usuario {
   sucursalId        Int?
   accesos           Acceso[]
   cajas             Caja[]
+  movimientos       Movimiento[]
   sucursal          Sucursal? @relation(fields: [sucursalId], references: [id])
 }
 
@@ -311,9 +312,14 @@ model Movimiento {
   accion      String
   descripcion String
   usuario     String?
+  usuarioId   Int?
   sucursalId  Int?
   createdAt   DateTime  @default(now())
+  actor       Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   sucursal    Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([usuarioId, createdAt])
+  @@index([sucursalId, createdAt])
 }
 
 model Factura {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Ban, Car, Pencil, Plus, Search, X } from "lucide-react";
+import { Ban, Car, Eye, Pencil, Plus, Search, X } from "lucide-react";
 import FormModal from "../components/ui/FormModal";
 import useDebounce from "../hooks/useDebounce";
 import ScrollLock from "../components/ScrollLock";
@@ -13,6 +13,7 @@ import Toast from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ClientSearch from "../components/ClientSearch";
 import { TableSkeleton } from "../components/Skeleton";
+import { formatCurrency } from "../utils/formatters";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
 const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
@@ -66,6 +67,9 @@ export default function Vehiculos() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
+  const [historialVehiculo, setHistorialVehiculo] = useState<any>(null);
+  const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
 
   const formVacio = {
     placa: "",
@@ -185,6 +189,21 @@ export default function Vehiculos() {
     }
   };
 
+  const verHistorial = async (id) => {
+    setCargandoHistorial(true);
+    setHistorialAbierto(true);
+    setHistorialVehiculo(null);
+    try {
+      const res = await api.get(`/vehiculos/${id}`);
+      setHistorialVehiculo(res.data?.vehiculo || null);
+    } catch (error) {
+      setHistorialAbierto(false);
+      mostrarToast(error.response?.data?.message || "No fue posible cargar el historial del vehículo", "error");
+    } finally {
+      setCargandoHistorial(false);
+    }
+  };
+
   const confirmarEliminar = (id) => {
     setConfirm({ abierto: true, titulo: "Eliminar vehículo", mensaje: "¿Estás seguro de eliminar este vehículo?", onConfirm: () => eliminarVehiculo(id) });
   };
@@ -259,7 +278,10 @@ export default function Vehiculos() {
                       )}
                     </td>
                     <td className="px-4 py-3.5">
-                      <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-2 flex-wrap">
+                        <button onClick={() => verHistorial(v.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <Eye className="w-4 h-4" /> Historial
+                        </button>
                         <button onClick={() => editarVehiculo(v)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 border border-teal-200 dark:border-teal-800 rounded-lg">
                           <IconEdit /> Editar
                         </button>
@@ -375,6 +397,43 @@ export default function Vehiculos() {
             </div>
           )}
         </div>
+      </FormModal>
+
+      <FormModal
+        open={historialAbierto}
+        onClose={() => setHistorialAbierto(false)}
+        gradient="from-blue-600 to-cyan-500"
+        icon={Car}
+        titulo={historialVehiculo ? `Historial · ${historialVehiculo.placa}` : "Historial del vehículo"}
+        subtitulo="Propietarios, ingresos, mensualidades, ausencias y reservas"
+        footer={
+          <button onClick={() => setHistorialAbierto(false)} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600">Cerrar</button>
+        }
+      >
+        {cargandoHistorial ? (
+          <div className="py-12 text-center text-sm text-slate-500">Cargando historial...</div>
+        ) : historialVehiculo ? (
+          <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
+            {[
+              { titulo: "Propietarios", items: historialVehiculo.propietarios || [], render: (x) => `${x.cliente?.nombres || ""} ${x.cliente?.apellidos || ""} · Desde ${new Date(x.desde).toLocaleDateString("es-CO")}${x.hasta ? ` hasta ${new Date(x.hasta).toLocaleDateString("es-CO")}` : " · Actual"}` },
+              { titulo: "Ingresos y salidas", items: historialVehiculo.ingresos || [], render: (x) => `${new Date(x.fechaEntrada).toLocaleString("es-CO")} · ${x.fechaSalida ? new Date(x.fechaSalida).toLocaleString("es-CO") : "Aún dentro"} · ${x.estado} · Puesto ${x.puesto?.codigo || "—"} · Cobro ${x.valorPagado == null ? "—" : formatCurrency(Number(x.valorPagado))}` },
+              { titulo: "Mensualidades", items: historialVehiculo.mensualidades || [], render: (x) => `${x.plan?.nombre || "Plan"} · ${new Date(x.fechaInicio).toLocaleDateString("es-CO")} – ${new Date(x.fechaFin).toLocaleDateString("es-CO")} · ${x.estado} · ${formatCurrency(Number(x.valor))}` },
+              { titulo: "Ausencias y compensaciones", items: historialVehiculo.ausencias || [], render: (x) => `${new Date(x.fechaSalida).toLocaleDateString("es-CO")} – ${x.fechaRegreso ? new Date(x.fechaRegreso).toLocaleDateString("es-CO") : "Sin regreso"} · ${x.estado} · ${x.diasCompensados || 0} días compensados · ${x.compensacionDetalle || x.motivo || "Sin detalle"}` },
+              { titulo: "Reservas", items: historialVehiculo.reservas || [], render: (x) => `${new Date(x.fechaInicio).toLocaleString("es-CO")} · ${x.estado} · Puesto ${x.puesto?.codigo || "sin asignar"}` },
+            ].map((section) => (
+              <section key={section.titulo}>
+                <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-2">{section.titulo} ({section.items.length})</h3>
+                {section.items.length ? (
+                  <ul className="space-y-2">
+                    {section.items.map((item) => (
+                      <li key={item.id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-300">{section.render(item)}</li>
+                    ))}
+                  </ul>
+                ) : <p className="text-xs text-slate-400">Sin registros</p>}
+              </section>
+            ))}
+          </div>
+        ) : <p className="py-8 text-center text-sm text-slate-500">No hay información disponible.</p>}
       </FormModal>
 
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />

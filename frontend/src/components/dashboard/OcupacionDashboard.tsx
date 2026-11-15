@@ -17,6 +17,7 @@ const ESTADO_CFG: Record<string, { bg: string; border: string; text: string; dot
   OCUPADO: { bg: "bg-red-50 dark:bg-red-900/20", border: "border-red-300 dark:border-red-700", text: "text-red-700 dark:text-red-300", dot: "bg-red-500" },
   RESERVADO: { bg: "bg-amber-50 dark:bg-amber-900/20", border: "border-amber-300 dark:border-amber-700", text: "text-amber-700 dark:text-amber-300", dot: "bg-amber-500" },
   MANTENIMIENTO: { bg: "bg-slate-100 dark:bg-slate-800", border: "border-slate-300 dark:border-slate-600", text: "text-slate-600 dark:text-slate-400", dot: "bg-slate-400" },
+  AUSENCIA: { bg: "bg-violet-50 dark:bg-violet-900/20", border: "border-violet-300 dark:border-violet-700", text: "text-violet-700 dark:text-violet-300", dot: "bg-violet-500" },
 };
 
 export default function OcupacionDashboard({ puestos, loading }: { puestos: Puesto[]; loading: boolean }) {
@@ -50,8 +51,12 @@ export default function OcupacionDashboard({ puestos, loading }: { puestos: Pues
     ocupados: filtrados.filter(p => p.estado === "OCUPADO").length,
     reservados: filtrados.filter(p => p.estado === "RESERVADO").length,
     mantenimiento: filtrados.filter(p => p.estado === "MANTENIMIENTO").length,
+    ausencias: filtrados.filter(p => p.estado === "AUSENCIA").length,
   };
-  const pct = filtrados.length > 0 ? Math.round(((stats.ocupados + stats.reservados) / filtrados.length) * 100) : 0;
+  const capacidadOperativa = Math.max(0, filtrados.length - stats.mantenimiento);
+  const pct = capacidadOperativa > 0
+    ? Math.round(((stats.ocupados + stats.reservados + stats.ausencias) / capacidadOperativa) * 100)
+    : 0;
 
   return (
     <div className="space-y-5">
@@ -69,7 +74,7 @@ export default function OcupacionDashboard({ puestos, loading }: { puestos: Pues
           ))}
         </div>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800">
           <p className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-medium">Libres</p>
           <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{stats.libres}</p>
@@ -86,8 +91,12 @@ export default function OcupacionDashboard({ puestos, loading }: { puestos: Pues
           <p className="text-xs text-slate-500 uppercase font-medium">Mtto.</p>
           <p className="text-2xl font-bold text-slate-600 dark:text-slate-300">{stats.mantenimiento}</p>
         </div>
+        <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-4 border border-violet-200 dark:border-violet-800">
+          <p className="text-xs text-violet-600 dark:text-violet-400 uppercase font-medium">Ausencias</p>
+          <p className="text-2xl font-bold text-violet-700 dark:text-violet-300">{stats.ausencias}</p>
+        </div>
         <div className="bg-teal-50 dark:bg-teal-900/20 rounded-xl p-4 border border-teal-200 dark:border-teal-800 col-span-2 sm:col-span-1">
-          <p className="text-xs text-teal-600 dark:text-teal-400 uppercase font-medium">Ocupación</p>
+          <p className="text-xs text-teal-600 dark:text-teal-400 uppercase font-medium">Capacidad comprometida</p>
           <p className="text-2xl font-bold text-teal-700 dark:text-teal-300">{pct}%</p>
           <div className="mt-2 h-1.5 bg-teal-200 dark:bg-teal-800 rounded-full overflow-hidden">
             <div className="h-full bg-teal-600 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
@@ -115,6 +124,7 @@ export default function OcupacionDashboard({ puestos, loading }: { puestos: Pues
               {p.estado === "LIBRE" && <div className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium">Disponible</div>}
               {p.estado === "RESERVADO" && <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 font-medium">Reservado</div>}
               {p.estado === "MANTENIMIENTO" && <div className="text-[11px] text-slate-500 mt-1">Mtto.</div>}
+              {p.estado === "AUSENCIA" && <div className="text-[11px] text-violet-600 dark:text-violet-400 mt-1 font-medium">En ausencia · puesto reservado</div>}
             </div>
           );
         })}

@@ -182,6 +182,81 @@ export default function PerfilCliente() {
           </div>
         </div>
       )}
+
+      {data.propietarios?.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Historial de propietarios</h2>
+          <div className="space-y-2">
+            {data.propietarios.map((p, i) => (
+              <div key={`${p.vehiculoId}-${p.id}-${i}`} className="flex flex-wrap justify-between gap-2 rounded-lg border border-slate-100 dark:border-slate-700 p-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">{p.cliente?.nombres} {p.cliente?.apellidos} · {p.placa}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Documento: {p.cliente?.documento || "—"}</p>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(p.desde)} – {p.hasta ? formatDate(p.hasta) : "Actual"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Reservas ({data.reservas?.length || 0})</h2>
+          {data.reservas?.length ? (
+            <div className="space-y-2">
+              {data.reservas.map((r, i) => (
+                <div key={r.id || i} className="rounded-lg border border-slate-100 dark:border-slate-700 p-3">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">{r.vehiculo?.placa || "Sin vehículo"} · Puesto {r.puesto?.codigo || "sin asignar"}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(r.fechaInicio)} · {r.estado}</p>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-sm text-slate-400">Sin reservas registradas</p>}
+        </div>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Ausencias y compensaciones ({data.ausencias?.length || 0})</h2>
+          {data.ausencias?.length ? (
+            <div className="space-y-2">
+              {data.ausencias.map((a, i) => (
+                <div key={a.id || i} className="rounded-lg border border-slate-100 dark:border-slate-700 p-3">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white">{a.vehiculo?.placa || "Vehículo"} · {a.estado}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(a.fechaSalida)} – {a.fechaRegreso ? formatDate(a.fechaRegreso) : "Sin regreso"}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{a.diasCompensados || 0} días compensados · {a.compensacionDetalle || a.motivo || "Sin detalle"}</p>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-sm text-slate-400">Sin ausencias registradas</p>}
+        </div>
+      </div>
+
+      {data.movimientosSaldo?.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Movimientos de saldo</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                <th className="text-left py-2 px-2">Fecha</th>
+                <th className="text-left py-2 px-2">Tipo</th>
+                <th className="text-left py-2 px-2">Concepto</th>
+                <th className="text-right py-2 px-2">Monto</th>
+                <th className="text-right py-2 px-2">Saldo final</th>
+              </tr></thead>
+              <tbody>
+                {data.movimientosSaldo.map((m, i) => (
+                  <tr key={m.id || i} className="border-b border-slate-100 dark:border-slate-700">
+                    <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{formatDate(m.createdAt)}</td>
+                    <td className="py-2 px-2 text-slate-700 dark:text-slate-200">{m.tipo}</td>
+                    <td className="py-2 px-2 text-slate-600 dark:text-slate-300">{m.concepto || "—"}</td>
+                    <td className="py-2 px-2 text-right text-slate-800 dark:text-white">{formatCurrency(Number(m.monto || 0))}</td>
+                    <td className="py-2 px-2 text-right text-slate-800 dark:text-white">{formatCurrency(Number(m.saldoDespues || 0))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

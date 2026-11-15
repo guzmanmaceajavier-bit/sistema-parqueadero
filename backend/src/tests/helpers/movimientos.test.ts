@@ -17,15 +17,15 @@ import { registrarMovimiento } from "../../helpers/movimientos.js";
 describe("registrarMovimiento", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    usuarioFindUnique.mockResolvedValue({ sucursalId: 7 });
+    usuarioFindUnique.mockResolvedValue({ id: 12, sucursalId: 7 });
     movimientoCreate.mockResolvedValue({ id: 1 });
   });
 
-  it("atribuye el registro a la sucursal asignada al actor", async () => {
+  it("vincula el registro al usuario y a su sucursal asignada", async () => {
     await registrarMovimiento("CAJA", "ABRIR", "Caja abierta", "supervisor");
     expect(usuarioFindUnique).toHaveBeenCalledWith({
       where: { usuario: "supervisor" },
-      select: { sucursalId: true },
+      select: { id: true, sucursalId: true },
     });
     expect(movimientoCreate).toHaveBeenCalledWith({
       data: {
@@ -33,26 +33,31 @@ describe("registrarMovimiento", () => {
         accion: "ABRIR",
         descripcion: "Caja abierta",
         usuario: "supervisor",
+        usuarioId: 12,
         sucursalId: 7,
       },
     });
   });
 
-  it("respeta una sucursal explícita para acciones administrativas", async () => {
+  it("conserva el actor al registrar una acción de sucursal explícita", async () => {
     await registrarMovimiento("FACTURACION", "CREAR", "Factura emitida", "admin", 3);
-    expect(usuarioFindUnique).not.toHaveBeenCalled();
+    expect(usuarioFindUnique).toHaveBeenCalledWith({
+      where: { usuario: "admin" },
+      select: { id: true, sucursalId: true },
+    });
     expect(movimientoCreate).toHaveBeenCalledWith({
       data: {
         modulo: "FACTURACION",
         accion: "CREAR",
         descripcion: "Factura emitida",
         usuario: "admin",
+        usuarioId: 12,
         sucursalId: 3,
       },
     });
   });
 
-  it("deja los eventos del sistema sin sucursal cuando no hay actor", async () => {
+  it("deja los eventos del sistema sin actor ni sucursal", async () => {
     usuarioFindUnique.mockResolvedValue(null);
     await registrarMovimiento("RESERVAS", "VENCER", "Reserva vencida", "sistema");
     expect(movimientoCreate).toHaveBeenCalledWith({
@@ -61,6 +66,7 @@ describe("registrarMovimiento", () => {
         accion: "VENCER",
         descripcion: "Reserva vencida",
         usuario: "sistema",
+        usuarioId: null,
         sucursalId: null,
       },
     });
