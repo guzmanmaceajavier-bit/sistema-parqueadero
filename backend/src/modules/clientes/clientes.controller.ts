@@ -110,8 +110,18 @@ export const obtenerClientes = asyncHandler(async (req, res) => {
 
 export const obtenerCliente = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: Number(id) },
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+  const cliente = await prisma.cliente.findFirst({
+    where: {
+      id: Number(id),
+      ...(sucursalId ? { OR: [
+        { vehiculos: { some: { sucursalId } } },
+        { ingresos: { some: { vehiculo: { sucursalId } } } },
+        { mensualidades: { some: { sucursalId } } },
+        { reservas: { some: { sucursalId } } },
+        { ausencias: { some: { sucursalId } } },
+      ] } : {}),
+    },
     include: { vehiculos: true, mensualidades: { include: { vehiculo: true, plan: true, puesto: true } }, reservas: true, ausencias: true, ingresos: { where: { estado: "ACTIVO" }, take: 1 } },
   });
   if (!cliente) throw new AppError("Cliente no encontrado", 404);
@@ -120,8 +130,20 @@ export const obtenerCliente = asyncHandler(async (req, res) => {
 
 export const actualizarCliente = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const existe = await prisma.cliente.findUnique({ where: { id: Number(id) } });
-  if (!existe) throw new AppError("Cliente no encontrado", 404);
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId ?? req.query.sucursalId);
+  const existe = await prisma.cliente.findFirst({
+    where: {
+      id: Number(id),
+      ...(sucursalId ? { OR: [
+        { vehiculos: { some: { sucursalId } } },
+        { ingresos: { some: { vehiculo: { sucursalId } } } },
+        { mensualidades: { some: { sucursalId } } },
+        { reservas: { some: { sucursalId } } },
+        { ausencias: { some: { sucursalId } } },
+      ] } : {}),
+    },
+  });
+  if (!existe) throw new AppError("Cliente no encontrado en esta sucursal", 404);
 
   const { nombres, apellidos, telefono, direccion, email, observaciones, estado, deseaReservar, bloqueado, saldo } = req.body;
   const esAdmin = req.usuario?.rol === "admin";
@@ -140,8 +162,10 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
     data.bloqueado = bloqueado;
   }
   if (saldo !== undefined) {
-    if (!esAdmin) throw new AppError("Solo un administrador puede modificar el saldo del cliente", 403);
-    data.saldo = Number(saldo);
+    throw new AppError(
+      "El saldo no se modifica desde la ficha del cliente. Registra una recarga, consumo, devolución o ajuste para conservar el historial financiero.",
+      409,
+    );
   }
 
   const cliente = await prisma.cliente.update({ where: { id: Number(id) }, data });
