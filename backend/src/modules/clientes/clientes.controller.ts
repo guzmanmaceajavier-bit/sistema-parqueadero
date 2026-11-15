@@ -440,11 +440,10 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   // Saldo y caja se registran en una sola transacción: sin caja abierta
   // no se acredita dinero que no haya quedado contabilizado.
   const cliente = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${Number(id)} FOR UPDATE`;
-
-    // El mismo bloqueo que usa el cierre de caja impide acreditar saldo
-    // después de que otra operación haya cerrado la caja.
+    // Orden global de bloqueos: caja primero y cliente después.
+    // Las salidas y anulaciones usan el mismo orden para evitar deadlocks.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${Number(id)} FOR UPDATE`;
     const cajaAbierta = await tx.caja.findFirst({
       where: { estado: "ABIERTA", sucursalId: sucursalId ?? null },
     });
