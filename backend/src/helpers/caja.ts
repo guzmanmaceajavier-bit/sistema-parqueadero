@@ -1,5 +1,6 @@
 import prisma from "../config/prisma.js";
 import { AppError } from "../middlewares/error.middleware.js";
+import { sumarDinero, restarDinero } from "../utils/dinero.js";
 
 export async function getCajaAbierta(sucursalId?: number | null) {
   const caja = await prisma.caja.findFirst({
@@ -8,7 +9,7 @@ export async function getCajaAbierta(sucursalId?: number | null) {
   });
   if (!caja) return null;
   const { ingresos, egresos } = await calcularTotales(caja.id);
-  return { ...caja, ingresos, egresos, saldo: caja.apertura + ingresos - egresos };
+  return { ...caja, ingresos, egresos, saldo: restarDinero(sumarDinero(caja.apertura, ingresos), egresos) };
 }
 
 export async function getCajaOError(sucursalId?: number | null) {

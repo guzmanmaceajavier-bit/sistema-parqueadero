@@ -1,5 +1,6 @@
 import prisma from "../config/prisma.js";
 import type { Tarifa } from "@prisma/client";
+import { redondearDinero } from "../utils/dinero.js";
 
 function diffMinutos(fechaEntrada: Date, fechaSalida: Date): number {
   return Math.ceil((fechaSalida.getTime() - fechaEntrada.getTime()) / (1000 * 60));
@@ -115,7 +116,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
         detalle: [],
       };
     }
-    const total = tarifa.tarifaMaximaDiaria;
+    const total = redondearDinero(tarifa.tarifaMaximaDiaria);
     const detalle = [{ concepto: "Ticket extraviado — Tarifa máxima del día", valor: total }];
     return {
       tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: modalidadTarifa, valorUnitario: tarifa.valor },
@@ -153,7 +154,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   switch (modalidadTarifa) {
     case "minuto": {
-      const base = Math.ceil(minutosFacturables * tarifa.valor);
+      const base = minutosFacturables * tarifa.valor;
       const valor = aplicarTopeDiario(minCargo(base));
       detalle.push({ concepto: `${totalMinutos} min - ${cortesia + minutosGratis + minutosGracia} min gratis = ${minutosFacturables} min facturables → $${valor}`, valor });
       total = valor;
@@ -220,16 +221,29 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
   }
 
+  const totalRedondeado = redondearDinero(total);
+  const detalleRedondeado = detalle.map((item: any) => ({
+    ...item,
+    valor: redondearDinero(Number(item.valor) || 0),
+  }));
+  const desgloseOriginal = desglose as Record<string, unknown>;
+  const desgloseRedondeado = {
+    ...desgloseOriginal,
+    ...(typeof desgloseOriginal.valor === "number"
+      ? { valor: redondearDinero(desgloseOriginal.valor) }
+      : {}),
+  };
+
   return {
-    tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: tarifa.modalidad, valorUnitario: tarifa.valor },
+    tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: tarifa.modalidad, valorUnitario: redondearDinero(tarifa.valor) },
     totalMinutos,
     minutosCortesia: cortesia,
     minutosGratis,
     minutosGracia,
     minutosFacturables,
-    total,
-    detalle,
-    desglose,
+    total: totalRedondeado,
+    detalle: detalleRedondeado,
+    desglose: desgloseRedondeado,
     fechaEntrada: ingreso.fechaEntrada,
     fechaSalida: salida,
   };

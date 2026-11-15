@@ -6,10 +6,14 @@ import { paginate } from "../../utils/pagination.js";
 import { calcularTotalesHelper } from "./caja.helpers.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { redondearDinero, sumarDinero, restarDinero } from "../../utils/dinero.js";
 
 export const abrirCaja = asyncHandler(async (req, res) => {
   const { apertura, password, observacion } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
+  const aperturaIngresada = Number(apertura);
+  if (!Number.isFinite(aperturaIngresada) || aperturaIngresada < 0) throw new AppError("El fondo de apertura debe ser válido y no negativo", 400);
+  const aperturaNormalizada = redondearDinero(aperturaIngresada);
 
   const caja = await prisma.$transaction(async (tx) => {
     // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
@@ -26,14 +30,14 @@ export const abrirCaja = asyncHandler(async (req, res) => {
     if (!valida) throw new AppError("Contraseña incorrecta", 401);
 
     return tx.caja.create({
-      data: { apertura: Number(apertura), observacion, usuarioId, sucursalId: sucursalId ?? null },
+      data: { apertura: aperturaNormalizada, observacion, usuarioId, sucursalId: sucursalId ?? null },
     });
   });
 
-  await registrarMovimiento("CAJA", "ABRIR", `Caja abierta por ${req.usuario?.usuario} con apertura de $${Number(apertura)}`, req.usuario?.usuario);
+  await registrarMovimiento("CAJA", "ABRIR", `Caja abierta por ${req.usuario?.usuario} con apertura de ${aperturaNormalizada}`, req.usuario?.usuario);
   emitirEvento("caja:abierta", { mensaje: "Caja abierta", caja });
 
-  res.status(201).json({ ok: true, caja: { ...caja, ingresos: 0, egresos: 0, saldo: Number(apertura) } });
+  res.status(201).json({ ok: true, caja: { ...caja, ingresos: 0, egresos: 0, saldo: aperturaNormalizada } });
 });
 
 export const cerrarCaja = asyncHandler(async (req, res) => {
@@ -49,7 +53,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
     if (caja.estado !== "ABIERTA") throw new AppError("La caja ya está cerrada", 409);
 
     const totales = await calcularTotalesHelper(caja.id, tx);
-    const esperado = caja.apertura + totales.ingresosEfectivo - totales.egresosEfectivo;
+    const esperado = restarDinero(sumarDinero(caja.apertura, totales.ingresosEfectivo), totales.egresosEfectivo);
     let obsFinal = observacion || "";
     let totalConteo = 0;
     let diferencia = 0;
@@ -73,7 +77,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
         }
         totalConteo += denominacion * cantidad;
       }
-      diferencia = totalConteo - esperado;
+      diferencia = restarDinero(totalConteo, esperado);
       const arqueoData = { conteo, totalConteo, esperado, diferencia };
       obsFinal = obsFinal ? obsFinal + "\n" + JSON.stringify(arqueoData) : JSON.stringify(arqueoData);
     }
@@ -115,8 +119,8 @@ export const obtenerCajaActiva = asyncHandler(async (req, res) => {
     caja: {
       ...caja,
       ...totales,
-      saldo: caja.apertura + totales.ingresos - totales.egresos,
-      efectivoEnCaja: caja.apertura + totales.ingresosEfectivo - totales.egresosEfectivo,
+      saldo: restarDinero(sumarDinero(caja.apertura, totales.ingresos), totales.egresos),
+      efectivoEnCaja: restarDinero(sumarDinero(caja.apertura, totales.ingresosEfectivo), totales.egresosEfectivo),
     },
   });
 });
@@ -148,7 +152,7 @@ export const obtenerCaja = asyncHandler(async (req, res) => {
   if (!caja) throw new AppError("Caja no encontrada", 404);
 
   const totales = await calcularTotalesHelper(caja.id);
-  res.json({ ok: true, caja: { ...caja, ...totales, saldo: caja.apertura + totales.ingresos - totales.egresos } });
+  res.json({ ok: true, caja: { ...caja, ...totales, saldo: restarDinero(sumarDinero(caja.apertura, totales.ingresos), totales.egresos) } });
 });
 
 export const actualizarCaja = asyncHandler(async (req, res) => {
@@ -167,10 +171,11 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
 
     const data: any = {};
     if (apertura !== undefined) {
-      const aperturaNormalizada = Number(apertura);
-      if (!Number.isFinite(aperturaNormalizada) || aperturaNormalizada < 0) {
+      const aperturaIngresada = Number(apertura);
+      if (!Number.isFinite(aperturaIngresada) || aperturaIngresada < 0) {
         throw new AppError("El fondo de apertura debe ser un valor válido y no negativo", 400);
       }
+      const aperturaNormalizada = redondearDinero(aperturaIngresada);
       if (existente.estado !== "ABIERTA") {
         throw new AppError("No se puede modificar el fondo de apertura de una caja cerrada", 409);
       }
@@ -243,13 +248,14 @@ export const obtenerMovimientosCaja = asyncHandler(async (req, res) => {
   const totalMovs = await prisma.cajaMovimiento.findMany({ where: { ...where, anulado: false }, select: { monto: true, tipo: true, metodoPago: true } });
   const ingresos = totalMovs.filter(m => m.tipo === "INGRESO");
   const egresos = totalMovs.filter(m => m.tipo === "EGRESO");
+  const sumarMovimientos = (items: typeof totalMovs) => sumarDinero(...items.map(m => m.monto));
   const resumen = {
-    total: totalMovs.reduce((s, m) => s + m.monto, 0),
-    ingresos: ingresos.reduce((s, m) => s + m.monto, 0),
-    egresos: egresos.reduce((s, m) => s + m.monto, 0),
-    ingresosEfectivo: ingresos.filter(m => String(m.metodoPago || "efectivo").trim().toLowerCase() === "efectivo").reduce((s, m) => s + m.monto, 0),
-    ingresosTarjeta: ingresos.filter(m => String(m.metodoPago || "").trim().toLowerCase() === "tarjeta").reduce((s, m) => s + m.monto, 0),
-    ingresosTransferencia: ingresos.filter(m => String(m.metodoPago || "").trim().toLowerCase() === "transferencia").reduce((s, m) => s + m.monto, 0),
+    total: sumarMovimientos(totalMovs),
+    ingresos: sumarMovimientos(ingresos),
+    egresos: sumarMovimientos(egresos),
+    ingresosEfectivo: sumarMovimientos(ingresos.filter(m => String(m.metodoPago || "efectivo").trim().toLowerCase() === "efectivo")),
+    ingresosTarjeta: sumarMovimientos(ingresos.filter(m => String(m.metodoPago || "").trim().toLowerCase() === "tarjeta")),
+    ingresosTransferencia: sumarMovimientos(ingresos.filter(m => String(m.metodoPago || "").trim().toLowerCase() === "transferencia")),
   };
 
   res.json({ ok: true, movimientos, resumen, pagination });

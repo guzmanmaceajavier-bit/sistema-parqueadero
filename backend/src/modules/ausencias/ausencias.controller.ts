@@ -4,6 +4,9 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { calcularCobro } from "../../services/calculadorCobros.js";
+import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+import { redondearDinero, restarDinero } from "../../utils/dinero.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, fechaSalida, fechaRegreso, motivo, opcion } = req.body;
@@ -22,12 +25,18 @@ export const crearAusencia = asyncHandler(async (req, res) => {
   if (sucursalId && vehiculo.sucursalId !== sucursalId) throw new AppError("El vehículo pertenece a otra sucursal", 403);
   if (vehiculo.clienteId !== cid) throw new AppError("El vehículo no pertenece al cliente seleccionado", 400);
 
-  const ingresoActivo = await prisma.ingreso.findFirst({
-    where: { vehiculoId: vid, estado: "ACTIVO" },
-    include: { puesto: true, vehiculo: true },
-  });
-
   const ausencia = await prisma.$transaction(async (tx) => {
+    // Serializa la ausencia con entradas y salidas para que el mismo vehículo
+    // no pueda cerrar dos veces su ingreso ni liberar el puesto por duplicado.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
+    const ingresoActivo = await tx.ingreso.findFirst({
+      where: { vehiculoId: vid, estado: "ACTIVO" },
+      include: { puesto: true, vehiculo: true },
+    });
+    if (ingresoActivo?.puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoActivo.puestoId}::integer)) AS advisory_lock`;
+    }
+
     const a = await tx.ausencia.create({
       data: {
         clienteId: cid, vehiculoId: vid, sucursalId: vehiculo.sucursalId ?? sucursalId ?? null,
@@ -41,8 +50,8 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       const tiempoMinutos = Math.ceil((ahora.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60));
       const sucursalIngreso = ingresoActivo.vehiculo.sucursalId ?? sucursalId ?? null;
 
-      // Si el vehículo está cubierto por una mensualidad vigente, la salida por
-      // ausencia NO genera cobro (mismo criterio que la salida normal).
+      // La ausencia aplica exactamente la misma regla de cobertura que una salida
+      // normal: solo una mensualidad totalmente pagada y vigente evita el cobro.
       const planActivo = await tx.mensualidad.findFirst({
         where: {
           vehiculoId: vid,
@@ -52,31 +61,52 @@ export const crearAusencia = asyncHandler(async (req, res) => {
           fechaFin: { gte: ahora },
           OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }],
         },
+        include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       });
+      const coberturaPagada = !!planActivo
+        && calcularPagadoMensualidad(planActivo.facturas, planActivo.fechaInicio) >= planActivo.valor;
 
       let valorFacturado = 0;
-      if (!planActivo) {
+      if (!coberturaPagada) {
+        // No duplicar una fórmula simplificada: reutilizar el calculador central
+        // para respetar modalidad, cortesías, minutos gratis, progresivas y topes.
+        const cobro = await calcularCobro({
+          ingreso: ingresoActivo,
+          tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
+          fechaSalida: ahora,
+          tarifaId: ingresoActivo.vehiculo.tarifaId ?? undefined,
+        });
+        if (cobro.error) throw new AppError(cobro.error, 400);
+        valorFacturado = cobro.total;
+
+        await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
         const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalIngreso } });
         if (!cajaAbierta) throw new AppError("No hay caja abierta para registrar la salida por ausencia", 400);
 
         const numeroFactura = await generarNumeroFactura("FACT");
-        const tarifas = await tx.tarifa.findMany({
-          where: {
-            tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
-            activa: true,
-            OR: [{ sucursalId: sucursalIngreso }, { sucursalId: null }],
+        const factura = await tx.factura.create({
+          data: {
+            numero: numeroFactura,
+            ingresoId: ingresoActivo.id,
+            origen: "INGRESO",
+            valor: valorFacturado,
+            metodoPago: "efectivo",
+            sucursalId: sucursalIngreso,
+            tarifaId: cobro.tarifa?.id,
+            modalidad: cobro.tarifa?.modalidad,
+            tiempoMinutos: cobro.totalMinutos,
+            desglose: { ...cobro.desglose, detalle: cobro.detalle, salidaPorAusencia: true },
           },
-          orderBy: { valor: "asc" },
         });
-        const tarifa = tarifas.find(t => t.sucursalId === sucursalIngreso) ?? tarifas.find(t => t.sucursalId === null);
-        if (tarifa) {
-          const cortesia = tarifa.minutosCortesia || 0;
-          const minutosFacturables = Math.max(0, tiempoMinutos - cortesia);
-          const horas = Math.ceil(minutosFacturables / 60);
-          valorFacturado = horas * tarifa.valor;
-        }
-        await tx.factura.create({
-          data: { numero: numeroFactura, ingresoId: ingresoActivo.id, origen: "INGRESO", valor: valorFacturado, metodoPago: "efectivo", sucursalId: sucursalIngreso },
+        await tx.cajaMovimiento.create({
+          data: {
+            cajaId: cajaAbierta.id,
+            tipo: "INGRESO",
+            concepto: `Factura ${numeroFactura} — Salida por ausencia ${ingresoActivo.vehiculo.placa}`,
+            monto: valorFacturado,
+            metodoPago: "efectivo",
+            facturaId: factura.id,
+          },
         });
       }
 
@@ -138,12 +168,33 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
   const existente = await prisma.ausencia.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
 
+  // Cambiar el estado por esta ruta omitía la lógica de finalización
+  // (devolución del puesto, fechas y ajustes de mensualidad).
+  if (estado !== undefined) {
+    throw new AppError("El estado debe modificarse mediante la acción de finalizar ausencia", 400);
+  }
+
   const data: any = {};
-  if (fechaSalida) data.fechaSalida = new Date(fechaSalida);
-  if (fechaRegreso !== undefined) data.fechaRegreso = fechaRegreso ? new Date(fechaRegreso) : null;
+  if (fechaSalida !== undefined) {
+    const fecha = new Date(fechaSalida);
+    if (!Number.isFinite(fecha.getTime())) throw new AppError("La fecha de salida no es válida", 400);
+    data.fechaSalida = fecha;
+  }
+  if (fechaRegreso !== undefined) {
+    if (fechaRegreso === null || fechaRegreso === "") data.fechaRegreso = null;
+    else {
+      const fecha = new Date(fechaRegreso);
+      if (!Number.isFinite(fecha.getTime())) throw new AppError("La fecha de regreso no es válida", 400);
+      if (data.fechaSalida && fecha < data.fechaSalida) throw new AppError("La fecha de regreso no puede ser anterior a la salida", 400);
+      data.fechaRegreso = fecha;
+    }
+  }
   if (motivo !== undefined) data.motivo = motivo;
-  if (opcion) data.opcion = opcion;
-  if (estado) data.estado = estado;
+  if (opcion !== undefined) {
+    const opcionesValidas = ["HISTORIAL", "CONGELAR", "EXTENDER", "DESCONTAR", "MANTENER"];
+    if (!opcionesValidas.includes(opcion)) throw new AppError("La opción de ausencia no es válida", 400);
+    data.opcion = opcion;
+  }
 
   const ausencia = await prisma.ausencia.update({
     where: { id: Number(id) }, data,
@@ -165,6 +216,17 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
   let mensaje = "Ausencia finalizada";
 
   const ausencia = await prisma.$transaction(async (tx) => {
+    // La finalización puede liberar el puesto y extender planes; comparte
+    // los bloqueos operativos con ingresos, reservas y mensualidades.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+    const ingresoParaBloqueo = await tx.ingreso.findFirst({
+      where: { vehiculoId: existente.vehiculoId, estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
+      orderBy: { fechaSalida: "desc" },
+      select: { puestoId: true },
+    });
+    if (ingresoParaBloqueo?.puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoParaBloqueo.puestoId}::integer)) AS advisory_lock`;
+    }
     const fechaRegreso = new Date();
     const diasAusente = Math.max(1, Math.ceil((fechaRegreso.getTime() - existente.fechaSalida.getTime()) / 86400000));
 
@@ -186,10 +248,31 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       orderBy: { fechaSalida: "desc" },
     });
     if (ingresoAusencia?.puestoId) {
-      const ingresoActivoPuesto = await tx.ingreso.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVO" } });
-      const mensualidadActivaPuesto = await tx.mensualidad.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVA" } });
-      const reservaActivaPuesto = await tx.reserva.count({ where: { puestoId: ingresoAusencia.puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] } } });
-      const nuevoEstado = (ingresoActivoPuesto > 0 || mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0) ? "OCUPADO" : "LIBRE";
+      const ahora = new Date();
+      const [ingresoActivoPuesto, mensualidadActivaPuesto, reservaActivaPuesto] = await Promise.all([
+        tx.ingreso.count({ where: { puestoId: ingresoAusencia.puestoId, estado: "ACTIVO" } }),
+        tx.mensualidad.count({
+          where: {
+            puestoId: ingresoAusencia.puestoId,
+            estado: "ACTIVA",
+            fechaFin: { gte: ahora },
+          },
+        }),
+        tx.reserva.count({
+          where: {
+            puestoId: ingresoAusencia.puestoId,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
+          },
+        }),
+      ]);
+      // Un plan o reserva conserva el puesto reservado, pero no ocupado:
+      // el vehículo todavía no ha reingresado físicamente.
+      const nuevoEstado = ingresoActivoPuesto > 0
+        ? "OCUPADO"
+        : mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0
+          ? "RESERVADO"
+          : "LIBRE";
       await tx.puesto.update({ where: { id: ingresoAusencia.puestoId }, data: { estado: nuevoEstado } });
     }
 
@@ -201,18 +284,18 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
         mensaje = `Mensualidad congelada — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
       }
     } else if (existente.opcion === "EXTENDER") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, estado: "ACTIVA" } });
+      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
       for (const m of mensualidades) {
         const nuevaFechaFin = new Date(m.fechaFin.getTime() + diasAusente * 86400000);
         await tx.mensualidad.update({ where: { id: m.id }, data: { fechaFin: nuevaFechaFin } });
         mensaje = `Vencimiento extendido ${diasAusente} día(s) — nueva fecha fin: ${nuevaFechaFin.toLocaleDateString("es-CO")}`;
       }
     } else if (existente.opcion === "DESCONTAR") {
-      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, estado: "ACTIVA" } });
+      const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
       for (const m of mensualidades) {
-        const valorDia = m.valor / 30;
-        const descuento = Math.round(valorDia * diasAusente * 100) / 100;
-        const nuevoValor = Math.max(0, m.valor - descuento);
+        const valorDia = redondearDinero(m.valor / 30);
+        const descuento = redondearDinero(valorDia * diasAusente);
+        const nuevoValor = Math.max(0, restarDinero(m.valor, descuento));
         await tx.mensualidad.update({ where: { id: m.id }, data: { valor: nuevoValor } });
         mensaje = `Descontados $${descuento.toLocaleString()} — nuevo valor mensualidad: $${nuevoValor.toLocaleString()}`;
       }

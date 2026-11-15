@@ -9,6 +9,15 @@ import { getCajaAbierta, getCajaOError } from "../../helpers/caja.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import * as service from "./ingresos.service.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+import { redondearDinero, restarDinero } from "../../utils/dinero.js";
+
+type FacturaCobertura = { createdAt: Date; valor: number; metodoPago: string | null; anulada: boolean };
+type MensualidadCobertura = { valor: number; fechaInicio: Date; facturas?: FacturaCobertura[] };
+
+function mensualidadPagada(mensualidad: MensualidadCobertura): boolean {
+  return calcularPagadoMensualidad(mensualidad.facturas || [], mensualidad.fechaInicio) >= mensualidad.valor;
+}
 
 /** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
 function puestoAceptaTipo(puesto: { tipoPuesto?: string | null }, tipoVehiculo?: string | null): boolean {
@@ -82,6 +91,12 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
   const sucursalOperativa = vehiculo.sucursalId ?? sucursalId ?? null;
 
+  const placa = req.body.placa || vehiculo.placa;
+  const existenteActivo = await prisma.ingreso.findFirst({
+    where: { vehiculoId, estado: "ACTIVO" },
+  });
+  if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
+
   let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId, sucursalOperativa);
   let planDetectado = await prisma.mensualidad.findFirst({
     where: {
@@ -90,10 +105,12 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       estado: "ACTIVA",
       fechaInicio: { lte: new Date() },
       fechaFin: { gte: new Date() },
-      puestoId: { not: null },
     },
-    include: { plan: true, puesto: true },
+    include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
+  if (planDetectado && !mensualidadPagada(planDetectado)) {
+    throw new AppError("El plan tiene saldo pendiente. Registra el pago completo antes de ingresar con cobertura de plan.", 402);
+  }
 
   if (reservaVinculada?.puestoId && planDetectado?.puestoId && reservaVinculada.puestoId !== planDetectado.puestoId) {
     throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
@@ -117,11 +134,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     throw new AppError(`El puesto ${puesto.codigo} no admite vehículos de tipo ${vehiculo.tipo || "desconocido"}`, 400);
   }
 
-  const placa = req.body.placa || vehiculo.placa;
-  const existenteActivo = await prisma.ingreso.findFirst({
-    where: { vehiculoId: vehiculoId, estado: "ACTIVO" },
-  });
-  if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
+
 
   const ingreso = await prisma.$transaction(async (tx) => {
     // Bloqueos transaccionales por vehículo y puesto: serializan intentos simultáneos.
@@ -158,12 +171,14 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
           estado: "ACTIVA",
           fechaInicio: { lte: ahora },
           fechaFin: { gte: ahora },
-          puestoId: { not: null },
         },
-        include: { plan: true, puesto: true },
+        include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       }),
     ]);
 
+    if (mensualidadActual && !mensualidadPagada(mensualidadActual)) {
+      throw new AppError("El plan tiene saldo pendiente. Registra el pago completo antes de ingresar con cobertura de plan.", 402);
+    }
     if (reservaVinculada && !reservaActual) {
       throw new AppError("La reserva seleccionada cambió o dejó de estar vigente. Actualiza la información antes de registrar la entrada.", 409);
     }
@@ -275,7 +290,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
-  const planActivo = await prisma.mensualidad.findFirst({
+  let planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
       sucursalId: sucursalOperativa,
@@ -547,7 +562,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
 
   const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
   const ahoraSim = new Date();
-  const planActivo = await prisma.mensualidad.findFirst({
+  let planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
       sucursalId: sucursalOperativa,
@@ -556,15 +571,16 @@ export const simularCobro = asyncHandler(async (req, res) => {
       fechaFin: { gte: ahoraSim },
       OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
-    include: { plan: true },
+    include: { plan: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
+  if (planActivo && !mensualidadPagada(planActivo)) planActivo = null;
   if (planActivo) {
     const totalMinutos = Math.ceil((Date.now() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
     return res.json({ ok: true, cobro: { total: 0, totalMinutos, error: null, plan: planActivo.plan?.nombre || "Plan activo" }, ingreso });
   }
 
   // Excedente: la mensualidad cubría la entrada pero venció durante la estancia.
-  const planQueCubriaEntrada = await prisma.mensualidad.findFirst({
+  let planQueCubriaEntrada = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
       sucursalId: sucursalOperativa,
@@ -573,8 +589,10 @@ export const simularCobro = asyncHandler(async (req, res) => {
       fechaFin: { gte: ingreso.fechaEntrada, lt: ahoraSim },
       OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
+    include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
     orderBy: { fechaFin: "desc" },
   });
+  if (planQueCubriaEntrada && !mensualidadPagada(planQueCubriaEntrada)) planQueCubriaEntrada = null;
 
   await getCajaOError(ingreso.vehiculo.sucursalId ?? sucursalId ?? null);
 
@@ -588,8 +606,8 @@ export const simularCobro = asyncHandler(async (req, res) => {
   if (cobro.error) throw new AppError(cobro.error, 400);
 
   const saldoDisponible = Math.max(0, ingreso.cliente?.saldo ?? 0);
-  const saldoUsado = Math.min(saldoDisponible, cobro.total);
-  const totalPorPagar = Math.max(0, cobro.total - saldoUsado);
+  const saldoUsado = redondearDinero(Math.min(saldoDisponible, cobro.total));
+  const totalPorPagar = Math.max(0, restarDinero(cobro.total, saldoUsado));
 
   res.json({
     ok: true,
@@ -633,8 +651,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       // La mensualidad solo cubre el puesto que tiene asignado (o todos si no fija uno).
       OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
-    include: { plan: true, puesto: true },
+    include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
+  if (mensualidadVigente && !mensualidadPagada(mensualidadVigente)) mensualidadVigente = null;
 
   // Política de excedente: si la mensualidad venció DURANTE la estancia (cubría la
   // entrada pero ya no el momento de salida), se cubre hasta su fechaFin y solo se
@@ -650,10 +669,10 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         fechaFin: { gte: ingreso.fechaEntrada, lt: ahora },
         OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
       },
-      include: { plan: true, puesto: true },
+      include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       orderBy: { fechaFin: "desc" },
     });
-    if (mensualidadQueCubriaEntrada) {
+    if (mensualidadQueCubriaEntrada && mensualidadPagada(mensualidadQueCubriaEntrada)) {
       mensualidadVigente = mensualidadQueCubriaEntrada;
       coberturaHasta = mensualidadQueCubriaEntrada.fechaFin;
     }
@@ -700,7 +719,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   // El saldo se calcula dentro de la transacción, después de bloquear el registro
   // del cliente. Así dos salidas simultáneas no pueden consumir el mismo crédito.
-  let valorFinal = cobroTotal;
+  let valorFinal = redondearDinero(cobroTotal);
   let saldoUsado = 0;
   let snapshot: { tarifaId: number | null; modalidad: string | null; tiempoMinutos: number | null; desglose: any } | null = null;
 
@@ -711,8 +730,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     // Usa los mismos bloqueos que el registro de entrada para serializar la ocupación.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${ingreso.vehiculoId}::integer)) AS advisory_lock`;
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingreso.puestoId}::integer)) AS advisory_lock`;
-    // El cierre de caja usa este mismo bloqueo: no puede cerrar mientras se registra un cobro.
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+    // Primero se bloquean vehículo, puesto y mensualidad. El bloqueo de caja
+    // se toma después de validar cobertura para mantener un orden global y evitar deadlocks.
     // La hora efectiva se fija después de obtener los bloqueos, no antes de esperar.
     fechaSalida = new Date();
     if (cubiertoPorPlan) {
@@ -743,8 +762,21 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
       FOR UPDATE
     `;
-    if ((mensualidadesBloqueadas.length > 0) !== cubiertoPorPlan) {
-      throw new AppError("La cobertura de la mensualidad cambió durante la operación. Vuelve a simular el cobro.", 409);
+    const planesActivosBloqueados = mensualidadesBloqueadas.length
+      ? await tx.mensualidad.findMany({
+          where: { id: { in: mensualidadesBloqueadas.map((m) => m.id) } },
+          include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
+        })
+      : [];
+    const existeCoberturaPagada = planesActivosBloqueados.some(mensualidadPagada);
+    if (existeCoberturaPagada !== cubiertoPorPlan) {
+      throw new AppError("La cobertura pagada cambió durante la operación. Vuelve a simular el cobro.", 409);
+    }
+
+    // Orden financiero común: vehículo -> puesto -> mensualidad -> caja -> cliente.
+    // Se toma caja antes de bloquear el saldo para no invertir el orden de recargas/anulaciones.
+    if (!cubiertoPorPlan) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     }
 
     // Recalcula con la hora efectiva de salida tras esperar los bloqueos.
@@ -763,9 +795,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       if (ingreso.clienteId) {
         await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
         const clienteActual = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-        saldoUsado = Math.min(Math.max(0, clienteActual?.saldo ?? 0), cobroTotal);
+        saldoUsado = redondearDinero(Math.min(Math.max(0, clienteActual?.saldo ?? 0), cobroTotal));
       }
-      valorFinal = Math.max(0, cobroTotal - saldoUsado);
+      valorFinal = Math.max(0, restarDinero(cobroTotal, saldoUsado));
     } else if (!cubiertoPorPlan) {
       const cobroActual = await calcularCobro({
         ingreso,
@@ -832,22 +864,6 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     }
 
     if (!cubiertoPorPlan) {
-      if (saldoUsado > 0 && ingreso.clienteId) {
-        const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-        await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
-        // D6 — libro de movimientos de saldo.
-        await tx.clienteSaldoMovimiento.create({
-          data: {
-            clienteId: ingreso.clienteId,
-            tipo: "CONSUMO",
-            monto: saldoUsado,
-            saldoAntes: saldoAntes?.saldo ?? 0,
-            saldoDespues: (saldoAntes?.saldo ?? 0) - saldoUsado,
-            concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa}`,
-            usuario: req.usuario?.usuario || "admin",
-          },
-        });
-      }
       const f = await tx.factura.create({
         data: {
           numero: String(numeroFactura),
@@ -863,6 +879,28 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         },
       });
       facturaCreada = f;
+
+      // El movimiento de consumo queda vinculado al número exacto de factura.
+      // Así una anulación posterior devuelve solo el saldo usado en esta salida.
+      if (saldoUsado > 0 && ingreso.clienteId) {
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
+        const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
+        const saldoPrevio = redondearDinero(saldoAntes?.saldo ?? 0);
+        await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
+        await tx.clienteSaldoMovimiento.create({
+          data: {
+            clienteId: ingreso.clienteId,
+            tipo: "CONSUMO",
+            monto: saldoUsado,
+            saldoAntes: saldoPrevio,
+            saldoDespues: restarDinero(saldoPrevio, saldoUsado),
+            concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa} — factura ${f.numero}`,
+            facturaId: f.id,
+            usuario: req.usuario?.usuario || "admin",
+          },
+        });
+      }
+
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingreso.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
       const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";

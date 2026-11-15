@@ -6,11 +6,15 @@ import { emitirEvento } from "../../services/socket.js";
 import { getCajaOError } from "../../helpers/caja.js";
 import { calcularProximaGeneracion } from "./gastos.utils.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { redondearDinero } from "../../utils/dinero.js";
 
 export const crearGasto = asyncHandler(async (req, res) => {
   const { concepto, descripcion, categoria, valor, recurrente, periodicidad } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   if (!concepto) throw new AppError("Concepto es requerido", 400);
+  const valorIngresado = Number(valor);
+  if (!Number.isFinite(valorIngresado) || valorIngresado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
+  const valorNormalizado = redondearDinero(valorIngresado);
 
   await getCajaOError(sucursalId ?? null);
 
@@ -18,7 +22,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
     const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalId ?? null } });
     if (!cajaAbierta) throw new AppError("La caja se cerró antes de registrar el gasto", 409);
-    const data: any = { concepto, descripcion, categoria: categoria || "otros", valor: Number(valor), sucursalId: sucursalId ?? null };
+    const data: any = { concepto, descripcion, categoria: categoria || "otros", valor: valorNormalizado, sucursalId: sucursalId ?? null };
     if (recurrente) {
       data.recurrente = true;
       data.periodicidad = periodicidad || "mensual";
@@ -26,7 +30,7 @@ export const crearGasto = asyncHandler(async (req, res) => {
     }
     const g = await tx.gasto.create({ data });
     await tx.cajaMovimiento.create({
-      data: { cajaId: cajaAbierta.id, tipo: "EGRESO", concepto: `Gasto: ${g.concepto}`, monto: Number(valor), gastoId: g.id },
+      data: { cajaId: cajaAbierta.id, tipo: "EGRESO", concepto: `Gasto: ${g.concepto}`, monto: valorNormalizado, gastoId: g.id },
     });
     return [g];
   });
@@ -75,9 +79,9 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   if (descripcion !== undefined) data.descripcion = descripcion;
   if (categoria !== undefined) data.categoria = categoria;
   if (valor !== undefined) {
-    const valorNormalizado = Number(valor);
-    if (!Number.isFinite(valorNormalizado) || valorNormalizado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
-    data.valor = valorNormalizado;
+    const valorIngresado = Number(valor);
+    if (!Number.isFinite(valorIngresado) || valorIngresado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
+    data.valor = redondearDinero(valorIngresado);
   }
   if (recurrente !== undefined) data.recurrente = recurrente;
   if (periodicidad !== undefined) data.periodicidad = periodicidad;
@@ -115,7 +119,7 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
     const actualizado = await tx.gasto.update({ where: { id: Number(id) }, data });
     const movimientoData: any = {};
     if (concepto !== undefined) movimientoData.concepto = `Gasto: ${actualizado.concepto}`;
-    if (valor !== undefined) movimientoData.monto = Number(valor);
+    if (valor !== undefined) movimientoData.monto = data.valor;
     if (movimientos.length > 0 && Object.keys(movimientoData).length) {
       await tx.cajaMovimiento.updateMany({ where: { gastoId: Number(id), anulado: false }, data: movimientoData });
     }

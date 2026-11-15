@@ -54,6 +54,19 @@ npm run dev
 Entra con `admin` y la clave de `ADMIN_PASSWORD`. Si la base estaba vacía, el
 backend crea ese admin solo en el primer arranque.
 
+## Docker Compose
+
+Antes de ejecutar `docker compose up -d --build`, define estas variables en un archivo `.env` junto a `docker-compose.yml`:
+
+```env
+DB_PASSWORD=una_clave_larga_y_unica
+JWT_SECRET=salida_de_node_crypto_randomBytes_32_hex
+ADMIN_PASSWORD=una_clave_inicial_segura
+CORS_ORIGINS=https://tu-dominio-frontend.com
+```
+
+No uses las claves de ejemplo en producción. Compose ahora exige `DB_PASSWORD`, `JWT_SECRET` y `ADMIN_PASSWORD`; no inicia con contraseñas predeterminadas. El administrador inicial se crea al arrancar el backend si la base de datos todavía no tiene uno.
+
 ## Instalación en la PC del parqueadero (una sola vez)
 
 ```bash

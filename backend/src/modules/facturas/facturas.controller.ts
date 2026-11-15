@@ -3,6 +3,7 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { redondearDinero, sumarDinero } from "../../utils/dinero.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 
 /**
@@ -27,65 +28,117 @@ export const anularFactura = asyncHandler(async (req, res) => {
   if (factura.anulada) throw new AppError("Esta factura ya está anulada", 409);
 
   const usuario = req.usuario?.usuario || "admin";
-  const ahora = new Date();
 
   await prisma.$transaction(async (tx) => {
-    await tx.factura.update({
+    // Orden de bloqueo común con cobros y salidas: vehículo -> puesto ->
+    // mensualidad -> caja -> cliente. Evita deadlocks entre pagos y anulaciones.
+    const vehiculoId = factura.ingreso?.vehiculoId ?? factura.mensualidad?.vehiculoId;
+    const puestoId = factura.ingreso?.puestoId ?? factura.mensualidad?.puestoId;
+    if (vehiculoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vehiculoId}::integer)) AS advisory_lock`;
+    }
+    if (puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${puestoId}::integer)) AS advisory_lock`;
+    }
+    if (factura.mensualidadId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${factura.mensualidadId}::integer)) AS advisory_lock`;
+      await tx.$queryRaw`SELECT "id" FROM "Mensualidad" WHERE "id" = ${factura.mensualidadId} FOR UPDATE`;
+    }
+
+    // El bloqueo de caja se toma después de los bloqueos operativos anteriores.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+    const facturaActual = await tx.factura.findUnique({
       where: { id: factura.id },
+      include: { cajaMovimientos: { include: { caja: true } }, mensualidad: true, ingreso: true },
+    });
+    if (!facturaActual || facturaActual.anulada) {
+      throw new AppError("Esta factura ya fue anulada por otra operación", 409);
+    }
+    const ahora = new Date();
+
+    await tx.factura.update({
+      where: { id: facturaActual.id },
       data: { anulada: true, anuladaEn: ahora, anuladoPor: usuario, motivoAnulacion: motivo },
     });
 
-    // Reverso en caja
-    if (factura.metodoPago) {
-      const movOriginal = factura.cajaMovimientos[0];
+    // Reverso en caja: solo se altera el movimiento de esta factura.
+    if (facturaActual.metodoPago) {
+      const movOriginal = facturaActual.cajaMovimientos.find((movimiento) => !movimiento.anulado);
       const cajaOriginalAbierta = movOriginal?.caja?.estado === "ABIERTA";
       if (movOriginal && cajaOriginalAbierta) {
-        // Se anula el movimiento original (soft) — los totales lo excluyen.
         await tx.cajaMovimiento.update({
           where: { id: movOriginal.id },
-          data: { anulado: true, anuladoEn: ahora, anuladoPor: usuario, motivoAnulacion: `Anulado por factura ${factura.numero}` },
+          data: { anulado: true, anuladoEn: ahora, anuladoPor: usuario, motivoAnulacion: `Anulado por factura ${facturaActual.numero}` },
         });
       } else {
-        // La caja original está cerrada o no existe: se registra el reverso en la caja abierta actual.
-        const cajaActual = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: factura.sucursalId ?? sucursalId ?? null } });
-        if (cajaActual) {
-          await tx.cajaMovimiento.create({
-            data: {
-              cajaId: cajaActual.id,
-              tipo: "EGRESO",
-              concepto: `Ajuste por anulación factura ${factura.numero} (motivo: ${motivo})`,
-              monto: factura.valor,
-              metodoPago: factura.metodoPago,
-              facturaId: null,
-            },
-          });
+        const cajaActual = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: facturaActual.sucursalId ?? sucursalId ?? null } });
+        if (!cajaActual) {
+          throw new AppError("No hay una caja abierta en esta sucursal para registrar el reverso. Abre la caja y vuelve a anular la factura.", 409);
         }
+        await tx.cajaMovimiento.create({
+          data: {
+            cajaId: cajaActual.id,
+            tipo: "EGRESO",
+            concepto: `Ajuste por anulación factura ${facturaActual.numero} (motivo: ${motivo})`,
+            monto: redondearDinero(facturaActual.valor),
+            metodoPago: facturaActual.metodoPago,
+            facturaId: null,
+          },
+        });
       }
     }
 
-    // D1-b — devolver al cliente el saldo que esa factura consumió.
-    if (factura.ingresoId) {
+    // Devolver únicamente el consumo asociado a ESTA factura.
+    if (facturaActual.ingresoId) {
       const ingreso = await tx.ingreso.findUnique({
-        where: { id: factura.ingresoId },
-        select: { clienteId: true, vehiculo: { select: { placa: true } } },
+        where: { id: facturaActual.ingresoId },
+        select: { clienteId: true },
       });
       if (ingreso?.clienteId) {
-        const consumos = await tx.clienteSaldoMovimiento.findMany({
-          where: { clienteId: ingreso.clienteId, tipo: "CONSUMO", concepto: { contains: `salida ${ingreso.vehiculo?.placa || ""}` } },
-          orderBy: { createdAt: "desc" },
-        });
-        const consumido = consumos.reduce((s, m) => s + m.monto, 0);
-        if (consumido > 0) {
-          const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-          await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { increment: consumido } } });
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
+        const [consumos, devolucionExistente] = await Promise.all([
+          tx.clienteSaldoMovimiento.findMany({
+            where: {
+              clienteId: ingreso.clienteId,
+              tipo: "CONSUMO",
+              OR: [
+                { facturaId: facturaActual.id },
+                // Compatibilidad con movimientos históricos anteriores a la FK.
+                // El sufijo exacto evita confundir FACT-12 con FACT-123.
+                { facturaId: null, concepto: { endsWith: `— factura ${facturaActual.numero}` } },
+              ],
+            },
+          }),
+          tx.clienteSaldoMovimiento.findFirst({
+            where: {
+              clienteId: ingreso.clienteId,
+              tipo: "DEVOLUCION",
+              facturaId: facturaActual.id,
+            },
+            select: { id: true },
+          }),
+        ]);
+        const consumido = sumarDinero(...consumos.map((movimiento) => movimiento.monto));
+        if (consumido > 0 && !devolucionExistente) {
+          const saldoAntes = await tx.cliente.findUnique({
+            where: { id: ingreso.clienteId },
+            select: { saldo: true },
+          });
+          const saldoPrevio = redondearDinero(saldoAntes?.saldo ?? 0);
+          const saldoDespues = sumarDinero(saldoPrevio, consumido);
+          await tx.cliente.update({
+            where: { id: ingreso.clienteId },
+            data: { saldo: saldoDespues },
+          });
           await tx.clienteSaldoMovimiento.create({
             data: {
               clienteId: ingreso.clienteId,
               tipo: "DEVOLUCION",
               monto: consumido,
-              saldoAntes: saldoAntes?.saldo ?? 0,
-              saldoDespues: (saldoAntes?.saldo ?? 0) + consumido,
-              concepto: `Devolución de saldo por anulación de factura ${factura.numero}`,
+              saldoAntes: saldoPrevio,
+              saldoDespues,
+              concepto: `Devolución de saldo por anulación de factura ${facturaActual.numero}`,
+              facturaId: facturaActual.id,
               usuario,
             },
           });
@@ -94,11 +147,10 @@ export const anularFactura = asyncHandler(async (req, res) => {
     }
 
     // D1-c: revertir renovación automática si la factura saldó una mensualidad.
-    if (factura.mensualidadId && factura.origen === "MENSUALIDAD" && factura.mensualidad) {
-      const m = factura.mensualidad;
-      // Si el período fue renovado (fechaInicio posterior al pago), se marca VENCIDA para revisión.
-      if (new Date(m.fechaInicio) >= new Date(factura.createdAt)) {
-        await tx.mensualidad.update({ where: { id: m.id }, data: { estado: "VENCIDA" } });
+    if (facturaActual.mensualidadId && facturaActual.origen === "MENSUALIDAD" && facturaActual.mensualidad) {
+      const mensualidad = facturaActual.mensualidad;
+      if (new Date(mensualidad.fechaInicio) >= new Date(facturaActual.createdAt)) {
+        await tx.mensualidad.update({ where: { id: mensualidad.id }, data: { estado: "VENCIDA" } });
       }
     }
   });
@@ -110,7 +162,7 @@ export const anularFactura = asyncHandler(async (req, res) => {
 export const obtenerFacturas = asyncHandler(async (req, res) => {
   const { page, limit, q, desde, hasta, origen } = req.query;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
-  const where: any = sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
+  const where: any = sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {};
   if (desde || hasta) {
     where.createdAt = {};
     if (desde) where.createdAt.gte = new Date(String(desde));
@@ -144,7 +196,7 @@ export const obtenerFactura = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
     prisma.factura.findFirst({
-      where: { id: Number(id), ...(sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true, puesto: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),
@@ -158,7 +210,7 @@ export const descargarFacturaPDF = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const [factura, config] = await Promise.all([
     prisma.factura.findFirst({
-      where: { id: Number(id), ...(sucursalId ? { OR: [{ mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
+      where: { id: Number(id), ...(sucursalId ? { OR: [{ sucursalId }, { mensualidad: { sucursalId } }, { mensualidad: { vehiculo: { sucursalId } } }, { ingreso: { vehiculo: { sucursalId } } }] } : {}) },
       include: { ingreso: { include: { cliente: true, vehiculo: true, puesto: true } }, mensualidad: { include: { cliente: true, vehiculo: true } } },
     }),
     prisma.configuracion.findFirst(),

@@ -55,11 +55,11 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: parkadmin_test
+          POSTGRES_DB: parqueadero_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d parkadmin_test"
+          --health-cmd "pg_isready -U postgres -d parqueadero_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -67,7 +67,11 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/parkadmin_test?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/parqueadero_test?schema=public
+      NODE_ENV: test
+      PORT: 3001
+      JWT_SECRET: integration-test-secret-with-at-least-32-characters
+      ADMIN_PASSWORD: IntegrationTest-Admin-2026
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,11 +85,39 @@ jobs:
         run: npx prisma generate --schema=prisma/schema.prisma
       - name: Apply database migrations
         run: npx prisma migrate deploy --schema=prisma/schema.prisma
-      - name: Inspect schema drift against Prisma models
-        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
-      - name: Sync ephemeral test database to Prisma schema
-        run: npx prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss
+      - name: Fail when migrations do not match the Prisma schema
+        shell: bash
+        run: |
+          diff_sql="$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script)"
+          # Prisma emits a comment even when there is no schema drift:
+          # "-- This is an empty migration." Do not mistake that comment for SQL.
+          if printf '%s\n' "$diff_sql" | grep -Eiq '^[[:space:]]*(CREATE|ALTER|DROP|COMMENT|GRANT|REVOKE|TRUNCATE|INSERT|UPDATE|DELETE)[[:space:]]'; then
+            echo "::error::The deployed migrations do not produce the current Prisma schema."
+            printf '%s\n' "$diff_sql"
+            exit 1
+          fi
+          echo "Schema and applied migrations are in sync."
       - name: Seed minimal test data
         run: node prisma/seed/seed-test.mjs
+      - name: Start API for HTTP integration tests
+        run: |
+          npm run start:only > /tmp/parqueadero-api.log 2>&1 &
+          echo $! > /tmp/parqueadero-api.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3001/ > /dev/null; then
+              echo "Test API is ready on port 3001."
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/parqueadero-api.log
+          echo "::error::The test API did not start."
+          exit 1
       - name: Run PostgreSQL integration tests
         run: npm run test:integration
+      - name: Stop test API
+        if: always()
+        run: |
+          if [[ -f /tmp/parqueadero-api.pid ]]; then
+            kill "$(cat /tmp/parqueadero-api.pid)" 2>/dev/null || true
+          fi

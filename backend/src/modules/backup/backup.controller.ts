@@ -2,7 +2,7 @@ import prisma from "../../config/prisma.js";
 import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 
 export const generarBackup = asyncHandler(async (req, res) => {
-  const [usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion, ingresos, mensualidades, reservas, facturas, caja, movimientos, gastos] = await Promise.all([
+  const [usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion, ingresos, mensualidades, reservas, facturas, caja, movimientos, gastos, sucursales, ausencias, accesos, pushSubscriptions, vehiculoPropietarios, clienteSaldoMovimientos, registrosMovimientos] = await Promise.all([
     // El respaldo nunca incluye contraseñas ni tokens de sesión.
     prisma.usuario.findMany({ select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true } }),
     prisma.cliente.findMany({ include: { vehiculos: true, ingresos: true, mensualidades: true, reservas: true, ausencias: true } }),
@@ -15,32 +15,51 @@ export const generarBackup = asyncHandler(async (req, res) => {
     prisma.mensualidad.findMany({ include: { cliente: true, vehiculo: true, plan: true, puesto: true, facturas: true } }),
     prisma.reserva.findMany({ include: { cliente: true, vehiculo: true, puesto: true, ingreso: true } }),
     prisma.factura.findMany({ include: { ingreso: true, mensualidad: true, cajaMovimientos: true } }),
-    prisma.caja.findMany({ include: { movimientos: true, usuario: true } }),
+    prisma.caja.findMany({ include: { movimientos: true, usuario: { select: { id: true, nombre: true, usuario: true, correo: true, rol: true, estado: true, sucursalId: true, ultimoAcceso: true, createdAt: true } } } }),
     prisma.cajaMovimiento.findMany({ include: { factura: true, gasto: true } }),
     prisma.gasto.findMany(),
+    prisma.sucursal.findMany(),
+    prisma.ausencia.findMany(),
+    prisma.acceso.findMany(),
+    prisma.pushSubscription.findMany(),
+    prisma.vehiculoPropietario.findMany(),
+    prisma.clienteSaldoMovimiento.findMany(),
+    // "movimientos" conserva compatibilidad con respaldos 1.1 (CajaMovimiento).
+    prisma.movimiento.findMany(),
   ]);
 
   const backup = {
-    version: "1.1",
+    version: "1.2",
     fecha: new Date().toISOString(),
-    data: { usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion, ingresos, mensualidades, reservas, facturas, caja, movimientos, gastos },
+    data: {
+      usuarios, clientes, vehiculos, puestos, tarifas, planes, configuracion,
+      ingresos, mensualidades, reservas, facturas, caja, movimientos, gastos,
+      sucursales, ausencias, accesos, pushSubscriptions, vehiculoPropietarios,
+      clienteSaldoMovimientos, registrosMovimientos,
+    },
   };
 
   res.json({ ok: true, backup });
 });
 
 const RELACIONES: Record<string, string[]> = {
-  atributos: [],
-  clientes: ["vehiculos", "ingresos", "mensualidades", "reservas", "ausencias"],
-  vehiculos: ["cliente", "sucursal", "plan", "tarifa", "ingresos", "mensualidades", "reservas", "ausencias"],
+  configuracion: [],
+  sucursales: ["ausencias", "caja", "facturas", "gastos", "mensualidades", "movimientos", "puestos", "reservas", "tarifas", "usuarios", "vehiculos"],
+  clientes: ["vehiculos", "ingresos", "mensualidades", "reservas", "ausencias", "saldoMovimientos", "vehiculoPropietarios"],
+  vehiculos: ["cliente", "sucursal", "plan", "tarifa", "ingresos", "mensualidades", "reservas", "ausencias", "propietarios"],
   puestos: ["sucursal", "ingresos", "mensualidades", "reservas"],
   ingresos: ["cliente", "vehiculo", "puesto", "facturas", "reserva"],
   mensualidades: ["cliente", "vehiculo", "plan", "puesto", "facturas", "sucursal"],
   reservas: ["cliente", "vehiculo", "puesto", "ingreso", "sucursal"],
-  facturas: ["ingreso", "mensualidad", "cajaMovimientos", "sucursal"],
+  facturas: ["ingreso", "mensualidad", "cajaMovimientos", "saldoMovimientos", "sucursal"],
   caja: ["movimientos", "usuario", "sucursal"],
   movimientos: ["factura", "gasto", "caja"],
   gastos: ["cajaMovimientos", "sucursal"],
+  ausencias: ["cliente", "vehiculo", "sucursal"],
+  accesos: ["usuarioRel"],
+  vehiculoPropietarios: ["vehiculo", "cliente"],
+  clienteSaldoMovimientos: ["cliente", "factura"],
+  registrosMovimientos: ["sucursal"],
 };
 
 function prepararRegistro(modelo: string, item: any) {
@@ -56,7 +75,23 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
   const { data } = req.body;
   if (!data) throw new AppError("No hay datos para restaurar", 400);
 
-  const modelos = ["configuracion", "planes", "tarifas", "puestos", "vehiculos", "clientes", "usuarios", "ingresos", "mensualidades", "reservas", "facturas", "caja", "movimientos", "gastos"];
+  if (typeof data !== "object" || Array.isArray(data)) throw new AppError("El respaldo no tiene una estructura válida", 400);
+  for (const [modelo, registros] of Object.entries(data)) {
+    if (registros !== undefined && !Array.isArray(registros)) {
+      throw new AppError(`La sección ${modelo} del respaldo no es una lista válida`, 400);
+    }
+  }
+
+  // Las claves nuevas amplían el respaldo 1.2 sin romper el formato anterior:
+  // "movimientos" sigue representando CajaMovimiento y "registrosMovimientos"
+  // representa el modelo de auditoría Movimiento.
+  const modelos = [
+    "sucursales", "configuracion", "planes", "tarifas", "usuarios",
+    "clientes", "puestos", "vehiculos", "reservas", "ingresos",
+    "mensualidades", "ausencias", "facturas", "caja", "gastos",
+    "movimientos", "registrosMovimientos", "vehiculoPropietarios",
+    "clienteSaldoMovimientos", "accesos", "pushSubscriptions",
+  ];
   const omitidas: Record<string, number> = {};
   const creadosConClaveTemp: string[] = [];
   const bcrypt = (await import("bcrypt")).default;
@@ -99,7 +134,31 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
             continue;
           }
 
-          const delegate = (tx as any)[modelo];
+          // Las secciones del JSON usan nombres plurales; Prisma expone delegates singulares.
+          // Este mapa explícito evita invocar propiedades inexistentes como tx.clientes o tx.facturas.
+          const delegates: Record<string, string> = {
+            sucursales: "sucursal",
+            configuracion: "configuracion",
+            planes: "plan",
+            tarifas: "tarifa",
+            clientes: "cliente",
+            puestos: "puesto",
+            vehiculos: "vehiculo",
+            reservas: "reserva",
+            ingresos: "ingreso",
+            mensualidades: "mensualidad",
+            ausencias: "ausencia",
+            facturas: "factura",
+            caja: "caja",
+            gastos: "gasto",
+            movimientos: "cajaMovimiento",
+            registrosMovimientos: "movimiento",
+            vehiculoPropietarios: "vehiculoPropietario",
+            clienteSaldoMovimientos: "clienteSaldoMovimiento",
+            accesos: "acceso",
+            pushSubscriptions: "pushSubscription",
+          };
+          const delegate = (tx as any)[delegates[modelo] || modelo];
           await delegate.upsert({
             where: { id: Number(id) },
             create: { id: Number(id), ...rest },
@@ -107,6 +166,20 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
           });
         }
       }
+    }
+
+    // La restauración inserta IDs explícitos. Sin sincronizar las secuencias,
+    // el siguiente registro nuevo podría intentar reutilizar un ID ya existente.
+    const tablasConSecuencia = [
+      "Usuario", "Acceso", "Configuracion", "Cliente", "Vehiculo", "Puesto",
+      "Tarifa", "Caja", "CajaMovimiento", "Plan", "Mensualidad", "Gasto",
+      "Movimiento", "Factura", "Reserva", "PushSubscription", "Ausencia",
+      "Sucursal", "VehiculoPropietario", "ClienteSaldoMovimiento",
+    ];
+    for (const tabla of tablasConSecuencia) {
+      await tx.$queryRawUnsafe(
+        `SELECT setval(pg_get_serial_sequence('"${tabla}"', 'id'), COALESCE((SELECT MAX("id") FROM "${tabla}"), 1), EXISTS(SELECT 1 FROM "${tabla}"))`
+      );
     }
   });
 

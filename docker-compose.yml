@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: parqueadero_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD antes de iniciar Docker Compose}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -19,9 +19,10 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-postgres}@db:5432/parqueadero_db
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:?Define DB_PASSWORD antes de iniciar Docker Compose}@db:5432/parqueadero_db
       PORT: 3000
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET antes de iniciar Docker Compose}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD para crear el administrador inicial}
       NODE_ENV: production
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:5173}
       SMTP_HOST: ${SMTP_HOST}
