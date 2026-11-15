@@ -187,7 +187,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   const ingresosMensuales = meses.map((_, i) => {
     const total = facturasPorMes
       .filter(f => Number(obtenerFechaClaveEnZona(f.createdAt, zonaHoraria).slice(5, 7)) === i + 1)
-      .reduce((s, f) => s + f.valor, 0);
+      .reduce((s, f) => s + Number(f.valor), 0);
     return { mes: meses[i], total };
   });
 
