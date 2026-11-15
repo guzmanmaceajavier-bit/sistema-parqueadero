@@ -80,15 +80,6 @@ describe("Planes y cobro", () => {
     const mensualidad = await prisma.mensualidad.create({
       data: { clienteId, vehiculoId, planId, puestoId: puestoPlanId, fechaInicio: hoy, fechaFin: fin, valor: 150000 },
     });
-    await prisma.factura.create({
-      data: {
-        numero: `TEST-PLAN-${Date.now()}`,
-        mensualidadId: mensualidad.id,
-        origen: "MENSUALIDAD",
-        valor: 150000,
-        metodoPago: "efectivo",
-      },
-    });
     const planActivo = await prisma.mensualidad.findFirst({
       where: { vehiculoId, estado: "ACTIVA", puestoId: { not: null } },
     });
