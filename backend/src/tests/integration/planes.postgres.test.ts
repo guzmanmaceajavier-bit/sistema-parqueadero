@@ -63,6 +63,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.ingreso.deleteMany({ where: { vehiculo: { placa: PLACA } } }).catch(() => {});
+  await prisma.factura.deleteMany({ where: { mensualidad: { cliente: { documento: DOC } } } }).catch(() => {});
   await prisma.mensualidad.deleteMany({ where: { cliente: { documento: DOC } } }).catch(() => {});
   await prisma.vehiculo.deleteMany({ where: { placa: PLACA } }).catch(() => {});
   await prisma.cliente.deleteMany({ where: { documento: DOC } }).catch(() => {});
