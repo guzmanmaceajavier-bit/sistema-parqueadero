@@ -6,6 +6,7 @@ import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { calcularCobro } from "../../services/calculadorCobros.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+import { redondearDinero, restarDinero } from "../../utils/dinero.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, fechaSalida, fechaRegreso, motivo, opcion } = req.body;
@@ -292,9 +293,9 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     } else if (existente.opcion === "DESCONTAR") {
       const mensualidades = await tx.mensualidad.findMany({ where: { vehiculoId: a.vehiculoId, ...(sucursalId ? { sucursalId } : {}), estado: "ACTIVA" } });
       for (const m of mensualidades) {
-        const valorDia = m.valor / 30;
-        const descuento = Math.round(valorDia * diasAusente * 100) / 100;
-        const nuevoValor = Math.max(0, m.valor - descuento);
+        const valorDia = redondearDinero(m.valor / 30);
+        const descuento = redondearDinero(valorDia * diasAusente);
+        const nuevoValor = Math.max(0, restarDinero(m.valor, descuento));
         await tx.mensualidad.update({ where: { id: m.id }, data: { valor: nuevoValor } });
         mensaje = `Descontados $${descuento.toLocaleString()} — nuevo valor mensualidad: $${nuevoValor.toLocaleString()}`;
       }
