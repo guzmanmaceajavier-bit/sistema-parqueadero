@@ -197,6 +197,12 @@ export const actualizarCliente = asyncHandler(async (req, res) => {
     });
   }
 
+  await registrarMovimiento(
+    "CLIENTES",
+    "ACTUALIZAR",
+    `Ficha del cliente ${cliente.nombres} ${cliente.apellidos} actualizada`,
+    req.usuario?.usuario || "admin",
+  );
   res.json({ ok: true, message: "Cliente actualizado", cliente });
 });
 
