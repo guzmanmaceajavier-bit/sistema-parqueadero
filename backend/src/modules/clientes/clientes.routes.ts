@@ -1,7 +1,7 @@
 import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
-import { crearCliente, obtenerClientes, obtenerCliente, actualizarCliente, eliminarCliente, obtenerBloqueosCliente, perfilCliente, importarClientes, recargarSaldo } from "./clientes.controller.js";
+import { crearCliente, obtenerClientes, obtenerCliente, actualizarCliente, eliminarCliente, obtenerBloqueosCliente, perfilCliente, importarClientes, recargarSaldo, ajustarSaldo } from "./clientes.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
 import { crearClienteSchema, actualizarClienteSchema } from "../../schemas/cliente.schema.js";
@@ -116,5 +116,6 @@ router.get("/:id/bloqueos", verificarToken, verificarRol("admin"), validateIdPar
 router.get("/:id/perfil", verificarToken, validateIdParam, perfilCliente);
 router.post("/importar", verificarToken, verificarRol("admin", "supervisor"), importarClientes);
 router.post("/:id/recargar-saldo", verificarToken, verificarRol("admin"), validateIdParam, recargarSaldo);
+router.post("/:id/ajustar-saldo", verificarToken, verificarRol("admin"), validateIdParam, ajustarSaldo);
 
 export default router;
