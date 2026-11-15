@@ -12,13 +12,6 @@ import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
 import { redondearDinero, restarDinero } from "../../utils/dinero.js";
 
-type FacturaCobertura = { createdAt: Date; valor: number; metodoPago: string | null; anulada: boolean };
-type MensualidadCobertura = { valor: number; fechaInicio: Date; facturas?: FacturaCobertura[] };
-
-function mensualidadPagada(mensualidad: MensualidadCobertura): boolean {
-  return calcularPagadoMensualidad(mensualidad.facturas || [], mensualidad.fechaInicio) >= mensualidad.valor;
-}
-
 /** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
 function puestoAceptaTipo(puesto: { tipoPuesto?: string | null }, tipoVehiculo?: string | null): boolean {
   const tipos = String(puesto?.tipoPuesto || "")
