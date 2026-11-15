@@ -948,7 +948,17 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     });
   } else {
     await registrarMovimiento("INGRESOS", "SALIDA", `Salida ${ingreso.vehiculo.placa} — mensualidad vigente, sin cobro adicional`, req.usuario?.usuario || "admin");
-    res.json({ ok: true, message: "Salida registrada — salida cubierta por mensualidad vigente, no se generó cobro adicional", salida, cobro: { total: 0, totalMinutos: cobroTotalMinutos, cubiertoPorPlan: true, plan: mensualidadVigente?.plan?.nombre || "Plan mensual" } });
+    const saldoPendientePlan = mensualidadVigente
+      ? Math.max(0, redondearDinero(mensualidadVigente.valor - calcularPagadoMensualidad(mensualidadVigente.facturas || [], mensualidadVigente.fechaInicio)))
+      : 0;
+    res.json({
+      ok: true,
+      message: saldoPendientePlan > 0
+        ? `Salida cubierta por el plan, sin cobro diario adicional. La mensualidad conserva un saldo pendiente de ${saldoPendientePlan.toLocaleString("es-CO")}.`
+        : "Salida registrada — salida cubierta por mensualidad vigente, no se generó cobro adicional",
+      salida,
+      cobro: { total: 0, totalMinutos: cobroTotalMinutos, cubiertoPorPlan: true, plan: mensualidadVigente?.plan?.nombre || "Plan mensual", saldoPendientePlan },
+    });
   }
 });
 
