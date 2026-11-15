@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { sumarDinero } from "../../utils/dinero.js";
 
 export async function calcularTotalesHelper(cajaId: number, db: { cajaMovimiento: typeof prisma.cajaMovimiento } = prisma) {
   const movs = await db.cajaMovimiento.findMany({
@@ -13,13 +14,13 @@ export async function calcularTotalesHelper(cajaId: number, db: { cajaMovimiento
 
   for (const m of movs) {
     if (m.tipo === "INGRESO") {
-      totalIngresos += m.monto;
+      totalIngresos = sumarDinero(totalIngresos, m.monto);
       const metodo = String(m.metodoPago || "efectivo").trim().toLowerCase();
-      if (porMetodo[metodo] !== undefined) porMetodo[metodo] += m.monto;
-      else porMetodo.otros += m.monto;
+      if (porMetodo[metodo] !== undefined) porMetodo[metodo] = sumarDinero(porMetodo[metodo], m.monto);
+      else porMetodo.otros = sumarDinero(porMetodo.otros, m.monto);
     } else if (m.tipo === "EGRESO") {
-      totalEgresos += m.monto;
-      if ((m.metodoPago || "efectivo") === "efectivo") egresosEfectivo += m.monto;
+      totalEgresos = sumarDinero(totalEgresos, m.monto);
+      if ((m.metodoPago || "efectivo") === "efectivo") egresosEfectivo = sumarDinero(egresosEfectivo, m.monto);
     }
   }
 
