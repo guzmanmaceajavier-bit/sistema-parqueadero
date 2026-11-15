@@ -66,6 +66,7 @@ export default function Ausencias() {
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
   const [confirm, setConfirm] = useState({ abierto: false, titulo: "", mensaje: "", onConfirm: () => {} });
   const [editando, setEditando] = useState(null);
+  const [procesandoRegresoId, setProcesandoRegresoId] = useState(null);
   const [form, setForm] = useState({
     clienteId: "", vehiculoId: "", fechaSalida: "", fechaRegreso: "", motivo: "", opcion: "CONGELAR",
   });
@@ -146,6 +147,32 @@ export default function Ausencias() {
       mostrarToast(res.data?.mensaje || "Ausencia finalizada", "success");
     } catch (error) {
       mostrarToast(error.response?.data?.message || "Error al finalizar ausencia", "error");
+    }
+  };
+
+
+  const handleRegresar = async (ausencia) => {
+    let datosCompensacion = {};
+    if (ausencia.opcion === "EXTENDER") {
+      const dias = window.prompt("¿Cuántos días deseas agregar al vencimiento?", String(calcDias(ausencia)));
+      if (dias === null) return;
+      const numeroDias = Number(dias);
+      if (!Number.isInteger(numeroDias) || numeroDias < 0 || numeroDias > 365) {
+        mostrarToast("Ingresa un número entero entre 0 y 365", "error");
+        return;
+      }
+      datosCompensacion = { diasCompensacion: numeroDias };
+    }
+
+    setProcesandoRegresoId(ausencia.id);
+    try {
+      const res = await api.post(`/ausencias/regresar/${ausencia.id}`, datosCompensacion);
+      await cargarDatos();
+      mostrarToast(res.data?.mensaje || "Regreso registrado y puesto recuperado", "success");
+    } catch (error) {
+      mostrarToast(error.response?.data?.message || "No se pudo registrar el regreso. No se realizaron cambios.", "error");
+    } finally {
+      setProcesandoRegresoId(null);
     }
   };
 
@@ -255,7 +282,7 @@ export default function Ausencias() {
                         {a.estado === "ACTIVA" && (
                           <>
                             <button onClick={() => openEdit(a)} className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" title="Editar"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg></button>
-                            <button onClick={() => handleFinalizar(a)} className="p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors" title="Finalizar"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg></button>
+                            <button onClick={() => handleRegresar(a)} disabled={procesandoRegresoId === a.id} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-colors disabled:opacity-50" title="Registrar regreso y crear el ingreso"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg><span>{procesandoRegresoId === a.id ? "Procesando..." : "Registrar regreso"}</span></button>
                           </>
                         )}
                         {isAdmin && (
