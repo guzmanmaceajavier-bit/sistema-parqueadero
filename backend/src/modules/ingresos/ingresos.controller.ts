@@ -187,10 +187,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
         include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       }),
       tx.ausencia.findFirst({
-        where: {
-          vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null },
-          ...(mensualidadActual ? { OR: [{ mensualidadId: mensualidadActual.id }, { mensualidadId: null }] } : {}),
-        },
+        where: { vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null } },
         orderBy: { fechaRegreso: "desc" },
       }),
     ]);
@@ -203,7 +200,11 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     if (reservaActual?.puestoId && Number(puestoId) !== reservaActual.puestoId) {
       throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Actualiza la disponibilidad.", 409);
     }
-    const puestoMensualidadActual = mensualidadActual?.puestoId ?? ausenciaActualConPuesto?.puestoId ?? null;
+    const ausenciaPerteneceAlPlanActual = !!ausenciaActualConPuesto
+      && (!ausenciaActualConPuesto.mensualidadId || ausenciaActualConPuesto.mensualidadId === mensualidadActual?.id);
+    const puestoMensualidadActual = mensualidadActual?.puestoId
+      ?? (ausenciaPerteneceAlPlanActual ? ausenciaActualConPuesto?.puestoId : null)
+      ?? null;
     if (puestoMensualidadActual && Number(puestoId) !== puestoMensualidadActual) {
       throw new AppError("El vehículo tiene un puesto asignado por su mensualidad o ausencia anterior. Utiliza el puesto indicado.", 409);
     }
