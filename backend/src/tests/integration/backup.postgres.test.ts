@@ -97,6 +97,6 @@ describe("Respaldo y restauración PostgreSQL", () => {
       where: { id: movimientoId },
     });
     expect(restaurado?.facturaId).toBe(facturaId);
-    expect(restaurado?.monto).toBe(12.34);
+    expect(Number(restaurado?.monto)).toBe(12.34);
   }, 30000);
 });
