@@ -736,12 +736,14 @@ export default function Clientes() {
                         ${(cliente.saldo || 0).toLocaleString()}
                       </span>
                       {isAdmin && (
-                        <button onClick={() => { setRecargaCli(cliente); setRecargaMonto(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-emerald-600" title="Recargar saldo">
-                          <Plus className="w-3 h-3 inline" />
-                        </button>
-                        <button onClick={() => { setAjusteCli(cliente); setAjusteMonto(""); setAjusteMotivo(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-amber-600" title="Ajustar saldo">
-                          <Pencil className="w-3 h-3 inline" />
-                        </button>
+                        <span className="inline-flex items-center">
+                          <button onClick={() => { setRecargaCli(cliente); setRecargaMonto(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-emerald-600" title="Recargar saldo">
+                            <Plus className="w-3 h-3 inline" />
+                          </button>
+                          <button onClick={() => { setAjusteCli(cliente); setAjusteMonto(""); setAjusteMotivo(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-amber-600" title="Ajustar saldo">
+                            <Pencil className="w-3 h-3 inline" />
+                          </button>
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-4">
