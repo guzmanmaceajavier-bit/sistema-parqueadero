@@ -386,6 +386,7 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
       select: { saldo: true },
     });
     if (!saldoAntes) throw new AppError("Cliente no encontrado", 404);
+    const saldoPrevio = saldoAntes.saldo ?? 0;
 
     const actualizado = await tx.cliente.update({
       where: { id: Number(id) },
@@ -397,8 +398,8 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
         clienteId: Number(id),
         tipo: "RECARGA",
         monto: montoNormalizado,
-        saldoAntes: saldoAntes.saldo,
-        saldoDespues: saldoAntes.saldo + montoNormalizado,
+        saldoAntes: saldoPrevio,
+        saldoDespues: saldoPrevio + montoNormalizado,
         concepto: "Recarga de saldo",
         usuario: req.usuario?.usuario || "admin",
       },
