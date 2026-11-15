@@ -12,6 +12,7 @@ export const crearCliente = asyncHandler(async (req, res) => {
   const existe = await prisma.cliente.findUnique({ where: { documento } });
   if (existe) throw new AppError("El documento ya está registrado", 400);
 
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   const deseaReservarFinal = deseaReservar ?? false;
   const cliente = await prisma.cliente.create({
     data: { nombres, apellidos, documento, telefono, direccion, email, observaciones, estado: estado || "ACTIVO", deseaReservar: deseaReservarFinal },
@@ -20,7 +21,7 @@ export const crearCliente = asyncHandler(async (req, res) => {
   if (deseaReservarFinal) {
     const vehiculo = await prisma.vehiculo.findFirst({ where: { clienteId: cliente.id }, orderBy: { id: "asc" } });
     await prisma.reserva.create({
-      data: { clienteId: cliente.id, vehiculoId: vehiculo?.id ?? null, puestoId: null, fechaInicio: new Date() },
+      data: { clienteId: cliente.id, vehiculoId: vehiculo?.id ?? null, puestoId: null, fechaInicio: new Date(), sucursalId: sucursalId ?? null },
     }).catch(() => {});
   }
 
