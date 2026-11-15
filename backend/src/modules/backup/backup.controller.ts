@@ -150,6 +150,20 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
         }
       }
     }
+
+    // La restauración inserta IDs explícitos. Sin sincronizar las secuencias,
+    // el siguiente registro nuevo podría intentar reutilizar un ID ya existente.
+    const tablasConSecuencia = [
+      "Usuario", "Acceso", "Configuracion", "Cliente", "Vehiculo", "Puesto",
+      "Tarifa", "Caja", "CajaMovimiento", "Plan", "Mensualidad", "Gasto",
+      "Movimiento", "Factura", "Reserva", "PushSubscription", "Ausencia",
+      "Sucursal", "VehiculoPropietario", "ClienteSaldoMovimiento",
+    ];
+    for (const tabla of tablasConSecuencia) {
+      await tx.$queryRawUnsafe(
+        `SELECT setval(pg_get_serial_sequence('"\${tabla}"', 'id'), COALESCE((SELECT MAX("id") FROM "\${tabla}"), 1), EXISTS(SELECT 1 FROM "\${tabla}"))`
+      );
+    }
   });
 
   const resumen = Object.entries(omitidas).map(([m, n]) => `${m}: ${n} omitido(s)`).join(", ");
