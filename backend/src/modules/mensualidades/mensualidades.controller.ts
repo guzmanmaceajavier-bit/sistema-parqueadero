@@ -131,16 +131,11 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
       const puestoActual = await tx.puesto.findUnique({ where: { id: puesto.id } });
       if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto dejó de estar disponible", 409);
       const mensualidadVigente = inicio <= ahora && fin >= ahora;
+      const ingresoExistente = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" }, select: { id: true } });
       await tx.puesto.update({
         where: { id: puesto.id },
-        data: { estado: mensualidadVigente ? "OCUPADO" : "RESERVADO" },
+        data: { estado: ingresoExistente ? "OCUPADO" : "RESERVADO" },
       });
-      if (mensualidadVigente) {
-        const ingresoExistente = await tx.ingreso.findFirst({ where: { vehiculoId: vid, estado: "ACTIVO" } });
-        if (!ingresoExistente) {
-          await tx.ingreso.create({ data: { clienteId: cid, vehiculoId: vid, puestoId: puesto.id } });
-        }
-      }
     }
     return m;
   });
@@ -213,7 +208,7 @@ export const obtenerVencidas = asyncHandler(async (req, res) => {
 export const renovarMensualidad = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const id = Number(req.params.id);
-  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { vehiculo: { select: { sucursalId: true } } } });
+  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { vehiculo: { select: { sucursalId: true } }, plan: true } });
   if (!existente) throw new AppError("Mensualidad no encontrada", 404);
   if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
 
@@ -221,7 +216,8 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
   const ahora = new Date();
   // El nuevo periodo comienza después del anterior; se conserva la mensualidad histórica y sus facturas.
   const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin.getTime() + 1) : ahora;
-  const fechaFin = sumarMesesConTope(fechaInicio, 1);
+  const fechaFin = new Date(fechaInicio);
+  fechaFin.setDate(fechaFin.getDate() + Math.max(1, existente.plan?.duracionDias || 30));
 
   const renovada = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
@@ -289,13 +285,11 @@ export const renovarMensualidad = asyncHandler(async (req, res) => {
       include: { cliente: true, vehiculo: true, plan: true, puesto: true },
     });
 
-    if (fechaInicio <= ahora && actual.puestoId) {
-      if (!ingreso) {
-        await tx.ingreso.create({ data: { clienteId: actual.clienteId, vehiculoId: actual.vehiculoId, puestoId: actual.puestoId } });
-      }
-      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: "OCUPADO" } });
-    } else if (actual.puestoId && actual.fechaFin <= ahora && !ingreso) {
-      await tx.puesto.update({ where: { id: actual.puestoId }, data: { estado: "RESERVADO" } });
+    if (actual.puestoId) {
+      await tx.puesto.update({
+        where: { id: actual.puestoId },
+        data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
+      });
     }
     if (actual.fechaFin < ahora && actual.estado === "ACTIVA") {
       await tx.mensualidad.update({ where: { id }, data: { estado: "VENCIDA" } });
@@ -593,7 +587,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
 
     const pagos = await tx.factura.aggregate({
       _sum: { valor: true },
-      where: { mensualidadId: mensualidad.id, createdAt: { gte: mensualidad.fechaInicio }, metodoPago: { not: null } },
+      where: { mensualidadId: mensualidad.id, createdAt: { gte: mensualidad.fechaInicio }, metodoPago: { not: null }, anulada: false },
     });
     const saldoPendiente = Math.max(0, mensualidad.valor - (pagos._sum.valor || 0));
     const montoPagado = monto !== undefined ? Number(monto) : saldoPendiente;
@@ -654,6 +648,16 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
           sucursalId: mensualidad.sucursalId,
         },
       });
+      if (mensualidad.puestoId) {
+        const ingresoFisico = await tx.ingreso.findFirst({
+          where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVO" },
+          select: { id: true },
+        });
+        await tx.puesto.update({
+          where: { id: mensualidad.puestoId },
+          data: { estado: ingresoFisico ? "OCUPADO" : "RESERVADO" },
+        });
+      }
     }
 
     return {
