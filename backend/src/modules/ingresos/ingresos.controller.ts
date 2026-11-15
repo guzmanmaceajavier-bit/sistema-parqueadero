@@ -91,6 +91,12 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (!vehiculo.estado) throw new AppError("El vehículo está inactivo", 400);
   const sucursalOperativa = vehiculo.sucursalId ?? sucursalId ?? null;
 
+  const placa = req.body.placa || vehiculo.placa;
+  const existenteActivo = await prisma.ingreso.findFirst({
+    where: { vehiculoId, estado: "ACTIVO" },
+  });
+  if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
+
   let reservaVinculada = await service.buscarReservaActiva(clienteId, vehiculoId, sucursalOperativa);
   let planDetectado = await prisma.mensualidad.findFirst({
     where: {
@@ -128,11 +134,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     throw new AppError(`El puesto ${puesto.codigo} no admite vehículos de tipo ${vehiculo.tipo || "desconocido"}`, 400);
   }
 
-  const placa = req.body.placa || vehiculo.placa;
-  const existenteActivo = await prisma.ingreso.findFirst({
-    where: { vehiculoId: vehiculoId, estado: "ACTIVO" },
-  });
-  if (existenteActivo) throw new AppError(`El vehículo con placa ${placa} ya se encuentra dentro del parqueadero`, 400);
+
 
   const ingreso = await prisma.$transaction(async (tx) => {
     // Bloqueos transaccionales por vehículo y puesto: serializan intentos simultáneos.
