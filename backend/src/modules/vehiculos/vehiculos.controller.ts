@@ -215,6 +215,14 @@ export const actualizarVehiculo = asyncHandler(async (req, res) => {
   }
 
   const vehiculo = await prisma.vehiculo.update({ where: { id: Number(id) }, data, include: { cliente: true, plan: true, tarifa: true } });
+  if (Object.keys(data).length > 0) {
+    await registrarMovimiento(
+      "VEHICULOS",
+      "ACTUALIZAR",
+      `Ficha del vehículo ${vehiculo.placa} actualizada`,
+      req.usuario?.usuario || "admin",
+    );
+  }
   res.json({ ok: true, vehiculo });
 });
 
