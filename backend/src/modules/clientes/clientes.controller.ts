@@ -3,7 +3,7 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
-import { redondearDinero, sumarDinero } from "../../utils/dinero.js";
+import { redondearDinero, sumarDinero, restarDinero } from "../../utils/dinero.js";
 
 export const crearCliente = asyncHandler(async (req, res) => {
   let { nombres, apellidos, documento, telefono, direccion, email, observaciones, estado, deseaReservar } = req.body;
@@ -369,14 +369,17 @@ export const perfilCliente = asyncHandler(async (req, res) => {
   todosIngresos.sort((a, b) => new Date(b.fechaEntrada).getTime() - new Date(a.fechaEntrada).getTime());
 
   // Las facturas anuladas no representan ingresos ni pagos efectivos.
-  const totalGastado = todosIngresos.reduce((sum, i) => sum + (i.facturas || []).filter(f => !f.anulada).reduce((subtotal, factura) => subtotal + (factura.valor || 0), 0), 0);
+  const totalGastado = redondearDinero(todosIngresos.reduce((sum, i) => sumarDinero(
+    sum,
+    ...(i.facturas || []).filter(f => !f.anulada).map(factura => factura.valor || 0),
+  ), 0));
   const totalVisitas = todosIngresos.length;
   const ultimaVisita = todosIngresos[0]?.fechaEntrada || null;
   const deudaPendiente = (cliente.vehiculos?.flatMap(v => v.mensualidades || []) || []).reduce((sum, m) => {
     // Solo las mensualidades ACTIVA/VENCIDA representan deuda; las CANCELADA no.
     if (!["ACTIVA", "VENCIDA"].includes(m.estado)) return sum;
     const pagado = (m.facturas || []).filter(f => !f.anulada && f.metodoPago != null && new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + f.valor, 0);
-    return sum + Math.max(0, (m.valor || 0) - pagado);
+    return sumarDinero(sum, Math.max(0, restarDinero(m.valor || 0, pagado)));
   }, 0);
 
   const pagos = [
