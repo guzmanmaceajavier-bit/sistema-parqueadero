@@ -858,6 +858,10 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     }
 
     if (!cubiertoPorPlan) {
+      // Orden de bloqueos financiero: vehículo -> puesto -> caja -> cliente.
+      // La recarga y la anulación usan caja -> cliente; tomar primero la caja
+      // evita lecturas de saldo y movimientos de libro auxiliar inconsistentes.
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
       const f = await tx.factura.create({
         data: {
           numero: String(numeroFactura),
@@ -877,6 +881,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       // El movimiento de consumo queda vinculado al número exacto de factura.
       // Así una anulación posterior devuelve solo el saldo usado en esta salida.
       if (saldoUsado > 0 && ingreso.clienteId) {
+        await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
         const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
         const saldoPrevio = redondearDinero(saldoAntes?.saldo ?? 0);
         await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
@@ -894,8 +899,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         });
       }
 
-      // Serializa el registro de la factura con el cierre y la anulación de caja.
-      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+      // El bloqueo de caja ya se tomó antes de leer/modificar saldos del cliente.
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingreso.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
       const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";
