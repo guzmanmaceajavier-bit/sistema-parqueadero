@@ -30,6 +30,16 @@ export const anularFactura = asyncHandler(async (req, res) => {
   const ahora = new Date();
 
   await prisma.$transaction(async (tx) => {
+    // Serializa la anulación con cierres de caja y evita anular dos veces la misma factura.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+    const facturaActual = await tx.factura.findUnique({
+      where: { id: factura.id },
+      select: { anulada: true },
+    });
+    if (!facturaActual || facturaActual.anulada) {
+      throw new AppError("Esta factura ya fue anulada por otra operación", 409);
+    }
+
     await tx.factura.update({
       where: { id: factura.id },
       data: { anulada: true, anuladaEn: ahora, anuladoPor: usuario, motivoAnulacion: motivo },
@@ -48,18 +58,19 @@ export const anularFactura = asyncHandler(async (req, res) => {
       } else {
         // La caja original está cerrada o no existe: se registra el reverso en la caja abierta actual.
         const cajaActual = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: factura.sucursalId ?? sucursalId ?? null } });
-        if (cajaActual) {
-          await tx.cajaMovimiento.create({
-            data: {
-              cajaId: cajaActual.id,
-              tipo: "EGRESO",
-              concepto: `Ajuste por anulación factura ${factura.numero} (motivo: ${motivo})`,
-              monto: factura.valor,
-              metodoPago: factura.metodoPago,
-              facturaId: null,
-            },
-          });
+        if (!cajaActual) {
+          throw new AppError("No hay una caja abierta en esta sucursal para registrar el reverso. Abre la caja y vuelve a anular la factura.", 409);
         }
+        await tx.cajaMovimiento.create({
+          data: {
+            cajaId: cajaActual.id,
+            tipo: "EGRESO",
+            concepto: `Ajuste por anulación factura ${factura.numero} (motivo: ${motivo})`,
+            monto: factura.valor,
+            metodoPago: factura.metodoPago,
+            facturaId: null,
+          },
+        });
       }
     }
 
