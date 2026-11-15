@@ -5,6 +5,12 @@ import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { normalizarMonto } from "../../utils/dinero.js";
 
+function validarMinutosTarifa(valor: unknown, etiqueta: string): number {
+  const minutos = Number(valor ?? 0);
+  if (!Number.isSafeInteger(minutos) || minutos < 0) throw new AppError(`${etiqueta} debe ser un entero no negativo`, 400);
+  return minutos;
+}
+
 function validarMontoTarifa(valor: unknown, etiqueta: string, obligatorio = false): number | null {
   if (valor == null || valor === "") {
     if (obligatorio) throw new AppError(`${etiqueta} es requerido`, 400);
@@ -55,8 +61,8 @@ export const crearTarifa = asyncHandler(async (req, res) => {
       tipoVehiculo: tipos.join(","),
       modalidad: modalidadNormalizada,
       valor: val,
-      minutosCortesia: minutosCortesia ?? 0,
-      minutosGratis: minutosGratis ?? 0,
+      minutosCortesia: validarMinutosTarifa(minutosCortesia, "Los minutos de cortesía"),
+      minutosGratis: validarMinutosTarifa(minutosGratis, "Los minutos gratis"),
       precioPrimeraHora: primeraHora,
       precioHoraAdicional: horaAdicional,
       tarifaMaximaDiaria: maximoDiario,
@@ -129,16 +135,8 @@ export const actualizarTarifa = asyncHandler(async (req, res) => {
   if (modalidad !== undefined) data.modalidad = modalidadFinal;
 
   if (valor !== undefined) data.valor = validarMontoTarifa(valor, "El valor de la tarifa", true);
-  if (minutosCortesia !== undefined) {
-    const n = Number(minutosCortesia);
-    if (!Number.isSafeInteger(n) || n < 0) throw new AppError("Los minutos de cortesía deben ser un entero no negativo", 400);
-    data.minutosCortesia = n;
-  }
-  if (minutosGratis !== undefined) {
-    const n = Number(minutosGratis);
-    if (!Number.isSafeInteger(n) || n < 0) throw new AppError("Los minutos gratis deben ser un entero no negativo", 400);
-    data.minutosGratis = n;
-  }
+  if (minutosCortesia !== undefined) data.minutosCortesia = validarMinutosTarifa(minutosCortesia, "Los minutos de cortesía");
+  if (minutosGratis !== undefined) data.minutosGratis = validarMinutosTarifa(minutosGratis, "Los minutos gratis");
   if (precioPrimeraHora !== undefined) data.precioPrimeraHora = validarMontoTarifa(precioPrimeraHora, "El precio de la primera hora");
   if (precioHoraAdicional !== undefined) data.precioHoraAdicional = validarMontoTarifa(precioHoraAdicional, "El precio de la hora adicional");
   if (tarifaMaximaDiaria !== undefined) data.tarifaMaximaDiaria = validarMontoTarifa(tarifaMaximaDiaria, "La tarifa máxima diaria");
@@ -153,6 +151,7 @@ export const actualizarTarifa = asyncHandler(async (req, res) => {
 
   const tipos = tipoFinal.split(",").map((t: string) => t.trim()).filter(Boolean);
   if (!tipos.length) throw new AppError("Selecciona al menos un tipo de vehículo", 400);
+  if (tipoVehiculo !== undefined) data.tipoVehiculo = tipos.join(",");
   if (activaFinal) {
     const duplicada = await prisma.tarifa.findFirst({
       where: {
