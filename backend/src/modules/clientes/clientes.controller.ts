@@ -3,6 +3,7 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { redondearDinero, sumarDinero } from "../../utils/dinero.js";
 
 export const crearCliente = asyncHandler(async (req, res) => {
   let { nombres, apellidos, documento, telefono, direccion, email, observaciones, estado, deseaReservar } = req.body;
@@ -417,10 +418,12 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { monto } = req.body;
 
-  const montoNormalizado = Number(monto);
-  if (!Number.isFinite(montoNormalizado) || montoNormalizado <= 0) {
+  const montoIngresado = Number(monto);
+  if (!Number.isFinite(montoIngresado) || montoIngresado <= 0) {
     throw new AppError("El monto debe ser un número válido mayor a 0", 400);
   }
+  const montoNormalizado = redondearDinero(montoIngresado);
+  if (montoNormalizado <= 0) throw new AppError("El monto debe ser al menos 0,01", 400);
 
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
   const existe = await prisma.cliente.findFirst({
@@ -456,7 +459,7 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
       select: { saldo: true },
     });
     if (!saldoAntes) throw new AppError("Cliente no encontrado", 404);
-    const saldoPrevio = saldoAntes.saldo ?? 0;
+    const saldoPrevio = redondearDinero(saldoAntes.saldo ?? 0);
 
     const actualizado = await tx.cliente.update({
       where: { id: Number(id) },
@@ -469,7 +472,7 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
         tipo: "RECARGA",
         monto: montoNormalizado,
         saldoAntes: saldoPrevio,
-        saldoDespues: saldoPrevio + montoNormalizado,
+        saldoDespues: sumarDinero(saldoPrevio, montoNormalizado),
         concepto: "Recarga de saldo",
         usuario: req.usuario?.usuario || "admin",
       },
@@ -500,7 +503,8 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
  */
 export const ajustarSaldo = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  const diferencia = Number(req.body?.monto);
+  const diferenciaIngresada = Number(req.body?.monto);
+  const diferencia = Number.isFinite(diferenciaIngresada) ? redondearDinero(diferenciaIngresada) : diferenciaIngresada;
   const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
   if (!Number.isSafeInteger(id) || id <= 0) throw new AppError("Cliente no válido", 400);
   if (!Number.isFinite(diferencia) || diferencia === 0) throw new AppError("El ajuste debe ser un valor numérico distinto de cero", 400);
@@ -526,8 +530,8 @@ export const ajustarSaldo = asyncHandler(async (req, res) => {
     await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${id} FOR UPDATE`;
     const cliente = await tx.cliente.findUnique({ where: { id }, select: { id: true, nombres: true, apellidos: true, saldo: true } });
     if (!cliente) throw new AppError("Cliente no encontrado", 404);
-    const saldoAntes = cliente.saldo ?? 0;
-    const saldoDespues = saldoAntes + diferencia;
+    const saldoAntes = redondearDinero(cliente.saldo ?? 0);
+    const saldoDespues = sumarDinero(saldoAntes, diferencia);
     if (saldoDespues < 0) throw new AppError("El ajuste no puede dejar el saldo del cliente por debajo de cero", 409);
 
     const actualizado = await tx.cliente.update({ where: { id }, data: { saldo: saldoDespues } });
@@ -535,7 +539,7 @@ export const ajustarSaldo = asyncHandler(async (req, res) => {
       data: {
         clienteId: id,
         tipo: "AJUSTE",
-        monto: Math.abs(diferencia),
+        monto: redondearDinero(Math.abs(diferencia)),
         saldoAntes,
         saldoDespues,
         concepto: motivo,
