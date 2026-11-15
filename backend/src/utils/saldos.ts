@@ -1,8 +1,8 @@
-import { aCentavos, desdeCentavos } from "./dinero.js";
+import { aCentavos, desdeCentavos, type Importe } from "./dinero.js";
 
 export interface FacturaMensualidad {
   createdAt: Date;
-  valor: number;
+  valor: Importe;
   metodoPago: string | null;
   anulada?: boolean;
 }
