@@ -5,6 +5,7 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+import { restarDinero } from "../../utils/dinero.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 /** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
@@ -172,7 +173,7 @@ export const obtenerMensualidades = asyncHandler(async (req, res) => {
 
   const result = mensualidades.map((m) => {
     const pagadoPeriodo = calcularPagadoMensualidad(m.facturas, m.fechaInicio);
-    return { ...m, saldoPendiente: Math.max(0, m.valor - pagadoPeriodo), ausente: activasSet.has(m.vehiculoId) };
+    return { ...m, saldoPendiente: Math.max(0, restarDinero(m.valor, pagadoPeriodo)), ausente: activasSet.has(m.vehiculoId) };
   });
 
   res.json({ ok: true, mensualidades: result, pagination });
@@ -190,7 +191,7 @@ export const obtenerMensualidad = asyncHandler(async (req, res) => {
     where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVA" },
   }) : null;
   const pagadoPeriodo = calcularPagadoMensualidad(mensualidad.facturas, mensualidad.fechaInicio);
-  res.json({ ok: true, mensualidad: { ...mensualidad, saldoPendiente: Math.max(0, mensualidad.valor - pagadoPeriodo), ausente: !!ausenciaActiva, ausencia: ausenciaActiva } });
+  res.json({ ok: true, mensualidad: { ...mensualidad, saldoPendiente: Math.max(0, restarDinero(mensualidad.valor, pagadoPeriodo)), ausente: !!ausenciaActiva, ausencia: ausenciaActiva } });
 });
 
 export const obtenerVencidas = asyncHandler(async (req, res) => {
