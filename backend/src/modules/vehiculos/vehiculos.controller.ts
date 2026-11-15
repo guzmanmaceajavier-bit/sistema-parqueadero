@@ -129,6 +129,7 @@ export const obtenerVehiculo = asyncHandler(async (req, res) => {
         clienteId: vehiculo.clienteId,
         desde: vehiculo.createdAt,
         hasta: null,
+        createdAt: vehiculo.createdAt,
         cliente: vehiculo.cliente,
       }];
   res.json({
