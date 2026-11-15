@@ -161,7 +161,7 @@ export const restaurarBackup = asyncHandler(async (req, res) => {
     ];
     for (const tabla of tablasConSecuencia) {
       await tx.$queryRawUnsafe(
-        `SELECT setval(pg_get_serial_sequence('"\${tabla}"', 'id'), COALESCE((SELECT MAX("id") FROM "\${tabla}"), 1), EXISTS(SELECT 1 FROM "\${tabla}"))`
+        `SELECT setval(pg_get_serial_sequence('"${tabla}"', 'id'), COALESCE((SELECT MAX("id") FROM "${tabla}"), 1), EXISTS(SELECT 1 FROM "${tabla}"))`
       );
     }
   });
