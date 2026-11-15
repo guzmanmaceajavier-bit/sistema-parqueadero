@@ -121,4 +121,3 @@ jobs:
           if [[ -f /tmp/parqueadero-api.pid ]]; then
             kill "$(cat /tmp/parqueadero-api.pid)" 2>/dev/null || true
           fi
-          pkill -f 'tsx src/app.ts' 2>/dev/null || true
