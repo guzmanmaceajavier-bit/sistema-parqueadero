@@ -78,10 +78,60 @@ export const obtenerVehiculo = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const vehiculo = await prisma.vehiculo.findFirst({
     where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
-    include: { cliente: true },
+    include: {
+      cliente: { select: { id: true, nombres: true, apellidos: true, documento: true, telefono: true, email: true } },
+      propietarios: {
+        include: { cliente: { select: { id: true, nombres: true, apellidos: true, documento: true } } },
+        orderBy: { desde: "desc" },
+      },
+      ingresos: {
+        select: {
+          id: true, fechaEntrada: true, fechaSalida: true, estado: true,
+          tiempoMinutos: true, valorPagado: true, ticketExtraviado: true,
+          puesto: { select: { id: true, codigo: true } },
+        },
+        orderBy: { fechaEntrada: "desc" },
+        take: 50,
+      },
+      mensualidades: {
+        select: {
+          id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true,
+          observacion: true, plan: { select: { id: true, nombre: true } },
+          puesto: { select: { id: true, codigo: true } },
+        },
+        orderBy: { fechaInicio: "desc" },
+        take: 50,
+      },
+      ausencias: {
+        select: {
+          id: true, fechaSalida: true, fechaRegreso: true, motivo: true, estado: true,
+          opcion: true, diasCompensados: true, valorCompensado: true, compensacionDetalle: true,
+        },
+        orderBy: { fechaSalida: "desc" },
+        take: 50,
+      },
+      reservas: {
+        select: {
+          id: true, fechaReserva: true, fechaInicio: true, fechaFin: true, estado: true,
+          observaciones: true, puesto: { select: { id: true, codigo: true } },
+        },
+        orderBy: { fechaInicio: "desc" },
+        take: 50,
+      },
+    },
   });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
-  res.json({ ok: true, vehiculo });
+  res.json({
+    ok: true,
+    vehiculo,
+    historial: {
+      propietarios: vehiculo.propietarios,
+      ingresos: vehiculo.ingresos,
+      mensualidades: vehiculo.mensualidades,
+      ausencias: vehiculo.ausencias,
+      reservas: vehiculo.reservas,
+    },
+  });
 });
 
 export const actualizarVehiculo = asyncHandler(async (req, res) => {
