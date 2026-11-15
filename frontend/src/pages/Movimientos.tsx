@@ -46,7 +46,7 @@ export default function Movimientos() {
           <p className="text-slate-500 dark:text-slate-400 mt-1">Historial de auditoría del sistema — solo lectura</p>
         </div>
         <div className="flex gap-3">
-          <ExportButton data={movimientos.map(m => ({ Fecha: new Date(m.createdAt).toLocaleString("es-CO"), Modulo: m.modulo, Accion: m.accion, Descripcion: m.descripcion || "", Usuario: m.usuario || "" }))} filename="movimientos" title="Movimientos" columns={[{ key: 'Fecha', label: 'Fecha' }, { key: 'Modulo', label: 'Módulo' }, { key: 'Accion', label: 'Acción' }, { key: 'Descripcion', label: 'Descripción' }, { key: 'Usuario', label: 'Usuario' }]} />
+          <ExportButton data={movimientos.map(m => ({ Fecha: new Date(m.createdAt).toLocaleString("es-CO"), Modulo: m.modulo, Accion: m.accion, Descripcion: m.descripcion || "", Usuario: m.actor?.nombre || m.actor?.usuario || m.usuario || "Sistema", Sucursal: m.sucursal?.nombre || "Global" }))} filename="movimientos" title="Movimientos" columns={[{ key: 'Fecha', label: 'Fecha' }, { key: 'Modulo', label: 'Módulo' }, { key: 'Accion', label: 'Acción' }, { key: 'Descripcion', label: 'Descripción' }, { key: 'Usuario', label: 'Usuario' }, { key: 'Sucursal', label: 'Sucursal' }]} />
         </div>
       </div>
 
@@ -67,7 +67,7 @@ export default function Movimientos() {
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Módulo</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Acción</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Descripción</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Usuario</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-300 dark:text-slate-300 uppercase">Usuario / Sucursal</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -80,7 +80,7 @@ export default function Movimientos() {
                     <td className="px-4 py-3.5"><span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border bg-teal-50 dark:bg-emerald-900/20 text-teal-700 dark:text-emerald-400 border-teal-200 dark:border-emerald-800 capitalize">{m.modulo}</span></td>
                     <td className="px-4 py-3.5"><span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 capitalize">{m.accion}</span></td>
                     <td className="px-4 py-3.5 text-sm text-slate-600 dark:text-slate-300">{m.descripcion}</td>
-                    <td className="px-4 py-3.5 text-sm text-slate-600 dark:text-slate-300">{m.usuario || "—"}</td>
+                    <td className="px-4 py-3.5"><p className="text-sm font-medium text-slate-700 dark:text-slate-200">{m.actor?.nombre || m.actor?.usuario || m.usuario || "Sistema"}</p><p className="text-xs text-slate-400 dark:text-slate-500">{m.actor?.rol || "Automático"} · {m.sucursal?.nombre || "Global"}</p></td>
                   </tr>
                 ))
               )}
