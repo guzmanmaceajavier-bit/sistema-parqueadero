@@ -179,6 +179,10 @@ export default function Clientes() {
   const [recargaCli, setRecargaCli] = useState(null);
   const [recargaMonto, setRecargaMonto] = useState("");
   const [recargando, setRecargando] = useState(false);
+  const [ajusteCli, setAjusteCli] = useState(null);
+  const [ajusteMonto, setAjusteMonto] = useState("");
+  const [ajusteMotivo, setAjusteMotivo] = useState("");
+  const [ajustando, setAjustando] = useState(false);
 
   const vehiculoVacio = { placa: "", tipo: "", clase: "", marca: "", color: "", observaciones: "" };
 
@@ -485,6 +489,25 @@ export default function Clientes() {
     } finally { setRecargando(false); }
   };
 
+  const ajustarSaldo = async () => {
+    const monto = Number(ajusteMonto);
+    if (!ajusteCli || !Number.isFinite(monto) || monto === 0 || !ajusteMotivo.trim()) return;
+    setAjustando(true);
+    try {
+      await api.post(`/clientes/${ajusteCli.id}/ajustar-saldo`, {
+        monto,
+        motivo: ajusteMotivo.trim(),
+      });
+      mostrarToast("Ajuste de saldo registrado correctamente", "success");
+      setAjusteCli(null);
+      setAjusteMonto("");
+      setAjusteMotivo("");
+      cargarClientes();
+    } catch (err) {
+      mostrarToast(err.response?.data?.message || "Error al ajustar el saldo", "error");
+    } finally { setAjustando(false); }
+  };
+
   const confirmarEliminar = async (id) => {
     const cliente = clientes.find(c => c.id === id);
     const nombre = cliente ? `${cliente.nombres} ${cliente.apellidos}` : "este cliente";
@@ -715,6 +738,9 @@ export default function Clientes() {
                       {isAdmin && (
                         <button onClick={() => { setRecargaCli(cliente); setRecargaMonto(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-emerald-600" title="Recargar saldo">
                           <Plus className="w-3 h-3 inline" />
+                        </button>
+                        <button onClick={() => { setAjusteCli(cliente); setAjusteMonto(""); setAjusteMotivo(""); }} className="ml-1 p-0.5 rounded text-slate-400 hover:text-amber-600" title="Ajustar saldo">
+                          <Pencil className="w-3 h-3 inline" />
                         </button>
                       )}
                     </td>
@@ -1262,9 +1288,43 @@ export default function Clientes() {
         </div>
       )}
 
+      {/* Modal de ajuste administrativo de saldo */}
+      {ajusteCli && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => !ajustando && setAjusteCli(null)} />
+          <div className="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 overflow-hidden animate-modal-in">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Ajustar saldo</h3>
+              <button onClick={() => setAjusteCli(null)} disabled={ajustando} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><IconX /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Cliente: <strong className="text-slate-800 dark:text-white">{ajusteCli.nombres} {ajusteCli.apellidos}</strong>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Saldo actual: <strong className="text-emerald-600 dark:text-emerald-400">${(ajusteCli.saldo || 0).toLocaleString()}</strong></p>
+              <div>
+                <label className={labelClass}>Diferencia ($)</label>
+                <input type="number" step="0.01" placeholder="Ej. 15000 o -5000" value={ajusteMonto} onChange={(e) => setAjusteMonto(e.target.value)} className={inputClass} />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Usa un valor positivo para aumentar o negativo para disminuir el saldo. No registra efectivo en caja.</p>
+              </div>
+              <div>
+                <label className={labelClass}>Motivo del ajuste</label>
+                <textarea rows={3} maxLength={255} value={ajusteMotivo} onChange={(e) => setAjusteMotivo(e.target.value)} className={inputClass} placeholder="Explica por qué se realiza el ajuste" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4 border-t border-slate-200 dark:border-slate-700">
+              <button onClick={() => setAjusteCli(null)} disabled={ajustando} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">Cancelar</button>
+              <button disabled={!ajusteMonto || Number(ajusteMonto) === 0 || !ajusteMotivo.trim() || ajustando} onClick={ajustarSaldo} className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50">
+                {ajustando ? "Guardando..." : "Registrar ajuste"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
       <ConfirmDialog abierto={confirm.abierto} titulo={confirm.titulo} mensaje={confirm.mensaje} confirmLabel={confirm.confirmLabel} soloAceptar={confirm.soloAceptar} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, abierto: false }))} />
-      <ScrollLock cuando={mostrarModal || !!renovarCli || !!recargaCli} />
+      <ScrollLock cuando={mostrarModal || !!renovarCli || !!recargaCli || !!ajusteCli} />
     </div>
   );
 }
