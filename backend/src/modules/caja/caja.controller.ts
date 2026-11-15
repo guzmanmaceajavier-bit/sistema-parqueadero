@@ -171,10 +171,11 @@ export const actualizarCaja = asyncHandler(async (req, res) => {
 
     const data: any = {};
     if (apertura !== undefined) {
-      const aperturaNormalizada = redondearDinero(Number(apertura));
-      if (!Number.isFinite(aperturaNormalizada) || aperturaNormalizada < 0) {
+      const aperturaIngresada = Number(apertura);
+      if (!Number.isFinite(aperturaIngresada) || aperturaIngresada < 0) {
         throw new AppError("El fondo de apertura debe ser un valor válido y no negativo", 400);
       }
+      const aperturaNormalizada = redondearDinero(aperturaIngresada);
       if (existente.estado !== "ABIERTA") {
         throw new AppError("No se puede modificar el fondo de apertura de una caja cerrada", 409);
       }
