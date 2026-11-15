@@ -162,6 +162,7 @@ model Puesto {
   zona          String?
   ingresos      Ingreso[]
   mensualidades Mensualidad[]
+  ausencias     Ausencia[]
   sucursal      Sucursal?     @relation(fields: [sucursalId], references: [id])
   reservas      Reserva[]
 
@@ -279,6 +280,7 @@ model Mensualidad {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   facturas    Factura[]
+  ausencias   Ausencia[]
   cliente     Cliente   @relation(fields: [clienteId], references: [id])
   plan        Plan?     @relation(fields: [planId], references: [id])
   puesto      Puesto?   @relation(fields: [puestoId], references: [id])
@@ -374,20 +376,28 @@ model PushSubscription {
 }
 
 model Ausencia {
-  id           Int       @id @default(autoincrement())
-  clienteId    Int
-  vehiculoId   Int
-  fechaSalida  DateTime
-  fechaRegreso DateTime?
-  motivo       String?
-  estado       String    @default("ACTIVA")
-  sucursalId   Int?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  opcion       String    @default("HISTORIAL")
-  cliente      Cliente   @relation(fields: [clienteId], references: [id])
-  sucursal     Sucursal? @relation(fields: [sucursalId], references: [id])
-  vehiculo     Vehiculo  @relation(fields: [vehiculoId], references: [id])
+  id                     Int          @id @default(autoincrement())
+  clienteId              Int
+  vehiculoId             Int
+  puestoId               Int?
+  mensualidadId          Int?
+  fechaSalida            DateTime
+  fechaRegreso           DateTime?
+  motivo                 String?
+  estado                 String       @default("ACTIVA")
+  sucursalId             Int?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  opcion                 String       @default("HISTORIAL")
+  diasCompensados        Int          @default(0)
+  valorCompensado        Float        @default(0)
+  compensacionDetalle    String?
+  compensacionAplicadaAt DateTime?
+  cliente                Cliente      @relation(fields: [clienteId], references: [id])
+  sucursal               Sucursal?    @relation(fields: [sucursalId], references: [id])
+  vehiculo               Vehiculo     @relation(fields: [vehiculoId], references: [id])
+  puesto                 Puesto?      @relation(fields: [puestoId], references: [id])
+  mensualidad            Mensualidad? @relation(fields: [mensualidadId], references: [id])
 }
 
 model Sucursal {
