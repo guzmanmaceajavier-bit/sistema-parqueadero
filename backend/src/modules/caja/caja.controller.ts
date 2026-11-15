@@ -11,8 +11,9 @@ import { redondearDinero, sumarDinero, restarDinero } from "../../utils/dinero.j
 export const abrirCaja = asyncHandler(async (req, res) => {
   const { apertura, password, observacion } = req.body;
   const sucursalId = resolverSucursalPermitida(req.usuario, req.body.sucursalId);
-  const aperturaNormalizada = redondearDinero(Number(apertura));
-  if (!Number.isFinite(aperturaNormalizada) || aperturaNormalizada < 0) throw new AppError("El fondo de apertura debe ser válido y no negativo", 400);
+  const aperturaIngresada = Number(apertura);
+  if (!Number.isFinite(aperturaIngresada) || aperturaIngresada < 0) throw new AppError("El fondo de apertura debe ser válido y no negativo", 400);
+  const aperturaNormalizada = redondearDinero(aperturaIngresada);
 
   const caja = await prisma.$transaction(async (tx) => {
     // Serializa aperturas para evitar que dos solicitudes creen cajas abiertas simultáneas.
