@@ -156,7 +156,7 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     // Relee reservas y mensualidades dentro del bloqueo: los datos consultados antes
     // de abrir la transacción podrían haber cambiado mientras se esperaba el puesto.
     const ahora = new Date();
-    const [reservaActual, mensualidadActual, ausenciaActualConPuesto] = await Promise.all([
+    const [reservaActual, mensualidadActual] = await Promise.all([
       tx.reserva.findFirst({
         where: {
           clienteId,
@@ -179,11 +179,14 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
         },
         include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       }),
-      tx.ausencia.findFirst({
-        where: { vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null } },
-        orderBy: { fechaRegreso: "desc" },
-      }),
     ]);
+    const ausenciaActualConPuesto = mensualidadActual ? await tx.ausencia.findFirst({
+      where: {
+        vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null },
+        OR: [{ mensualidadId: mensualidadActual.id }, { mensualidadId: null }],
+      },
+      orderBy: { fechaRegreso: "desc" },
+    }) : null;
 
     // No bloqueamos el reingreso por saldo pendiente: se conserva la deuda
     // del plan, pero no se genera una tarifa diaria adicional por el mismo servicio.
