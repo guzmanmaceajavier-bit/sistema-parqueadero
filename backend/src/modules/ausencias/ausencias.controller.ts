@@ -485,7 +485,7 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
           data: {
             fechaFin: nuevaFechaFin,
             estado: "ACTIVA",
-            observacion: [mensualidad.observacion, `Ausencia #${id}: ${ausencia.opcion.toLowerCase()} de ${dias} día(s), ${ahora.toISOString()}`].filter(Boolean).join("\\n").slice(0, 2000),
+            observacion: [mensualidad.observacion, `Ausencia #${id}: ${ausencia.opcion.toLowerCase()} de ${dias} día(s), ${ahora.toISOString()}`].filter(Boolean).join("\n").slice(0, 2000),
           },
         });
         mensaje = `Regreso registrado. Mensualidad compensada ${dias} día(s); nueva fecha de vencimiento: ${nuevaFechaFin.toLocaleDateString("es-CO")}.`;
@@ -506,7 +506,7 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
           where: { id: mensualidad.id },
           data: {
             valor: Math.max(pagado, restarDinero(mensualidad.valor, reduccion)),
-            observacion: [mensualidad.observacion, `Ausencia #${id}: descuento de deuda por ${reduccion.toLocaleString("es-CO")}`].filter(Boolean).join("\\n").slice(0, 2000),
+            observacion: [mensualidad.observacion, `Ausencia #${id}: descuento de deuda por ${reduccion.toLocaleString("es-CO")}`].filter(Boolean).join("\n").slice(0, 2000),
           },
         });
       }
