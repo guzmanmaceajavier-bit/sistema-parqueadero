@@ -7,6 +7,7 @@ import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { calcularCobro } from "../../services/calculadorCobros.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
 import { redondearDinero, restarDinero } from "../../utils/dinero.js";
+import { emitirEvento } from "../../services/socket.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
   const { clienteId, vehiculoId, fechaSalida, fechaRegreso, motivo, opcion } = req.body;
@@ -564,6 +565,15 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
   });
 
   await registrarMovimiento("AUSENCIAS", "REGRESO", `Regreso de ausencia #${id} — vehículo ${resultado.ingreso.vehiculo.placa}, puesto ${resultado.ingreso.puesto.codigo}`, req.usuario?.usuario || "admin");
+  await registrarMovimiento("INGRESOS", "ENTRADA", `Vehículo ${resultado.ingreso.vehiculo.placa} regresó de ausencia al puesto ${resultado.ingreso.puesto.codigo}`, req.usuario?.usuario || "admin");
+  emitirEvento("ingreso:entrada", {
+    mensaje: `Vehículo ${resultado.ingreso.vehiculo.placa} regresó y ocupó el puesto ${resultado.ingreso.puesto.codigo}`,
+    cliente: resultado.ingreso.cliente,
+    vehiculo: resultado.ingreso.vehiculo,
+    puesto: resultado.ingreso.puesto,
+    fecha: resultado.ingreso.fechaEntrada,
+    tipoIngreso: "regreso_ausencia",
+  });
   res.status(201).json({ ok: true, ...resultado, mensaje });
 });
 
