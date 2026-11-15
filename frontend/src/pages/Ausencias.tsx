@@ -17,9 +17,9 @@ const ESTADOS = [
 ];
 
 const OPCIONES_AUSENCIA = [
-  { value: "EXTENDER", label: "Extender vencimiento", desc: "Extiende la fecha fin de la mensualidad", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" },
-  { value: "DESCONTAR", label: "Descontar días", desc: "Descuenta del valor de la mensualidad", color: "bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400" },
-  { value: "CONGELAR", label: "Congelar mensualidad", desc: "Pausa la mensualidad y extiende fecha fin", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400" },
+  { value: "EXTENDER", label: "Extender vencimiento", desc: "Permite indicar cuántos días adicionales se reconocen al regresar", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" },
+  { value: "DESCONTAR", label: "Descontar días", desc: "Reduce primero la deuda pendiente y acredita el excedente al saldo a favor; no realiza devolución en efectivo", color: "bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400" },
+  { value: "CONGELAR", label: "Congelar mensualidad", desc: "Reconoce automáticamente todos los días de ausencia y extiende el vencimiento", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400" },
   { value: "MANTENER", label: "Mantener cobro normal", desc: "El cliente sigue pagando normal", color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" },
   { value: "HISTORIAL", label: "Solo historial", desc: "Solo se registra, sin cambios en mensualidad", color: "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300" },
 ];
@@ -67,7 +67,7 @@ export default function Ausencias() {
   const [confirm, setConfirm] = useState({ abierto: false, titulo: "", mensaje: "", onConfirm: () => {} });
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({
-    clienteId: "", vehiculoId: "", fechaSalida: "", fechaRegreso: "", motivo: "", opcion: "HISTORIAL",
+    clienteId: "", vehiculoId: "", fechaSalida: "", fechaRegreso: "", motivo: "", opcion: "CONGELAR",
   });
 
   const cargarDatos = async () => {
@@ -93,7 +93,7 @@ export default function Ausencias() {
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const resetForm = () => {
-    setForm({ clienteId: "", vehiculoId: "", fechaSalida: "", fechaRegreso: "", motivo: "", opcion: "HISTORIAL" });
+    setForm({ clienteId: "", vehiculoId: "", fechaSalida: "", fechaRegreso: "", motivo: "", opcion: "CONGELAR" });
     setEditando(null);
   };
 
@@ -128,9 +128,20 @@ export default function Ausencias() {
     }
   };
 
-  const handleFinalizar = async (id) => {
+  const handleFinalizar = async (ausencia) => {
     try {
-      const res = await api.put(`/ausencias/finalizar/${id}`);
+      let datosCompensacion = {};
+      if (ausencia.opcion === "EXTENDER") {
+        const dias = window.prompt("¿Cuántos días deseas agregar al vencimiento?", String(calcDias(ausencia)));
+        if (dias === null) return;
+        const numeroDias = Number(dias);
+        if (!Number.isInteger(numeroDias) || numeroDias < 0 || numeroDias > 365) {
+          mostrarToast("Ingresa un número entero entre 0 y 365", "error");
+          return;
+        }
+        datosCompensacion = { diasCompensacion: numeroDias };
+      }
+      const res = await api.put(`/ausencias/finalizar/${ausencia.id}`, datosCompensacion);
       cargarDatos();
       mostrarToast(res.data?.mensaje || "Ausencia finalizada", "success");
     } catch (error) {
@@ -177,7 +188,7 @@ export default function Ausencias() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><IconAusencia /> Ausencias</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Registro de ausencias de clientes</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Control de salidas temporales, conservación del puesto y compensación de mensualidades</p>
         </div>
         <div className="flex gap-2">
           <ExportButton data={ausencias.map(a => ({ Cliente: `${a.cliente?.nombres || ""} ${a.cliente?.apellidos || ""}`.trim(), Vehiculo: a.vehiculo?.placa || "", "Fecha Salida": a.fechaSalida ? new Date(a.fechaSalida).toLocaleString("es-CO") : "", "Fecha Regreso": a.fechaRegreso ? new Date(a.fechaRegreso).toLocaleString("es-CO") : "", Días: calcDias(a), Motivo: a.motivo || "", Opción: OPCIONES_AUSENCIA.find(o => o.value === a.opcion)?.label || a.opcion || "Historial", Estado: a.estado === "ACTIVA" ? "Activa" : "Finalizada" }))} filename="ausencias" title="Ausencias" columns={[{ key: 'Cliente', label: 'Cliente' }, { key: 'Vehiculo', label: 'Vehículo' }, { key: 'Fecha Salida', label: 'Fecha Salida' }, { key: 'Fecha Regreso', label: 'Fecha Regreso' }, { key: 'Días', label: 'Días' }, { key: 'Motivo', label: 'Motivo' }, { key: 'Opción', label: 'Opción' }, { key: 'Estado', label: 'Estado' }]} />
@@ -234,14 +245,14 @@ export default function Ausencias() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[200px] truncate">{a.motivo || "-"}</td>
-                  <td className="px-4 py-3"><OpcionBadge opcion={a.opcion} /></td>
+                  <td className="px-4 py-3"><OpcionBadge opcion={a.opcion} />{a.compensacionDetalle && <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 max-w-[220px]">{a.compensacionDetalle}</p>}</td>
                   <td className="px-4 py-3"><EstadoBadge estado={a.estado} /></td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {a.estado === "ACTIVA" && (
                           <>
                             <button onClick={() => openEdit(a)} className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" title="Editar"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg></button>
-                            <button onClick={() => handleFinalizar(a.id)} className="p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors" title="Finalizar"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg></button>
+                            <button onClick={() => handleFinalizar(a)} className="p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors" title="Finalizar"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg></button>
                           </>
                         )}
                         {isAdmin && (
