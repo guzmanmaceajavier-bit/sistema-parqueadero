@@ -121,11 +121,21 @@ export const obtenerVehiculo = asyncHandler(async (req, res) => {
     },
   });
   if (!vehiculo) throw new AppError("Vehículo no encontrado", 404);
+  const propietarios = vehiculo.propietarios.length > 0
+    ? vehiculo.propietarios
+    : [{
+        id: 0,
+        vehiculoId: vehiculo.id,
+        clienteId: vehiculo.clienteId,
+        desde: vehiculo.createdAt,
+        hasta: null,
+        cliente: vehiculo.cliente,
+      }];
   res.json({
     ok: true,
-    vehiculo,
+    vehiculo: { ...vehiculo, propietarios },
     historial: {
-      propietarios: vehiculo.propietarios,
+      propietarios,
       ingresos: vehiculo.ingresos,
       mensualidades: vehiculo.mensualidades,
       ausencias: vehiculo.ausencias,
@@ -196,6 +206,17 @@ export const actualizarVehiculo = asyncHandler(async (req, res) => {
     if (!nuevo) throw new AppError("Cliente no encontrado", 404);
 
     await prisma.$transaction(async (tx) => {
+      const propietarioActual = await tx.vehiculoPropietario.findFirst({
+        where: { vehiculoId: Number(id), hasta: null },
+        select: { id: true },
+      });
+      // Si el vehículo nunca había cambiado de dueño, registra también al
+      // propietario inicial antes de cerrar su período.
+      if (!propietarioActual) {
+        await tx.vehiculoPropietario.create({
+          data: { vehiculoId: Number(id), clienteId: existe.clienteId, desde: existe.createdAt },
+        });
+      }
       await tx.vehiculoPropietario.updateMany({
         where: { vehiculoId: Number(id), hasta: null },
         data: { hasta: new Date() },
