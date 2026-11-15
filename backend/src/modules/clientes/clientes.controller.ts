@@ -366,18 +366,19 @@ export const perfilCliente = asyncHandler(async (req, res) => {
   const todosIngresos = cliente.vehiculos.flatMap(v => v.ingresos?.map(i => ({ ...i, placa: v.placa, vehiculoId: v.id, marca: v.marca, modelo: v.modelo })) || []);
   todosIngresos.sort((a, b) => new Date(b.fechaEntrada).getTime() - new Date(a.fechaEntrada).getTime());
 
-  const totalGastado = todosIngresos.reduce((sum, i) => sum + (i.facturas || []).reduce((subtotal, factura) => subtotal + (factura.valor || 0), 0), 0);
+  // Las facturas anuladas no representan ingresos ni pagos efectivos.
+  const totalGastado = todosIngresos.reduce((sum, i) => sum + (i.facturas || []).filter(f => !f.anulada).reduce((subtotal, factura) => subtotal + (factura.valor || 0), 0), 0);
   const totalVisitas = todosIngresos.length;
   const ultimaVisita = todosIngresos[0]?.fechaEntrada || null;
   const deudaPendiente = (cliente.vehiculos?.flatMap(v => v.mensualidades || []) || []).reduce((sum, m) => {
     // Solo las mensualidades ACTIVA/VENCIDA representan deuda; las CANCELADA no.
     if (!["ACTIVA", "VENCIDA"].includes(m.estado)) return sum;
-    const pagado = (m.facturas || []).filter(f => f.metodoPago != null && new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + f.valor, 0);
+    const pagado = (m.facturas || []).filter(f => !f.anulada && f.metodoPago != null && new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + f.valor, 0);
     return sum + Math.max(0, (m.valor || 0) - pagado);
   }, 0);
 
   const pagos = [
-    ...todosIngresos.flatMap(i => (i.facturas || []).map(factura => ({
+    ...todosIngresos.flatMap(i => (i.facturas || []).filter(factura => !factura.anulada).map(factura => ({
       id: factura.id,
       fecha: factura.createdAt || i.fechaEntrada,
       concepto: `Ingreso ${i.placa || ""}`.trim(),
@@ -385,7 +386,7 @@ export const perfilCliente = asyncHandler(async (req, res) => {
       valor: factura.valor || 0,
       tipo: "ingreso",
     }))),
-    ...(cliente.vehiculos?.flatMap(v => v.mensualidades?.filter(m => m.facturas?.length > 0).flatMap(m => (m.facturas || []).map(f => ({
+    ...(cliente.vehiculos?.flatMap(v => v.mensualidades?.filter(m => m.facturas?.some(f => !f.anulada)).flatMap(m => (m.facturas || []).filter(f => !f.anulada).map(f => ({
       id: f.id,
       fecha: f.createdAt,
       concepto: `Mensualidad ${v.placa} - ${m.plan?.nombre || ""}`.trim(),
