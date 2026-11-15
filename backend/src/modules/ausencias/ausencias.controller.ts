@@ -29,6 +29,8 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     // Serializa la ausencia con entradas y salidas para que el mismo vehículo
     // no pueda cerrar dos veces su ingreso ni liberar el puesto por duplicado.
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${vid}::integer)) AS advisory_lock`;
+    const ausenciaPreviaActiva = await tx.ausencia.findFirst({ where: { vehiculoId: vid, estado: "ACTIVA" }, select: { id: true } });
+    if (ausenciaPreviaActiva) throw new AppError("El vehículo ya tiene una ausencia activa. Finalízala antes de registrar otra.", 409);
     const ingresoActivo = await tx.ingreso.findFirst({
       where: { vehiculoId: vid, estado: "ACTIVO" },
       include: { puesto: true, vehiculo: true },
@@ -123,6 +125,10 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       if (ingresoActivo.puestoId) {
         await tx.puesto.update({ where: { id: ingresoActivo.puestoId }, data: { estado: "AUSENCIA" } });
       }
+    } else if (a.puestoId) {
+      // Si se registra la ausencia cuando el vehículo ya está fuera, igualmente
+      // se conserva el puesto contractual para su regreso.
+      await tx.puesto.updateMany({ where: { id: a.puestoId, estado: "LIBRE" }, data: { estado: "RESERVADO" } });
     }
 
     return a;
@@ -350,7 +356,15 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       const ahora = new Date();
       const [ingresoActivoPuesto, mensualidadActivaPuesto, reservaActivaPuesto] = await Promise.all([
         tx.ingreso.count({ where: { puestoId: puestoAusenciaId, estado: "ACTIVO" } }),
-        tx.mensualidad.count({ where: { puestoId: puestoAusenciaId, estado: "ACTIVA", fechaFin: { gte: ahora } } }),
+        tx.mensualidad.count({
+          where: {
+            estado: "ACTIVA", fechaFin: { gte: ahora },
+            OR: [
+              { puestoId: puestoAusenciaId },
+              ...(a.mensualidadId ? [{ id: a.mensualidadId, puestoId: null }] : []),
+            ],
+          },
+        }),
         tx.reserva.count({ where: { puestoId: puestoAusenciaId, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] } }),
       ]);
       const nuevoEstado = ingresoActivoPuesto > 0 ? "OCUPADO" : mensualidadActivaPuesto > 0 || reservaActivaPuesto > 0 ? "RESERVADO" : "LIBRE";
