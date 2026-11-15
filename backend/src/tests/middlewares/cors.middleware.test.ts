@@ -30,6 +30,12 @@ describe("corsSeguro", () => {
     expect(r.next).not.toHaveBeenCalled();
   });
 
+  it("permite el mismo origen aunque no esté duplicado en CORS_ORIGINS", () => {
+    const r = ejecutar("https://parqueadero.example", "POST", "production", "", "parqueadero.example");
+    expect(r.next).toHaveBeenCalledOnce();
+    expect(r.headers["Access-Control-Allow-Origin"]).toBe("https://parqueadero.example");
+  });
+
   it("permite clientes sin Origin", () => {
     const r = ejecutar(undefined);
     expect(r.next).toHaveBeenCalledOnce();
