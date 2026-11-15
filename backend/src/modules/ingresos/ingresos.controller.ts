@@ -759,15 +759,15 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
       FOR UPDATE
     `;
-    if (cubiertoPorPlan) {
-      const facturasCobertura = await tx.factura.findMany({
-        where: { mensualidadId: { in: mensualidadesBloqueadas.map((m) => m.id) }, createdAt: { gte: mensualidadVigente!.fechaInicio }, metodoPago: { not: null }, anulada: false },
-        select: { createdAt: true, valor: true, metodoPago: true, anulada: true },
-      });
-      const pagado = calcularPagadoMensualidad(facturasCobertura, mensualidadVigente!.fechaInicio);
-      if (mensualidadesBloqueadas.length === 0 || pagado < mensualidadVigente!.valor) {
-        throw new AppError("La cobertura pagada cambió durante la operación. Vuelve a simular el cobro.", 409);
-      }
+    const planesActivosBloqueados = mensualidadesBloqueadas.length
+      ? await tx.mensualidad.findMany({
+          where: { id: { in: mensualidadesBloqueadas.map((m) => m.id) } },
+          include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
+        })
+      : [];
+    const existeCoberturaPagada = planesActivosBloqueados.some(mensualidadPagada);
+    if (existeCoberturaPagada !== cubiertoPorPlan) {
+      throw new AppError("La cobertura pagada cambió durante la operación. Vuelve a simular el cobro.", 409);
     }
 
     // Recalcula con la hora efectiva de salida tras esperar los bloqueos.
