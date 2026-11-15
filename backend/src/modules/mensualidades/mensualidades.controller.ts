@@ -423,12 +423,11 @@ export const actualizarMensualidad = asyncHandler(async (req, res) => {
     const futura = inicio > ahora;
     if (nuevoPuestoId) {
       if (vigente) {
-        if (ingresoVehiculo && ingresoVehiculo.puestoId !== nuevoPuestoId) {
-          await tx.ingreso.update({ where: { id: ingresoVehiculo.id }, data: { puestoId: nuevoPuestoId } });
-        } else if (!ingresoVehiculo) {
-          await tx.ingreso.create({ data: { clienteId: actual.clienteId, vehiculoId: vid, puestoId: nuevoPuestoId } });
-        }
-        await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: "OCUPADO" } });
+        // El plan reserva el espacio; solo un ingreso real mantiene el puesto ocupado.
+        await tx.puesto.update({
+          where: { id: nuevoPuestoId },
+          data: { estado: ingresoVehiculo ? "OCUPADO" : "RESERVADO" },
+        });
       } else if (futura) {
         await tx.puesto.update({ where: { id: nuevoPuestoId }, data: { estado: "RESERVADO" } });
       } else {
