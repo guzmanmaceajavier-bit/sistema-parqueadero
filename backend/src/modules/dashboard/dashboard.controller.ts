@@ -151,10 +151,10 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
   const reservasActivas = reservasMap["ACTIVA"] || 0;
   const reservasHoy = reservas.reduce((s, r) => s + r._count, 0);
 
-  const ingresosDia = facturasPeriodo._sum.valor || 0;
-  const ingresosSemana = facturasSemana._sum.valor || 0;
-  const ingresosMes = facturasMes._sum.valor || 0;
-  const gastosDia = gastosPeriodo._sum.valor || 0;
+  const ingresosDia = Number(facturasPeriodo._sum.valor || 0);
+  const ingresosSemana = Number(facturasSemana._sum.valor || 0);
+  const ingresosMes = Number(facturasMes._sum.valor || 0);
+  const gastosDia = Number(gastosPeriodo._sum.valor || 0);
 
   const ingresos7Dias = [];
   for (let i = 6; i >= 0; i--) {
@@ -163,7 +163,7 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     const label = new Date(`${key}T00:00:00.000Z`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", timeZone: "UTC" });
     const total = facturas7d
       .filter(f => obtenerFechaClaveEnZona(f.createdAt, zonaHoraria) === key)
-      .reduce((s, f) => s + f.valor, 0);
+      .reduce((s, f) => s + Number(f.valor), 0);
     ingresos7Dias.push({ label, total, dia: key });
   }
 
@@ -174,12 +174,12 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     const label = new Date(`${key}T00:00:00.000Z`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", timeZone: "UTC" });
     const total = gastos7d
       .filter(g => obtenerFechaClaveEnZona(g.fecha, zonaHoraria) === key)
-      .reduce((s, g) => s + g.valor, 0);
+      .reduce((s, g) => s + Number(g.valor), 0);
     gastos7Dias.push({ label, total, dia: key });
   }
 
   const metodosPagoData = metodosPago.reduce<Record<string, { count: number; total: number }>>((acc, m) => {
-    acc[m.metodoPago || "otros"] = { count: m._count, total: m._sum.valor || 0 };
+    acc[m.metodoPago || "otros"] = { count: m._count, total: Number(m._sum.valor || 0) };
     return acc;
   }, {});
 
