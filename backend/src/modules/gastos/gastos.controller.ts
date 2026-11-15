@@ -79,9 +79,9 @@ export const actualizarGasto = asyncHandler(async (req, res) => {
   if (descripcion !== undefined) data.descripcion = descripcion;
   if (categoria !== undefined) data.categoria = categoria;
   if (valor !== undefined) {
-    const valorNormalizado = redondearDinero(Number(valor));
-    if (!Number.isFinite(valorNormalizado) || valorNormalizado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
-    data.valor = valorNormalizado;
+    const valorIngresado = Number(valor);
+    if (!Number.isFinite(valorIngresado) || valorIngresado <= 0) throw new AppError("El valor del gasto debe ser mayor que cero", 400);
+    data.valor = redondearDinero(valorIngresado);
   }
   if (recurrente !== undefined) data.recurrente = recurrente;
   if (periodicidad !== undefined) data.periodicidad = periodicidad;
