@@ -68,6 +68,10 @@ jobs:
         working-directory: backend
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/parqueadero_test?schema=public
+      NODE_ENV: test
+      PORT: 3001
+      JWT_SECRET: integration-test-secret-with-at-least-32-characters
+      ADMIN_PASSWORD: IntegrationTest-Admin-2026
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,5 +99,26 @@ jobs:
           echo "Schema and applied migrations are in sync."
       - name: Seed minimal test data
         run: node prisma/seed/seed-test.mjs
+      - name: Start API for HTTP integration tests
+        run: |
+          npm run start:only > /tmp/parqueadero-api.log 2>&1 &
+          echo $! > /tmp/parqueadero-api.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3001/ > /dev/null; then
+              echo "Test API is ready on port 3001."
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/parqueadero-api.log
+          echo "::error::The test API did not start."
+          exit 1
       - name: Run PostgreSQL integration tests
         run: npm run test:integration
+      - name: Stop test API
+        if: always()
+        run: |
+          if [[ -f /tmp/parqueadero-api.pid ]]; then
+            kill "$(cat /tmp/parqueadero-api.pid)" 2>/dev/null || true
+          fi
+          pkill -f 'tsx src/app.ts' 2>/dev/null || true
