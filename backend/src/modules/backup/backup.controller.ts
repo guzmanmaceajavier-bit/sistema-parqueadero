@@ -51,14 +51,14 @@ const RELACIONES: Record<string, string[]> = {
   ingresos: ["cliente", "vehiculo", "puesto", "facturas", "reserva"],
   mensualidades: ["cliente", "vehiculo", "plan", "puesto", "facturas", "sucursal"],
   reservas: ["cliente", "vehiculo", "puesto", "ingreso", "sucursal"],
-  facturas: ["ingreso", "mensualidad", "cajaMovimientos", "sucursal"],
+  facturas: ["ingreso", "mensualidad", "cajaMovimientos", "saldoMovimientos", "sucursal"],
   caja: ["movimientos", "usuario", "sucursal"],
   movimientos: ["factura", "gasto", "caja"],
   gastos: ["cajaMovimientos", "sucursal"],
   ausencias: ["cliente", "vehiculo", "sucursal"],
   accesos: ["usuarioRel"],
   vehiculoPropietarios: ["vehiculo", "cliente"],
-  clienteSaldoMovimientos: ["cliente"],
+  clienteSaldoMovimientos: ["cliente", "factura"],
   registrosMovimientos: ["sucursal"],
 };
 
