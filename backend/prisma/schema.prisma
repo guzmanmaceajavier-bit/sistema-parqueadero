@@ -398,6 +398,9 @@ model Ausencia {
   vehiculo               Vehiculo     @relation(fields: [vehiculoId], references: [id])
   puesto                 Puesto?      @relation(fields: [puestoId], references: [id])
   mensualidad            Mensualidad? @relation(fields: [mensualidadId], references: [id])
+
+  @@index([puestoId])
+  @@index([mensualidadId])
 }
 
 model Sucursal {
