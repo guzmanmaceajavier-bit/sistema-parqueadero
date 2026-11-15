@@ -113,13 +113,13 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
   if (reservaVinculada?.puestoId && planDetectado?.puestoId && reservaVinculada.puestoId !== planDetectado.puestoId) {
     throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
   }
-  const ausenciaConPuesto = await prisma.ausencia.findFirst({
+  const ausenciaConPuesto = planDetectado ? await prisma.ausencia.findFirst({
     where: {
       vehiculoId, estado: "FINALIZADA", puestoId: { not: null }, fechaRegreso: { not: null },
-      ...(planDetectado ? { OR: [{ mensualidadId: planDetectado.id }, { mensualidadId: null }] } : {}),
+      OR: [{ mensualidadId: planDetectado.id }, { mensualidadId: null }],
     },
     orderBy: { fechaRegreso: "desc" },
-  });
+  }) : null;
   const puestoAsignado = reservaVinculada?.puestoId ?? planDetectado?.puestoId ?? ausenciaConPuesto?.puestoId;
   if (puestoAsignado) {
     if (puestoId && Number(puestoId) !== puestoAsignado) {
@@ -193,8 +193,8 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
     if (reservaActual?.puestoId && Number(puestoId) !== reservaActual.puestoId) {
       throw new AppError("El vehículo tiene una reserva vigente para otro puesto. Actualiza la disponibilidad.", 409);
     }
-    const ausenciaPerteneceAlPlanActual = !!ausenciaActualConPuesto
-      && (!ausenciaActualConPuesto.mensualidadId || ausenciaActualConPuesto.mensualidadId === mensualidadActual?.id);
+    const ausenciaPerteneceAlPlanActual = !!mensualidadActual && !!ausenciaActualConPuesto
+      && (!ausenciaActualConPuesto.mensualidadId || ausenciaActualConPuesto.mensualidadId === mensualidadActual.id);
     const puestoMensualidadActual = mensualidadActual?.puestoId
       ?? (ausenciaPerteneceAlPlanActual ? ausenciaActualConPuesto?.puestoId : null)
       ?? null;
