@@ -215,6 +215,17 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
   let mensaje = "Ausencia finalizada";
 
   const ausencia = await prisma.$transaction(async (tx) => {
+    // La finalización puede liberar el puesto y extender planes; comparte
+    // los bloqueos operativos con ingresos, reservas y mensualidades.
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
+    const ingresoParaBloqueo = await tx.ingreso.findFirst({
+      where: { vehiculoId: existente.vehiculoId, estado: "FINALIZADO", fechaSalida: { gte: existente.fechaSalida } },
+      orderBy: { fechaSalida: "desc" },
+      select: { puestoId: true },
+    });
+    if (ingresoParaBloqueo?.puestoId) {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${ingresoParaBloqueo.puestoId}::integer)) AS advisory_lock`;
+    }
     const fechaRegreso = new Date();
     const diasAusente = Math.max(1, Math.ceil((fechaRegreso.getTime() - existente.fechaSalida.getTime()) / 86400000));
 
