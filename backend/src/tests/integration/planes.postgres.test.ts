@@ -95,6 +95,22 @@ describe("Planes y cobro", () => {
     expect(planActivo).not.toBeNull();
   });
 
+  it("persiste el puesto y la mensualidad vinculados a una ausencia", async () => {
+    const inicio = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const fin = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
+    const mensualidad = await prisma.mensualidad.create({
+      data: { clienteId, vehiculoId, planId, puestoId: puestoPlanId, fechaInicio: inicio, fechaFin: fin, valor: 150000 },
+    });
+    const ausencia = await prisma.ausencia.create({
+      data: { clienteId, vehiculoId, puestoId: puestoPlanId, mensualidadId: mensualidad.id, fechaSalida: new Date(), opcion: "CONGELAR" },
+    });
+    expect(ausencia.puestoId).toBe(puestoPlanId);
+    expect(ausencia.mensualidadId).toBe(mensualidad.id);
+    expect(ausencia.diasCompensados).toBe(0);
+    await prisma.ausencia.delete({ where: { id: ausencia.id } });
+    await prisma.mensualidad.delete({ where: { id: mensualidad.id } });
+  });
+
   it("el plan vencido se marca VENCIDA solo y libera el puesto", async () => {
     const ayer = new Date();
     ayer.setDate(ayer.getDate() - 1);
