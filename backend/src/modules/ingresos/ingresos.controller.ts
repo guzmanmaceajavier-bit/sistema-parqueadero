@@ -289,7 +289,7 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
   if (ingreso.estado === "FINALIZADO") throw new AppError("Este ingreso ya fue finalizado", 400);
 
   const sucursalOperativa = ingreso.vehiculo.sucursalId ?? sucursalId ?? null;
-  const planActivo = await prisma.mensualidad.findFirst({
+  let planActivo = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
       sucursalId: sucursalOperativa,
