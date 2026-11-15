@@ -5,7 +5,7 @@ import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
-import { restarDinero } from "../../utils/dinero.js";
+import { redondearDinero, restarDinero } from "../../utils/dinero.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
 /** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
@@ -559,36 +559,36 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
   }
 
   const resultado = await prisma.$transaction(async (tx) => {
-    // Bloquea la mensualidad para que dos abonos simultáneos no excedan su saldo.
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${Number(id)}::integer)) AS advisory_lock`;
-    await tx.$queryRaw`SELECT id FROM "Mensualidad" WHERE id = ${Number(id)} FOR UPDATE`;
-
-    // Relee para conocer vehículo/puesto y adquirir los MISMOS bloqueos que usa la
-    // renovación (renovarMensualidad). Así "cobrar" y "renovar" no pueden ejecutarse
-    // en paralelo y duplicar el período.
-    const mensualidadRef = await tx.mensualidad.findFirst({ where: { id: Number(id) }, select: { vehiculoId: true, puestoId: true } });
+    // Orden de bloqueo común: vehículo -> puesto -> mensualidad -> caja.
+    // Evita ciclos con salidas y anulaciones que actualizan la misma mensualidad.
+    const mensualidadRef = await tx.mensualidad.findFirst({
+      where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
+      select: { vehiculoId: true, puestoId: true },
+    });
     if (!mensualidadRef) throw new AppError("Mensualidad no encontrada", 404);
     await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${mensualidadRef.vehiculoId}::integer)) AS advisory_lock`;
     if (mensualidadRef.puestoId) {
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${mensualidadRef.puestoId}::integer)) AS advisory_lock`;
     }
-
-    // El mismo bloqueo global de caja se usa al abrir, cerrar y registrar otros movimientos.
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${Number(id)}::integer)) AS advisory_lock`;
+    await tx.$queryRaw`SELECT id FROM "Mensualidad" WHERE id = ${Number(id)} FOR UPDATE`;
 
     const mensualidad = await tx.mensualidad.findFirst({
       where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
       include: { plan: true },
     });
     if (!mensualidad) throw new AppError("Mensualidad no encontrada", 404);
+    if (mensualidad.vehiculoId !== mensualidadRef.vehiculoId || mensualidad.puestoId !== mensualidadRef.puestoId) {
+      throw new AppError("La mensualidad cambió de vehículo o puesto. Actualiza e inténtalo nuevamente.", 409);
+    }
     if (mensualidad.estado !== "ACTIVA") throw new AppError("La mensualidad no está activa", 400);
 
     const pagos = await tx.factura.aggregate({
       _sum: { valor: true },
       where: { mensualidadId: mensualidad.id, createdAt: { gte: mensualidad.fechaInicio }, metodoPago: { not: null }, anulada: false },
     });
-    const saldoPendiente = Math.max(0, mensualidad.valor - (pagos._sum.valor || 0));
-    const montoPagado = monto !== undefined ? Number(monto) : saldoPendiente;
+    const saldoPendiente = Math.max(0, restarDinero(mensualidad.valor, pagos._sum.valor || 0));
+    const montoPagado = redondearDinero(monto !== undefined ? Number(monto) : saldoPendiente);
 
     if (!Number.isFinite(montoPagado) || montoPagado <= 0) throw new AppError("El monto debe ser un número mayor a 0", 400);
     if (montoPagado > saldoPendiente) {
@@ -622,7 +622,7 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
       },
     });
 
-    const nuevoSaldo = Math.max(0, saldoPendiente - montoPagado);
+    const nuevoSaldo = Math.max(0, restarDinero(saldoPendiente, montoPagado));
     const renovada = nuevoSaldo <= 0;
     if (renovada) {
       // Renovación unificada: se crea un PERÍODO NUEVO (igual que renovarMensualidad)
