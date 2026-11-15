@@ -855,22 +855,6 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
     }
 
     if (!cubiertoPorPlan) {
-      if (saldoUsado > 0 && ingreso.clienteId) {
-        const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-        await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
-        // D6 — libro de movimientos de saldo.
-        await tx.clienteSaldoMovimiento.create({
-          data: {
-            clienteId: ingreso.clienteId,
-            tipo: "CONSUMO",
-            monto: saldoUsado,
-            saldoAntes: saldoAntes?.saldo ?? 0,
-            saldoDespues: (saldoAntes?.saldo ?? 0) - saldoUsado,
-            concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa}`,
-            usuario: req.usuario?.usuario || "admin",
-          },
-        });
-      }
       const f = await tx.factura.create({
         data: {
           numero: String(numeroFactura),
@@ -886,6 +870,26 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         },
       });
       facturaCreada = f;
+
+      // El movimiento de consumo queda vinculado al número exacto de factura.
+      // Así una anulación posterior devuelve solo el saldo usado en esta salida.
+      if (saldoUsado > 0 && ingreso.clienteId) {
+        const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
+        const saldoPrevio = saldoAntes?.saldo ?? 0;
+        await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
+        await tx.clienteSaldoMovimiento.create({
+          data: {
+            clienteId: ingreso.clienteId,
+            tipo: "CONSUMO",
+            monto: saldoUsado,
+            saldoAntes: saldoPrevio,
+            saldoDespues: saldoPrevio - saldoUsado,
+            concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa} — factura ${f.numero}`,
+            usuario: req.usuario?.usuario || "admin",
+          },
+        });
+      }
+
       const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: ingreso.vehiculo.sucursalId ?? sucursalId ?? null } });
       if (!cajaAbierta) throw new AppError("No hay caja abierta", 400);
       const conceptoExtra = ticketExtraviado ? " [TICKET EXTRAVIADO]" : "";
