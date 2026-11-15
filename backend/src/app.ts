@@ -51,6 +51,12 @@ if (isWeak) {
 }
 
 const app = express();
+// Render termina TLS y reenvía la IP del cliente mediante X-Forwarded-For.
+// Ajusta TRUST_PROXY_HOPS si el backend usa otra topología de proxies.
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? (NODE_ENV === "production" ? 1 : 0));
+if (Number.isInteger(trustProxyHops) && trustProxyHops >= 0 && trustProxyHops <= 5) {
+  app.set("trust proxy", trustProxyHops);
+}
 
 // En desarrollo se dispara el límite con nada, por eso va más alto.
 const limiter = rateLimit({
