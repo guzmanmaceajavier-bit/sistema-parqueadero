@@ -505,6 +505,22 @@ export const ajustarSaldo = asyncHandler(async (req, res) => {
   if (!Number.isFinite(diferencia) || diferencia === 0) throw new AppError("El ajuste debe ser un valor numérico distinto de cero", 400);
   if (motivo.length < 3 || motivo.length > 255) throw new AppError("Indica un motivo de ajuste entre 3 y 255 caracteres", 400);
 
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.body?.sucursalId ?? req.query?.sucursalId);
+  const clienteVisible = await prisma.cliente.findFirst({
+    where: {
+      id,
+      ...(sucursalId ? { OR: [
+        { vehiculos: { some: { sucursalId } } },
+        { ingresos: { some: { vehiculo: { sucursalId } } } },
+        { mensualidades: { some: { sucursalId } } },
+        { reservas: { some: { sucursalId } } },
+        { ausencias: { some: { sucursalId } } },
+      ] } : {}),
+    },
+    select: { id: true },
+  });
+  if (!clienteVisible) throw new AppError("Cliente no encontrado en esta sucursal", 404);
+
   const resultado = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${id} FOR UPDATE`;
     const cliente = await tx.cliente.findUnique({ where: { id }, select: { id: true, nombres: true, apellidos: true, saldo: true } });
