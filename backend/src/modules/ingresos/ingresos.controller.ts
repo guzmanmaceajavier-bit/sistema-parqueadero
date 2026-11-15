@@ -10,6 +10,7 @@ import { generarTicketPDF } from "../../services/ticket.service.js";
 import * as service from "./ingresos.service.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+import { redondearDinero, restarDinero } from "../../utils/dinero.js";
 
 type FacturaCobertura = { createdAt: Date; valor: number; metodoPago: string | null; anulada: boolean };
 type MensualidadCobertura = { valor: number; fechaInicio: Date; facturas?: FacturaCobertura[] };
@@ -603,8 +604,8 @@ export const simularCobro = asyncHandler(async (req, res) => {
   if (cobro.error) throw new AppError(cobro.error, 400);
 
   const saldoDisponible = Math.max(0, ingreso.cliente?.saldo ?? 0);
-  const saldoUsado = Math.min(saldoDisponible, cobro.total);
-  const totalPorPagar = Math.max(0, cobro.total - saldoUsado);
+  const saldoUsado = redondearDinero(Math.min(saldoDisponible, cobro.total));
+  const totalPorPagar = Math.max(0, restarDinero(cobro.total, saldoUsado));
 
   res.json({
     ok: true,
@@ -716,7 +717,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
   // El saldo se calcula dentro de la transacción, después de bloquear el registro
   // del cliente. Así dos salidas simultáneas no pueden consumir el mismo crédito.
-  let valorFinal = cobroTotal;
+  let valorFinal = redondearDinero(cobroTotal);
   let saldoUsado = 0;
   let snapshot: { tarifaId: number | null; modalidad: string | null; tiempoMinutos: number | null; desglose: any } | null = null;
 
@@ -786,9 +787,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       if (ingreso.clienteId) {
         await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${ingreso.clienteId} FOR UPDATE`;
         const clienteActual = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-        saldoUsado = Math.min(Math.max(0, clienteActual?.saldo ?? 0), cobroTotal);
+        saldoUsado = redondearDinero(Math.min(Math.max(0, clienteActual?.saldo ?? 0), cobroTotal));
       }
-      valorFinal = Math.max(0, cobroTotal - saldoUsado);
+      valorFinal = Math.max(0, restarDinero(cobroTotal, saldoUsado));
     } else if (!cubiertoPorPlan) {
       const cobroActual = await calcularCobro({
         ingreso,
@@ -875,7 +876,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       // Así una anulación posterior devuelve solo el saldo usado en esta salida.
       if (saldoUsado > 0 && ingreso.clienteId) {
         const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
-        const saldoPrevio = saldoAntes?.saldo ?? 0;
+        const saldoPrevio = redondearDinero(saldoAntes?.saldo ?? 0);
         await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
         await tx.clienteSaldoMovimiento.create({
           data: {
@@ -883,7 +884,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
             tipo: "CONSUMO",
             monto: saldoUsado,
             saldoAntes: saldoPrevio,
-            saldoDespues: saldoPrevio - saldoUsado,
+            saldoDespues: restarDinero(saldoPrevio, saldoUsado),
             concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa} — factura ${f.numero}`,
             facturaId: f.id,
             usuario: req.usuario?.usuario || "admin",
