@@ -579,7 +579,7 @@ export const simularCobro = asyncHandler(async (req, res) => {
   }
 
   // Excedente: la mensualidad cubría la entrada pero venció durante la estancia.
-  const planQueCubriaEntrada = await prisma.mensualidad.findFirst({
+  let planQueCubriaEntrada = await prisma.mensualidad.findFirst({
     where: {
       vehiculoId: ingreso.vehiculoId,
       sucursalId: sucursalOperativa,
