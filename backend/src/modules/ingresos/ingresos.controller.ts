@@ -885,6 +885,7 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
             saldoAntes: saldoPrevio,
             saldoDespues: saldoPrevio - saldoUsado,
             concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa} — factura ${f.numero}`,
+            facturaId: f.id,
             usuario: req.usuario?.usuario || "admin",
           },
         });
