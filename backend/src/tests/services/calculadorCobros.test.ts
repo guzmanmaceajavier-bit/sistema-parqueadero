@@ -196,4 +196,23 @@ describe("calcularCobro", () => {
     expect(result.desglose).toMatchObject({ unidad: "tarifa_maxima" });
   });
 
+  it("redondea a centavos sin elevar indebidamente una tarifa por minuto", async () => {
+    prismaMock.tarifa.findFirst.mockResolvedValue({
+      ...tarifaBase,
+      modalidad: "minuto",
+      valor: 0.1,
+      minutosCortesia: 0,
+    });
+
+    const result = await calcularCobro({
+      ingreso: { id: 11, vehiculoId: 10, fechaEntrada: new Date("2026-01-01T08:00:00") },
+      tipoVehiculo: "moto",
+      tarifaId: 7,
+      fechaSalida: new Date("2026-01-01T08:03:00"),
+    });
+
+    expect(result.total).toBe(0.3);
+    expect(result.detalle[0].valor).toBe(0.3);
+  });
+
 });
