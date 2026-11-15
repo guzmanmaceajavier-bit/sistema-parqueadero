@@ -9,6 +9,14 @@ import { getCajaAbierta, getCajaOError } from "../../helpers/caja.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import * as service from "./ingresos.service.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { calcularPagadoMensualidad } from "../../utils/saldos.js";
+
+type FacturaCobertura = { createdAt: Date; valor: number; metodoPago: string | null; anulada: boolean };
+type MensualidadCobertura = { valor: number; fechaInicio: Date; facturas?: FacturaCobertura[] };
+
+function mensualidadPagada(mensualidad: MensualidadCobertura): boolean {
+  return calcularPagadoMensualidad(mensualidad.facturas || [], mensualidad.fechaInicio) >= mensualidad.valor;
+}
 
 /** Verifica que el tipo de vehículo sea compatible con el/los tipos del puesto. */
 function puestoAceptaTipo(puesto: { tipoPuesto?: string | null }, tipoVehiculo?: string | null): boolean {
@@ -92,8 +100,11 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
       fechaFin: { gte: new Date() },
       puestoId: { not: null },
     },
-    include: { plan: true, puesto: true },
+    include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
+  if (planDetectado && !mensualidadPagada(planDetectado)) {
+    throw new AppError("El plan tiene saldo pendiente. Registra el pago completo antes de ingresar con cobertura de plan.", 402);
+  }
 
   if (reservaVinculada?.puestoId && planDetectado?.puestoId && reservaVinculada.puestoId !== planDetectado.puestoId) {
     throw new AppError("La reserva y la mensualidad asignan puestos diferentes. Revisa las asignaciones antes de ingresar el vehículo.", 409);
@@ -160,10 +171,13 @@ export const registrarIngreso = asyncHandler(async (req, res) => {
           fechaFin: { gte: ahora },
           puestoId: { not: null },
         },
-        include: { plan: true, puesto: true },
+        include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       }),
     ]);
 
+    if (mensualidadActual && !mensualidadPagada(mensualidadActual)) {
+      throw new AppError("El plan tiene saldo pendiente. Registra el pago completo antes de ingresar con cobertura de plan.", 402);
+    }
     if (reservaVinculada && !reservaActual) {
       throw new AppError("La reserva seleccionada cambió o dejó de estar vigente. Actualiza la información antes de registrar la entrada.", 409);
     }
@@ -556,8 +570,9 @@ export const simularCobro = asyncHandler(async (req, res) => {
       fechaFin: { gte: ahoraSim },
       OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
-    include: { plan: true },
+    include: { plan: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
+  if (planActivo && !mensualidadPagada(planActivo)) planActivo = null;
   if (planActivo) {
     const totalMinutos = Math.ceil((Date.now() - new Date(ingreso.fechaEntrada).getTime()) / 60000);
     return res.json({ ok: true, cobro: { total: 0, totalMinutos, error: null, plan: planActivo.plan?.nombre || "Plan activo" }, ingreso });
@@ -573,8 +588,10 @@ export const simularCobro = asyncHandler(async (req, res) => {
       fechaFin: { gte: ingreso.fechaEntrada, lt: ahoraSim },
       OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
+    include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
     orderBy: { fechaFin: "desc" },
   });
+  if (planQueCubriaEntrada && !mensualidadPagada(planQueCubriaEntrada)) planQueCubriaEntrada = null;
 
   await getCajaOError(ingreso.vehiculo.sucursalId ?? sucursalId ?? null);
 
@@ -633,8 +650,9 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       // La mensualidad solo cubre el puesto que tiene asignado (o todos si no fija uno).
       OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
     },
-    include: { plan: true, puesto: true },
+    include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
   });
+  if (mensualidadVigente && !mensualidadPagada(mensualidadVigente)) mensualidadVigente = null;
 
   // Política de excedente: si la mensualidad venció DURANTE la estancia (cubría la
   // entrada pero ya no el momento de salida), se cubre hasta su fechaFin y solo se
@@ -650,10 +668,10 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         fechaFin: { gte: ingreso.fechaEntrada, lt: ahora },
         OR: [{ puestoId: null }, { puestoId: ingreso.puestoId }],
       },
-      include: { plan: true, puesto: true },
+      include: { plan: true, puesto: true, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       orderBy: { fechaFin: "desc" },
     });
-    if (mensualidadQueCubriaEntrada) {
+    if (mensualidadQueCubriaEntrada && mensualidadPagada(mensualidadQueCubriaEntrada)) {
       mensualidadVigente = mensualidadQueCubriaEntrada;
       coberturaHasta = mensualidadQueCubriaEntrada.fechaFin;
     }
@@ -743,8 +761,15 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
         AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
       FOR UPDATE
     `;
-    if ((mensualidadesBloqueadas.length > 0) !== cubiertoPorPlan) {
-      throw new AppError("La cobertura de la mensualidad cambió durante la operación. Vuelve a simular el cobro.", 409);
+    if (cubiertoPorPlan) {
+      const facturasCobertura = await tx.factura.findMany({
+        where: { mensualidadId: { in: mensualidadesBloqueadas.map((m) => m.id) }, createdAt: { gte: mensualidadVigente!.fechaInicio }, metodoPago: { not: null }, anulada: false },
+        select: { createdAt: true, valor: true, metodoPago: true, anulada: true },
+      });
+      const pagado = calcularPagadoMensualidad(facturasCobertura, mensualidadVigente!.fechaInicio);
+      if (mensualidadesBloqueadas.length === 0 || pagado < mensualidadVigente!.valor) {
+        throw new AppError("La cobertura pagada cambió durante la operación. Vuelve a simular el cobro.", 409);
+      }
     }
 
     // Recalcula con la hora efectiva de salida tras esperar los bloqueos.
