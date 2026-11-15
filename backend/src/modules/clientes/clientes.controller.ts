@@ -397,9 +397,41 @@ export const perfilCliente = asyncHandler(async (req, res) => {
             where: sucursalId ? { sucursalId } : undefined,
             include: { plan: true, facturas: true },
             orderBy: { createdAt: "desc" },
-            take: 20,
+            take: 50,
+          },
+          propietarios: {
+            include: { cliente: { select: { id: true, nombres: true, apellidos: true, documento: true } } },
+            orderBy: { desde: "desc" },
+          },
+          reservas: {
+            where: sucursalId ? { sucursalId } : undefined,
+            include: { puesto: true },
+            orderBy: { fechaInicio: "desc" },
+            take: 50,
+          },
+          ausencias: {
+            where: sucursalId ? { sucursalId } : undefined,
+            include: { puesto: true, mensualidad: true },
+            orderBy: { fechaSalida: "desc" },
+            take: 50,
           },
         },
+      },
+      reservas: {
+        where: sucursalId ? { sucursalId } : undefined,
+        include: { vehiculo: { select: { id: true, placa: true } }, puesto: { select: { id: true, codigo: true } } },
+        orderBy: { fechaInicio: "desc" },
+        take: 50,
+      },
+      ausencias: {
+        where: sucursalId ? { sucursalId } : undefined,
+        include: { vehiculo: { select: { id: true, placa: true } }, puesto: { select: { id: true, codigo: true } }, mensualidad: true },
+        orderBy: { fechaSalida: "desc" },
+        take: 50,
+      },
+      saldoMovimientos: {
+        orderBy: { createdAt: "desc" },
+        take: 50,
       },
     },
   });
@@ -451,7 +483,17 @@ export const perfilCliente = asyncHandler(async (req, res) => {
       ultimaVisita,
       deudaPendiente,
       historial: todosIngresos.slice(0, 50),
-      mensualidades: cliente.vehiculos.flatMap(v => v.mensualidades?.map(m => ({ ...m, placa: v.placa })) || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 20),
+      mensualidades: cliente.vehiculos.flatMap(v => v.mensualidades?.map(m => ({ ...m, placa: v.placa })) || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50),
+      reservas: cliente.reservas,
+      ausencias: cliente.ausencias,
+      movimientosSaldo: cliente.saldoMovimientos,
+      propietarios: cliente.vehiculos.flatMap(v => {
+        const registros = v.propietarios || [];
+        return registros.length ? registros.map(p => ({ ...p, placa: v.placa })) : [{
+          id: 0, vehiculoId: v.id, clienteId: v.clienteId, desde: v.createdAt, hasta: null,
+          placa: v.placa, cliente: { id: cliente.id, nombres: cliente.nombres, apellidos: cliente.apellidos, documento: cliente.documento },
+        }];
+      }),
       pagos,
     },
   });
