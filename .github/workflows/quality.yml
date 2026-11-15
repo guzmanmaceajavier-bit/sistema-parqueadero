@@ -85,11 +85,14 @@ jobs:
         shell: bash
         run: |
           diff_sql="$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script)"
-          if [[ -n "$(printf '%s' "$diff_sql" | tr -d '[:space:]')" ]]; then
+          # Prisma emits a comment even when there is no schema drift:
+          # "-- This is an empty migration." Do not mistake that comment for SQL.
+          if printf '%s\n' "$diff_sql" | grep -Eiq '^[[:space:]]*(CREATE|ALTER|DROP|COMMENT|GRANT|REVOKE|TRUNCATE|INSERT|UPDATE|DELETE)[[:space:]]'; then
             echo "::error::The deployed migrations do not produce the current Prisma schema."
             printf '%s\n' "$diff_sql"
             exit 1
           fi
+          echo "Schema and applied migrations are in sync."
       - name: Seed minimal test data
         run: node prisma/seed/seed-test.mjs
       - name: Run PostgreSQL integration tests
