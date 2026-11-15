@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { corsSeguro } from "../../middlewares/cors.middleware.js";
 
-function ejecutar(origin: string | undefined, method = "GET", env = "production", allow = "https://parqueadero.example") {
-  const req: any = { headers: { origin }, method };
+function ejecutar(origin: string | undefined, method = "GET", env = "production", allow = "https://parqueadero.example", host?: string) {
+  const req: any = { headers: { origin, host }, method };
   const headers: Record<string, string> = {};
   const res: any = {
     header: vi.fn((key: string, value: string) => { headers[key] = value; return res; }),
