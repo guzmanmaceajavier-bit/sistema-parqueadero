@@ -275,7 +275,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       where: {
         vehiculoId: a.vehiculoId,
         ...(sucursalId ? { sucursalId } : {}),
-        estado: { in: ["ACTIVA", "VENCIDA"] },
+        estado: a.mensualidadId ? { in: ["ACTIVA", "VENCIDA"] } : "ACTIVA",
         fechaInicio: { lte: existente.fechaSalida },
         fechaFin: { gte: existente.fechaSalida },
         ...(a.mensualidadId ? { id: a.mensualidadId } : { ...(puestoAusenciaId ? { OR: [{ puestoId: null }, { puestoId: puestoAusenciaId }] } : {}) }),
