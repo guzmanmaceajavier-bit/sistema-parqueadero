@@ -450,7 +450,7 @@ export const perfilCliente = asyncHandler(async (req, res) => {
   const deudaPendiente = (cliente.vehiculos?.flatMap(v => v.mensualidades || []) || []).reduce((sum, m) => {
     // Solo las mensualidades ACTIVA/VENCIDA representan deuda; las CANCELADA no.
     if (!["ACTIVA", "VENCIDA"].includes(m.estado)) return sum;
-    const pagado = (m.facturas || []).filter(f => !f.anulada && f.metodoPago != null && new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + f.valor, 0);
+    const pagado = (m.facturas || []).filter(f => !f.anulada && f.metodoPago != null && new Date(f.createdAt) >= new Date(m.fechaInicio)).reduce((s, f) => s + Number(f.valor), 0);
     return sumarDinero(sum, Math.max(0, restarDinero(m.valor || 0, pagado)));
   }, 0);
 
