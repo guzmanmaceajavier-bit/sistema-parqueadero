@@ -77,7 +77,7 @@ export const crearAusencia = asyncHandler(async (req, res) => {
         fechaSalida: fechaSalidaEfectiva, fechaRegreso: fechaRegreso ? new Date(fechaRegreso) : null,
         motivo, opcion: opcion || "CONGELAR",
       },
-      include: { cliente: true, vehiculo: true },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     });
 
     if (ingresoActivo) {
@@ -171,7 +171,7 @@ export const obtenerAusencias = asyncHandler(async (req, res) => {
 
   const { data: ausencias, pagination } = await paginate(prisma, "ausencia", {
     page, limit, where,
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     orderBy: { fechaSalida: "desc" },
   });
   res.json({ ok: true, ausencias, pagination });
@@ -182,7 +182,7 @@ export const obtenerAusencia = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const ausencia = await prisma.ausencia.findFirst({
     where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
   });
   if (!ausencia) throw new AppError("Ausencia no encontrada", 404);
   res.json({ ok: true, ausencia });
@@ -226,7 +226,7 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
 
   const ausencia = await prisma.ausencia.update({
     where: { id: Number(id) }, data,
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
   });
   res.json({ ok: true, ausencia });
 });
@@ -240,7 +240,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
   }
   const existente = await prisma.ausencia.findFirst({
     where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
-    include: { cliente: true, vehiculo: true },
+    include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
   });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
   if (existente.estado === "FINALIZADA") throw new AppError("La ausencia ya está finalizada", 400);
@@ -270,7 +270,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     const a = await tx.ausencia.update({
       where: { id: Number(id) },
       data: { estado: "FINALIZADA", fechaRegreso },
-      include: { cliente: true, vehiculo: true },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     });
 
     const otrasAusenciasActivas = await tx.ausencia.count({
@@ -392,7 +392,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
     return tx.ausencia.update({
       where: { id: Number(id) },
       data: { diasCompensados, valorCompensado, compensacionDetalle: mensaje, compensacionAplicadaAt: new Date() },
-      include: { cliente: true, vehiculo: true },
+      include: { cliente: true, vehiculo: true, puesto: true, mensualidad: { select: { id: true, fechaInicio: true, fechaFin: true, valor: true, estado: true } } },
     });
   });
 
