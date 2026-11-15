@@ -4,7 +4,6 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { registrarMovimiento } from "../../helpers/movimientos.js";
 import { generarNumeroFactura } from "../../services/facturaCounter.js";
-import { sumarMesesConTope } from "../../utils/fechas.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 
