@@ -65,12 +65,14 @@ describe("obtenerDashboard", () => {
     expect(prismaMock.factura.aggregate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: {
         metodoPago: { not: null },
+        anulada: false,
         createdAt: { gte: new Date("2026-10-01T00:00:00.000Z"), lt: new Date("2026-10-16T00:00:00.000Z") },
       },
     }));
     expect(prismaMock.factura.aggregate).toHaveBeenNthCalledWith(3, expect.objectContaining({
       where: {
         metodoPago: { not: null },
+        anulada: false,
         createdAt: { gte: new Date("2026-10-11T00:00:00.000Z"), lt: new Date("2026-10-16T00:00:00.000Z") },
       },
     }));

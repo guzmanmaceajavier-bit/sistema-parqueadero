@@ -833,7 +833,20 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
 
     if (!cubiertoPorPlan) {
       if (saldoUsado > 0 && ingreso.clienteId) {
+        const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
         await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { decrement: saldoUsado } } });
+        // D6 — libro de movimientos de saldo.
+        await tx.clienteSaldoMovimiento.create({
+          data: {
+            clienteId: ingreso.clienteId,
+            tipo: "CONSUMO",
+            monto: saldoUsado,
+            saldoAntes: saldoAntes?.saldo ?? 0,
+            saldoDespues: (saldoAntes?.saldo ?? 0) - saldoUsado,
+            concepto: `Saldo aplicado en salida ${ingreso.vehiculo.placa}`,
+            usuario: req.usuario?.usuario || "admin",
+          },
+        });
       }
       const f = await tx.factura.create({
         data: {

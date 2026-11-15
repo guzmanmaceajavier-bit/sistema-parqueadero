@@ -91,6 +91,8 @@ model Configuracion {
   pieFactura                   String?
   /// ─── Período de gracia ───
   minutosGracia                Int?     @default(0)
+  /// ─── Reservas ───
+  reservaVentanaHoras          Int?     @default(24)
   /// ─── Listas personalizables ───
   listasConfiguracion          Json?
 }
@@ -114,6 +116,8 @@ model Cliente {
   mensualidades Mensualidad[]
   reservas      Reserva[]
   vehiculos     Vehiculo[]
+  saldoMovimientos ClienteSaldoMovimiento[]
+  vehiculoPropietarios VehiculoPropietario[]
 }
 
 model Vehiculo {
@@ -138,6 +142,7 @@ model Vehiculo {
   ingresos      Ingreso[]
   mensualidades Mensualidad[]
   reservas      Reserva[]
+  propietarios  VehiculoPropietario[]
   cliente       Cliente       @relation(fields: [clienteId], references: [id])
   sucursal      Sucursal?     @relation(fields: [sucursalId], references: [id])
   plan          Plan?         @relation(fields: [planId], references: [id])
@@ -205,18 +210,22 @@ model Tarifa {
 }
 
 model Caja {
-  id          Int              @id @default(autoincrement())
-  apertura    Float
-  cierre      Float?
-  estado      String           @default("ABIERTA")
-  usuarioId   Int
-  observacion String?
-  sucursalId  Int?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  sucursal    Sucursal?        @relation(fields: [sucursalId], references: [id])
-  usuario     Usuario          @relation(fields: [usuarioId], references: [id])
-  movimientos CajaMovimiento[]
+  id              Int              @id @default(autoincrement())
+  apertura        Float
+  cierre          Float?
+  /// ─── Arqueo real (conteo) vs esperado ───
+  conteoEfectivo  Float?
+  esperadoEfectivo Float?
+  diferenciaArqueo Float?
+  estado          String           @default("ABIERTA")
+  usuarioId       Int
+  observacion     String?
+  sucursalId      Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  sucursal        Sucursal?        @relation(fields: [sucursalId], references: [id])
+  usuario         Usuario          @relation(fields: [usuarioId], references: [id])
+  movimientos     CajaMovimiento[]
 }
 
 model CajaMovimiento {
@@ -319,6 +328,15 @@ model Factura {
   modalidad       String?
   tiempoMinutos   Int?
   desglose        Json?
+  /// ─── IVA (opcional; 0 = sin IVA) ───
+  subtotal        Float?
+  ivaPorcentaje   Float?
+  ivaValor        Float?
+  /// ─── Anulación con contrapartida y auditoría ───
+  anulada          Boolean   @default(false)
+  anuladaEn        DateTime?
+  anuladoPor       String?
+  motivoAnulacion  String?
   createdAt       DateTime         @default(now())
   cajaMovimientos CajaMovimiento[]
   ingreso         Ingreso?         @relation(fields: [ingresoId], references: [id])
@@ -390,4 +408,32 @@ model Sucursal {
   tarifas       Tarifa[]
   usuarios      Usuario[]
   vehiculos     Vehiculo[]
+}
+
+model VehiculoPropietario {
+  id         Int       @id @default(autoincrement())
+  vehiculoId Int
+  clienteId  Int
+  desde      DateTime  @default(now())
+  hasta      DateTime?
+  createdAt  DateTime  @default(now())
+  vehiculo   Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  cliente    Cliente   @relation(fields: [clienteId], references: [id])
+
+  @@index([vehiculoId])
+}
+
+model ClienteSaldoMovimiento {
+  id         Int      @id @default(autoincrement())
+  clienteId  Int
+  tipo       String   // RECARGA | CONSUMO | AJUSTE | DEVOLUCION
+  monto      Float
+  saldoAntes Float
+  saldoDespues Float
+  concepto   String?
+  usuario    String?
+  createdAt  DateTime @default(now())
+  cliente    Cliente  @relation(fields: [clienteId], references: [id])
+
+  @@index([clienteId])
 }

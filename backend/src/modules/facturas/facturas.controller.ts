@@ -3,6 +3,109 @@ import { asyncHandler, AppError } from "../../middlewares/error.middleware.js";
 import { paginate } from "../../utils/pagination.js";
 import { generarTicketPDF } from "../../services/ticket.service.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
+import { registrarMovimiento } from "../../helpers/movimientos.js";
+
+/**
+ * D1 — Anular una factura con contrapartida y auditoría.
+ * - No se elimina: se marca `anulada`.
+ * - Se revierte el movimiento de caja ligado (si la caja está abierta) o se crea
+ *   un movimiento de ajuste en la caja abierta actual (si la original está cerrada).
+ * - Se devuelve al cliente el saldo que se hubiera consumido (si aplica).
+ * - Se recalcula el estado del puesto no; el ingreso no se toca.
+ */
+export const anularFactura = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
+  if (motivo.length < 3) throw new AppError("Debes indicar un motivo de anulación (mínimo 3 caracteres)", 400);
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
+
+  const factura = await prisma.factura.findFirst({
+    where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) },
+    include: { cajaMovimientos: { include: { caja: true } }, mensualidad: true, ingreso: true },
+  });
+  if (!factura) throw new AppError("Factura no encontrada", 404);
+  if (factura.anulada) throw new AppError("Esta factura ya está anulada", 409);
+
+  const usuario = req.usuario?.usuario || "admin";
+  const ahora = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.factura.update({
+      where: { id: factura.id },
+      data: { anulada: true, anuladaEn: ahora, anuladoPor: usuario, motivoAnulacion: motivo },
+    });
+
+    // Reverso en caja
+    if (factura.metodoPago) {
+      const movOriginal = factura.cajaMovimientos[0];
+      const cajaOriginalAbierta = movOriginal?.caja?.estado === "ABIERTA";
+      if (movOriginal && cajaOriginalAbierta) {
+        // Se anula el movimiento original (soft) — los totales lo excluyen.
+        await tx.cajaMovimiento.update({
+          where: { id: movOriginal.id },
+          data: { anulado: true, anuladoEn: ahora, anuladoPor: usuario, motivoAnulacion: `Anulado por factura ${factura.numero}` },
+        });
+      } else {
+        // La caja original está cerrada o no existe: se registra el reverso en la caja abierta actual.
+        const cajaActual = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: factura.sucursalId ?? sucursalId ?? null } });
+        if (cajaActual) {
+          await tx.cajaMovimiento.create({
+            data: {
+              cajaId: cajaActual.id,
+              tipo: "EGRESO",
+              concepto: `Ajuste por anulación factura ${factura.numero} (motivo: ${motivo})`,
+              monto: factura.valor,
+              metodoPago: factura.metodoPago,
+              facturaId: null,
+            },
+          });
+        }
+      }
+    }
+
+    // D1-b — devolver al cliente el saldo que esa factura consumió.
+    if (factura.ingresoId) {
+      const ingreso = await tx.ingreso.findUnique({
+        where: { id: factura.ingresoId },
+        select: { clienteId: true, vehiculo: { select: { placa: true } } },
+      });
+      if (ingreso?.clienteId) {
+        const consumos = await tx.clienteSaldoMovimiento.findMany({
+          where: { clienteId: ingreso.clienteId, tipo: "CONSUMO", concepto: { contains: `salida ${ingreso.vehiculo?.placa || ""}` } },
+          orderBy: { createdAt: "desc" },
+        });
+        const consumido = consumos.reduce((s, m) => s + m.monto, 0);
+        if (consumido > 0) {
+          const saldoAntes = await tx.cliente.findUnique({ where: { id: ingreso.clienteId }, select: { saldo: true } });
+          await tx.cliente.update({ where: { id: ingreso.clienteId }, data: { saldo: { increment: consumido } } });
+          await tx.clienteSaldoMovimiento.create({
+            data: {
+              clienteId: ingreso.clienteId,
+              tipo: "DEVOLUCION",
+              monto: consumido,
+              saldoAntes: saldoAntes?.saldo ?? 0,
+              saldoDespues: (saldoAntes?.saldo ?? 0) + consumido,
+              concepto: `Devolución de saldo por anulación de factura ${factura.numero}`,
+              usuario,
+            },
+          });
+        }
+      }
+    }
+
+    // D1-c: revertir renovación automática si la factura saldó una mensualidad.
+    if (factura.mensualidadId && factura.origen === "MENSUALIDAD" && factura.mensualidad) {
+      const m = factura.mensualidad;
+      // Si el período fue renovado (fechaInicio posterior al pago), se marca VENCIDA para revisión.
+      if (new Date(m.fechaInicio) >= new Date(factura.createdAt)) {
+        await tx.mensualidad.update({ where: { id: m.id }, data: { estado: "VENCIDA" } });
+      }
+    }
+  });
+
+  await registrarMovimiento("FACTURACION", "ANULAR", `Factura ${factura.numero} anulada — $${factura.valor}. Motivo: ${motivo}`, usuario);
+  res.json({ ok: true, message: "Factura anulada con contrapartida y auditoría" });
+});
 
 export const obtenerFacturas = asyncHandler(async (req, res) => {
   const { page, limit, q, desde, hasta, origen } = req.query;

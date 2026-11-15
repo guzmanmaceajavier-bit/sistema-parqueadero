@@ -2,6 +2,7 @@ import cron from "node-cron";
 import prisma from "../config/prisma.js";
 import { registrarMovimiento } from "../helpers/movimientos.js";
 import { emitirEvento } from "./socket.js";
+import { calcularProximaGeneracion } from "../modules/gastos/gastos.utils.js";
 
 async function liberarReservas() {
   const ahora = new Date();
@@ -44,8 +45,98 @@ async function liberarReservas() {
   if (liberadas > 0) console.log(`[Scheduler] ${liberadas} reserva(s) vencida(s) liberada(s)`);
 }
 
-async function enviarRecordatorios() {
+/**
+ * D10 — marca como RESERVADO los puestos de las reservas que entran en la
+ * ventana operativa, y los libera cuando la ventana pasa sin activarse.
+ */
+async function actualizarReservasPorVentana() {
   const ahora = new Date();
+  const config = await prisma.configuracion.findFirst({ select: { reservaVentanaHoras: true } });
+  const ventanaHoras = Math.max(0, config?.reservaVentanaHoras ?? 24);
+
+  const candidatas = await prisma.reserva.findMany({
+    where: { estado: { in: ["PENDIENTE", "CONFIRMADA"] }, puestoId: { not: null } },
+    select: { id: true, puestoId: true, fechaInicio: true },
+  });
+
+  let actualizados = 0;
+  for (const r of candidatas) {
+    const limite = new Date(r.fechaInicio.getTime() - ventanaHoras * 3600000);
+    if (limite.getTime() > ahora.getTime()) continue;
+
+    const cambio = await prisma.$transaction(async (tx) => {
+      const puesto = await tx.puesto.findUnique({ where: { id: r.puestoId! } });
+      if (!puesto || puesto.estado === "OCUPADO" || puesto.estado === "MANTENIMIENTO") return false;
+      const otroOcupante = await tx.ingreso.count({ where: { puestoId: r.puestoId!, estado: "ACTIVO" } });
+      if (otroOcupante > 0) return false;
+      const actualizado = await tx.puesto.updateMany({
+        where: { id: r.puestoId!, estado: { notIn: ["OCUPADO", "MANTENIMIENTO"] } },
+        data: { estado: "RESERVADO" },
+      });
+      return actualizado.count === 1;
+    });
+    if (cambio) actualizados++;
+  }
+
+  if (actualizados > 0) console.log(`[Scheduler] ${actualizados} puesto(s) marcado(s) RESERVADO por ventana de reserva`);
+}
+
+/**
+ * Genera los gastos recurrentes vencidos (sin duplicar) y los registra en caja.
+ */
+async function generarGastosRecurrentes() {
+  const ahora = new Date();
+  const pendientes = await prisma.gasto.findMany({
+    where: { recurrente: true, proximaGeneracion: { lte: ahora } },
+  });
+  if (pendientes.length === 0) return;
+
+  let generados = 0;
+  for (const plantilla of pendientes) {
+    const creado = await prisma.$transaction(async (tx) => {
+      // Claim optimista: solo una ejecución puede tomar la plantilla.
+      const reclamado = await tx.gasto.updateMany({
+        where: { id: plantilla.id, recurrente: true, proximaGeneracion: plantilla.proximaGeneracion },
+        data: { proximaGeneracion: calcularProximaGeneracion(plantilla.periodicidad) },
+      });
+      if (reclamado.count !== 1) return false;
+
+      const ocurrencia = await tx.gasto.create({
+        data: {
+          concepto: plantilla.concepto,
+          descripcion: plantilla.descripcion,
+          categoria: plantilla.categoria,
+          valor: plantilla.valor,
+          fecha: ahora,
+          recurrente: false,
+          sucursalId: plantilla.sucursalId,
+        },
+      });
+
+      const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: plantilla.sucursalId ?? null } });
+      if (cajaAbierta) {
+        await tx.cajaMovimiento.create({
+          data: {
+            cajaId: cajaAbierta.id,
+            tipo: "EGRESO",
+            concepto: `Gasto recurrente: ${plantilla.concepto}`,
+            monto: plantilla.valor,
+            gastoId: ocurrencia.id,
+          },
+        });
+      }
+      return true;
+    });
+    if (creado) generados++;
+  }
+
+  if (generados > 0) {
+    console.log(`[Scheduler] ${generados} gasto(s) recurrente(s) generado(s)`);
+    await registrarMovimiento("GASTOS", "GENERAR_RECURRENTES", `${generados} gasto(s) recurrente(s) generado(s)`, "sistema");
+  }
+}
+
+async function enviarRecordatorios() {  const ahora = new Date();
   const dentroDe2Horas = new Date(ahora.getTime() + 2 * 60 * 60 * 1000);
   const dentroDe1Hora = new Date(ahora.getTime() + 1 * 60 * 60 * 1000);
 
@@ -119,6 +210,13 @@ export function iniciarScheduler() {
     liberarReservas().catch((e) => console.error("[Scheduler] Error liberando reservas:", e.message));
     enviarRecordatorios().catch((e) => console.error("[Scheduler] Error enviando recordatorios:", e.message));
     vencerMensualidades().catch((e) => console.error("[Scheduler] Error venciendo mensualidades:", e.message));
+    actualizarReservasPorVentana().catch((e) => console.error("[Scheduler] Error aplicando ventana de reservas:", e.message));
   });
-  console.log("[Scheduler] Iniciado — cada 10 minutos");
+
+  // Los gastos recurrentes se generan a diario (a la 00:05).
+  cron.schedule("5 0 * * *", () => {
+    generarGastosRecurrentes().catch((e) => console.error("[Scheduler] Error generando gastos recurrentes:", e.message));
+  });
+
+  console.log("[Scheduler] Iniciado — cada 10 minutos (gastos recurrentes: diario 00:05)");
 }

@@ -23,6 +23,24 @@ export const crearTarifa = asyncHandler(async (req, res) => {
     throw new AppError("Configura juntos el precio de la primera hora y el de las horas adicionales.", 400);
   }
 
+  // O7 — no puede haber dos tarifas activas para el mismo tipo de vehículo,
+  // modalidad y sede: el cálculo elegiría una en silencio (la más barata).
+  const modalidadNormalizada = String(modalidad).trim().toLowerCase();
+  const duplicada = await prisma.tarifa.findFirst({
+    where: {
+      activa: true,
+      modalidad: modalidadNormalizada,
+      tipoVehiculo: { in: String(tipoVehiculo).split(",").map((t: string) => t.trim()).filter(Boolean) },
+      sucursalId: sucursalId ?? null,
+    },
+  });
+  if (duplicada) {
+    throw new AppError(
+      `Ya existe una tarifa activa para "${modalidadNormalizada}" y ese tipo de vehículo (${duplicada.nombre}). Desactívala o edítala en lugar de crear otra.`,
+      409,
+    );
+  }
+
   const tarifa = await prisma.tarifa.create({
     data: {
       nombre,

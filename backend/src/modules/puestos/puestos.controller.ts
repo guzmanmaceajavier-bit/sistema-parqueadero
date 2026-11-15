@@ -41,8 +41,10 @@ export const crearPuestosMasivos = asyncHandler(async (req, res) => {
   if (!prefijo) prefijo = "Puesto";
 
   const pattern = `${prefijo} `;
+  // D4 — la numeración se calcula dentro de la misma sede para no chocar con
+  // puestos de otra sucursal que pueden usar el mismo código.
   const existentes = await prisma.puesto.findMany({
-    where: { codigo: { startsWith: pattern } },
+    where: { codigo: { startsWith: pattern }, sucursalId: sucursalId ?? null },
     select: { codigo: true },
   });
   const nums = new Set(
@@ -156,6 +158,14 @@ export const actualizarPuesto = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const puesto = await prisma.puesto.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!puesto) throw new AppError("Puesto no encontrado", 404);
+
+  // D11 — el estado OCUPADO/RESERVADO/AUSENCIA se calcula automáticamente
+  // (ingresos, reservas, mensualidades y ausencias). Manualmente solo se
+  // permite LIBRE o MANTENIMIENTO, para no mostrar un puesto ocupado sin
+  // vehículo ni libre con un vehículo dentro.
+  if (estado && !["LIBRE", "MANTENIMIENTO"].includes(estado)) {
+    throw new AppError("El estado OCUPADO, RESERVADO o AUSENCIA se calcula automáticamente según los ingresos, reservas y ausencias del puesto", 400);
+  }
 
   if (estado && ["LIBRE", "MANTENIMIENTO"].includes(estado) && !["LIBRE", "MANTENIMIENTO"].includes(puesto.estado)) {
     const [ingresos, mensualidades, reservas] = await Promise.all([

@@ -4,6 +4,7 @@ export const crearPuestoSchema = z.object({
   codigo: z.string().trim().max(20).optional(),
   tipoPuesto: z.string().trim().min(1, "Tipo de puesto es requerido").max(100),
   zona: z.string().trim().max(50).optional().nullable(),
+  sucursalId: z.number().int().positive().optional().nullable(),
   activo: z.boolean().optional().default(true),
 });
 
@@ -12,11 +13,14 @@ export const crearPuestosMasivosSchema = z.object({
   cantidad: z.coerce.number().int().positive("Cantidad debe ser positiva").max(500),
   tipoPuesto: z.string().trim().max(100).optional().default("carro"),
   zona: z.string().trim().max(50).optional().nullable(),
+  sucursalId: z.number().int().positive().optional().nullable(),
 });
 
 export const actualizarPuestoSchema = z.object({
   codigo: z.string().trim().max(20).optional(),
-  estado: z.enum(["LIBRE", "OCUPADO", "RESERVADO", "MANTENIMIENTO", "AUSENCIA"]).optional(),
+  // D11 — el estado ocupado/reservado/ausencia se calcula solo.
+  // El administrador solo puede poner LIBRE o MANTENIMIENTO de forma manual.
+  estado: z.enum(["LIBRE", "MANTENIMIENTO"]).optional(),
   tipoPuesto: z.string().trim().max(100).optional(),
   observacion: z.string().trim().max(500).optional().nullable(),
   zona: z.string().trim().max(50).optional().nullable(),

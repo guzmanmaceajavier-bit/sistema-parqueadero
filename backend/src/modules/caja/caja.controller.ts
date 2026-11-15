@@ -80,7 +80,14 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
 
     const actualizada = await tx.caja.updateMany({
       where: { id: Number(id), estado: "ABIERTA" },
-      data: { cierre: esperado, observacion: obsFinal, estado: "CERRADA" },
+      data: {
+        cierre: esperado,
+        conteoEfectivo: totalConteo > 0 ? totalConteo : null,
+        esperadoEfectivo: esperado,
+        diferenciaArqueo: totalConteo > 0 ? diferencia : null,
+        observacion: obsFinal,
+        estado: "CERRADA",
+      },
     });
     if (actualizada.count !== 1) throw new AppError("La caja fue cerrada por otra operación", 409);
 

@@ -28,12 +28,15 @@ export const login = asyncHandler(async (req, res) => {
   const NODE_ENV = process.env.NODE_ENV || "development";
 
   if (!valid) {
+    // D5 — el límite de intentos viene de la configuración (rango seguro 3..10).
+    const config = await prisma.configuracion.findFirst({ select: { intentosMaximos: true } });
+    const maxIntentos = Math.min(10, Math.max(3, config?.intentosMaximos ?? 5));
     const nuevosIntentos = usuarioDb.intentosFallidos + 1;
     const data: any = { intentosFallidos: nuevosIntentos };
     await prisma.acceso.create({
       data: { usuarioId: usuarioDb.id, usuario: usuarioDb.usuario, actividad: "INICIO SESIÓN FALLIDO", ip, dispositivo },
     });
-    if (nuevosIntentos >= 5) {
+    if (nuevosIntentos >= maxIntentos) {
       data.bloqueadoHasta = new Date(Date.now() + 15 * 60 * 1000);
       data.intentosFallidos = 0;
       await prisma.usuario.update({ where: { id: usuarioDb.id }, data });

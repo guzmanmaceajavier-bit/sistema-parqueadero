@@ -71,9 +71,9 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     prisma.ingreso.count({ where: { estado: "ACTIVO", ...puestoSucursalFilter } }),
     prisma.ingreso.count({ where: { fechaEntrada: { gte: hoy, lt: manana }, ...puestoSucursalFilter } }),
 
-    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: hoy, lt: manana }, ...sucursalFilter } }),
-    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: principioMes, lt: manana }, ...sucursalFilter } }),
-    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: inicioSemana, lt: manana }, ...sucursalFilter } }),
+    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, anulada: false, createdAt: { gte: hoy, lt: manana }, ...sucursalFilter } }),
+    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, anulada: false, createdAt: { gte: principioMes, lt: manana }, ...sucursalFilter } }),
+    prisma.factura.aggregate({ _sum: { valor: true }, where: { metodoPago: { not: null }, anulada: false, createdAt: { gte: inicioSemana, lt: manana }, ...sucursalFilter } }),
 
     prisma.gasto.aggregate({ _sum: { valor: true }, where: { fecha: { gte: hoy, lt: manana }, ...sucursalFilter } }),
 
@@ -114,10 +114,10 @@ export const obtenerDashboard = asyncHandler(async (req, res) => {
     prisma.mensualidad.count({ where: { fechaFin: { lt: hoy }, estado: "ACTIVA", ...sucursalFilter } }),
     prisma.mensualidad.count({ where: { ...mensualidadVigenteFilter, fechaFin: { gte: ahora, lt: finSemana } } }),
 
-    prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: sieteDiasAtras, lt: manana }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+    prisma.factura.findMany({ where: { metodoPago: { not: null }, anulada: false, createdAt: { gte: sieteDiasAtras, lt: manana }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
     prisma.gasto.findMany({ where: { fecha: { gte: sieteDiasAtras, lt: manana }, ...sucursalFilter }, select: { valor: true, fecha: true }, orderBy: { fecha: "asc" } }),
-    prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: { metodoPago: { not: null }, createdAt: { gte: inicioSemana, lt: manana }, ...sucursalFilter } }),
-    prisma.factura.findMany({ where: { metodoPago: { not: null }, createdAt: { gte: principioAnio, lt: manana }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+    prisma.factura.groupBy({ by: ["metodoPago"], _count: true, _sum: { valor: true }, where: { metodoPago: { not: null }, anulada: false, createdAt: { gte: inicioSemana, lt: manana }, ...sucursalFilter } }),
+    prisma.factura.findMany({ where: { metodoPago: { not: null }, anulada: false, createdAt: { gte: principioAnio, lt: manana }, ...sucursalFilter }, select: { valor: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const resumenPuestos = resumirEstadosPuestos(puestos);

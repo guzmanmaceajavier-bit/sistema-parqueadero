@@ -30,7 +30,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
 
   const [facturas, gastos, ingresosPeriodo, puestos, ocupacionPorHora] = await Promise.all([
     prisma.factura.findMany({
-      where: { createdAt: rango, ...sf },
+      where: { createdAt: rango, anulada: false, ...sf },
       include: {
         ingreso: {
           select: {
@@ -96,7 +96,7 @@ export const obtenerReporte = asyncHandler(async (req, res) => {
     by: ["metodoPago"],
     _count: true,
     _sum: { valor: true },
-    where: { createdAt: rango, metodoPago: { not: null }, ...sf },
+    where: { createdAt: rango, metodoPago: { not: null }, anulada: false, ...sf },
   });
 
   res.json({

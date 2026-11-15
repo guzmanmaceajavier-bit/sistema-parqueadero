@@ -631,12 +631,28 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
     const nuevoSaldo = Math.max(0, saldoPendiente - montoPagado);
     const renovada = nuevoSaldo <= 0;
     if (renovada) {
+      // Renovación unificada: se crea un PERÍODO NUEVO (igual que renovarMensualidad)
+      // y el periodo pagado queda como histórico con sus facturas.
       const fechaInicio = new Date();
       const fechaFin = new Date(fechaInicio);
       fechaFin.setDate(fechaFin.getDate() + (mensualidad.plan?.duracionDias || 30));
       await tx.mensualidad.update({
         where: { id: mensualidad.id },
-        data: { fechaInicio, fechaFin, estado: "ACTIVA" },
+        data: { estado: "VENCIDA" },
+      });
+      await tx.mensualidad.create({
+        data: {
+          clienteId: mensualidad.clienteId,
+          vehiculoId: mensualidad.vehiculoId,
+          planId: mensualidad.planId,
+          puestoId: mensualidad.puestoId,
+          fechaInicio,
+          fechaFin,
+          valor: mensualidad.valor,
+          estado: "ACTIVA",
+          observacion: mensualidad.observacion,
+          sucursalId: mensualidad.sucursalId,
+        },
       });
     }
 

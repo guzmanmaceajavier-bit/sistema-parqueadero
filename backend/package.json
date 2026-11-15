@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run src/tests/integration"
+    "test:integration": "vitest run --project integration",
+    "test:unit": "vitest run --project unit",
+    "test:db:setup": "node prisma/seed/seed-test.mjs"
   },
   "keywords": [],
   "author": "",

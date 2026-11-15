@@ -5,6 +5,7 @@ import Pagination from "../components/Pagination";
 import ExportButton from "../components/ExportButton";
 import { TableSkeleton } from "../components/Skeleton";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters";
+import { useAuth } from "../context/AuthContext";
 
 function IconReceipt() {
   return <FileText className="w-4 h-4" />;
@@ -27,6 +28,7 @@ function IconEye() {
 }
 
 export default function Facturas() {
+  const { isAdmin } = useAuth();
   const [facturas, setFacturas] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [busquedaDebounced, setBusquedaDebounced] = useState("");
@@ -34,6 +36,18 @@ export default function Facturas() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [initialLoading, setInitialLoading] = useState(true);
+
+  const anularFactura = async (id) => {
+    const motivo = window.prompt("Motivo de anulación (mínimo 3 caracteres):");
+    if (!motivo || motivo.trim().length < 3) return;
+    try {
+      await api.post(`/facturas/${id}/anular`, { motivo });
+      mostrarToast("Factura anulada con contrapartida", "success");
+      cargarFacturas(page, busquedaDebounced);
+    } catch (error) {
+      mostrarToast(error.response?.data?.message || "Error al anular factura", "error");
+    }
+  };
 
   const cargarFacturas = async (p = 1, q = "") => {
     try {
@@ -147,6 +161,9 @@ export default function Facturas() {
                         </button>
                         <button onClick={() => window.open(`/api/facturas/${f.id}/recibo`, '_blank')} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg" title="Ticket de salida">
                           Recibo
+                        </button>
+                        <button onClick={() => anularFactura(f.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg" title="Anular factura">
+                          Anular
                         </button>
                         <button onClick={() => enviarWhatsApp(f.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-lg" title="Enviar por WhatsApp">
                           <IconWhatsApp />

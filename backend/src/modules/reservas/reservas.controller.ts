@@ -148,7 +148,17 @@ export const crearReserva = asyncHandler(async (req, res) => {
       data: { clienteId: cid, vehiculoId: vid, puestoId: pid, fechaInicio: inicio, fechaFin: fin, observaciones, sucursalId: sucursalRegistro },
       include: { cliente: true, vehiculo: true, puesto: true },
     });
-    if (pid) await tx.puesto.update({ where: { id: pid }, data: { estado: "RESERVADO" } });
+    // D10 — la reserva no bloquea el puesto si la fecha es lejana.
+    // El puesto se marca RESERVADO cuando la reserva entra en la ventana
+    // operativa (por defecto 24 h antes del inicio, configurable).
+    if (pid) {
+      const config = await tx.configuracion.findFirst({ select: { reservaVentanaHoras: true } });
+      const ventanaHoras = Math.max(0, config?.reservaVentanaHoras ?? 24);
+      const limiteVentana = new Date(inicio.getTime() - ventanaHoras * 3600000);
+      if (limiteVentana.getTime() <= Date.now()) {
+        await tx.puesto.update({ where: { id: pid }, data: { estado: "RESERVADO" } });
+      }
+    }
     return creada;
   });
   const codPuesto = puesto?.codigo || "sin asignar";

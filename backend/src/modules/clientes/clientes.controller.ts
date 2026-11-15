@@ -30,17 +30,36 @@ export const crearCliente = asyncHandler(async (req, res) => {
 
 export const obtenerClientes = asyncHandler(async (req, res) => {
   const { page, limit, estado, q, deseaReservar } = req.query;
+  // D7 — el cliente es global, pero cada sede solo ve los clientes con los que
+  // tiene relación (operaciones en esa sede). El administrador ve todos.
+  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
   const where: any = {};
+  const filtroSucursal = sucursalId
+    ? [
+        { vehiculos: { some: { sucursalId } } },
+        { ingresos: { some: { vehiculo: { sucursalId } } } },
+        { mensualidades: { some: { sucursalId } } },
+        { reservas: { some: { sucursalId } } },
+        { ausencias: { some: { sucursalId } } },
+      ]
+    : null;
   if (estado) where.estado = estado;
   if (deseaReservar === "true") where.deseaReservar = true;
   if (q) {
-    where.OR = [
-      { nombres: { contains: q, mode: "insensitive" } },
-      { apellidos: { contains: q, mode: "insensitive" } },
-      { documento: { contains: q, mode: "insensitive" } },
-      { telefono: { contains: q, mode: "insensitive" } },
-      { vehiculos: { some: { placa: { contains: q, mode: "insensitive" } } } },
+    where.AND = [
+      ...(filtroSucursal ? [{ OR: filtroSucursal }] : []),
+      {
+        OR: [
+          { nombres: { contains: q, mode: "insensitive" } },
+          { apellidos: { contains: q, mode: "insensitive" } },
+          { documento: { contains: q, mode: "insensitive" } },
+          { telefono: { contains: q, mode: "insensitive" } },
+          { vehiculos: { some: { placa: { contains: q, mode: "insensitive" } } } },
+        ],
+      },
     ];
+  } else if (filtroSucursal) {
+    where.OR = filtroSucursal;
   }
 
   const { data: clientes, pagination } = await paginate(prisma, "cliente", {
@@ -350,9 +369,23 @@ export const recargarSaldo = asyncHandler(async (req, res) => {
   // Saldo y movimiento de caja se crean en una sola transacción: nunca queda
   // un saldo acreditado sin su ingreso correspondiente (ni al revés).
   const cliente = await prisma.$transaction(async (tx) => {
+    const saldoAntes = await tx.cliente.findUnique({ where: { id: Number(id) }, select: { saldo: true } });
     const actualizado = await tx.cliente.update({
       where: { id: Number(id) },
       data: { saldo: { increment: Number(monto) } },
+    });
+
+    // D6 — libro de movimientos de saldo (trazabilidad de recargas y consumos).
+    await tx.clienteSaldoMovimiento.create({
+      data: {
+        clienteId: Number(id),
+        tipo: "RECARGA",
+        monto: Number(monto),
+        saldoAntes: saldoAntes?.saldo ?? 0,
+        saldoDespues: (saldoAntes?.saldo ?? 0) + Number(monto),
+        concepto: `Recarga de saldo`,
+        usuario: req.usuario?.usuario || "admin",
+      },
     });
 
     const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalId ?? null } });

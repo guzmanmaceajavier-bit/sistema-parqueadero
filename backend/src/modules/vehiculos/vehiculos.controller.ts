@@ -137,6 +137,33 @@ export const actualizarVehiculo = asyncHandler(async (req, res) => {
     }
   }
 
+  // Historial de propietarios: si cambia el dueño, se cierra el período
+  // anterior y se abre el nuevo (conserva quién era el dueño y desde cuándo).
+  const cambiaPropietario = clienteId !== undefined && Number(clienteId) !== existe.clienteId;
+  if (cambiaPropietario) {
+    const nuevoClienteId = Number(clienteId);
+    const nuevo = await prisma.cliente.findUnique({ where: { id: nuevoClienteId }, select: { id: true } });
+    if (!nuevo) throw new AppError("Cliente no encontrado", 404);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.vehiculoPropietario.updateMany({
+        where: { vehiculoId: Number(id), hasta: null },
+        data: { hasta: new Date() },
+      });
+      await tx.vehiculoPropietario.create({
+        data: { vehiculoId: Number(id), clienteId: nuevoClienteId, desde: new Date() },
+      });
+      await tx.vehiculo.update({ where: { id: Number(id) }, data: { clienteId: nuevoClienteId } });
+    });
+    delete data.clienteId;
+    await registrarMovimiento(
+      "VEHICULOS",
+      "CAMBIAR_PROPIETARIO",
+      `Vehículo ${existe.placa} cambió de propietario`,
+      req.usuario?.usuario || "admin",
+    );
+  }
+
   const vehiculo = await prisma.vehiculo.update({ where: { id: Number(id) }, data, include: { cliente: true, plan: true, tarifa: true } });
   res.json({ ok: true, vehiculo });
 });

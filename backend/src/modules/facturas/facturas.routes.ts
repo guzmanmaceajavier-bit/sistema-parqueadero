@@ -2,7 +2,7 @@ import express from "express";
 import { verificarToken } from "../../middlewares/auth.middleware.js";
 import { verificarRol } from "../../middlewares/roles.middleware.js";
 import { validateIdParam } from "../../middlewares/validateId.middleware.js";
-import { obtenerFacturas, obtenerFactura, descargarFacturaPDF, enviarWhatsapp, reciboSalida } from "./facturas.controller.js";
+import { obtenerFacturas, obtenerFactura, descargarFacturaPDF, enviarWhatsapp, reciboSalida, anularFactura } from "./facturas.controller.js";
 import rateLimit from "express-rate-limit";
 
 const pdfLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { ok: false, message: "Demasiadas descargas de PDF. Intente de nuevo en 1 minuto." } });
@@ -22,6 +22,7 @@ const router = express.Router();
  *         description: Lista de facturas
  */
 router.get("/", verificarToken, obtenerFacturas);
+router.post("/:id/anular", verificarToken, verificarRol("admin", "supervisor"), validateIdParam, anularFactura);
 
 /**
  * @swagger

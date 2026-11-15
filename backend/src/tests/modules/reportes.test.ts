@@ -52,7 +52,7 @@ describe("obtenerReporte", () => {
       lt: new Date("2026-11-01T00:00:00.000Z"),
     };
     expect(prismaMock.factura.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { createdAt: rango, sucursalId: 7 },
+      where: { createdAt: rango, anulada: false, sucursalId: 7 },
       include: expect.objectContaining({
         ingreso: expect.any(Object),
         mensualidad: {
@@ -74,7 +74,7 @@ describe("obtenerReporte", () => {
       select: { fechaEntrada: true },
     }));
     expect(prismaMock.factura.groupBy).toHaveBeenCalledWith(expect.objectContaining({
-      where: { createdAt: rango, metodoPago: { not: null }, sucursalId: 7 },
+      where: { createdAt: rango, metodoPago: { not: null }, anulada: false, sucursalId: 7 },
     }));
   });
 
@@ -95,6 +95,7 @@ describe("obtenerReporte", () => {
 
     expect(prismaMock.factura.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
+        anulada: false,
         createdAt: {
           gte: new Date("2026-10-01T05:00:00.000Z"),
           lt: new Date("2026-10-02T05:00:00.000Z"),
