@@ -40,6 +40,13 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     }
     const ahora = new Date();
     const sucursalIngreso = ingresoActivo?.vehiculo.sucursalId ?? vehiculo.sucursalId ?? sucursalId ?? null;
+    const fechaSalidaEfectiva = fechaSalida ? new Date(fechaSalida) : ahora;
+    if (!Number.isFinite(fechaSalidaEfectiva.getTime()) || fechaSalidaEfectiva > ahora) throw new AppError("La fecha de salida no es válida o está en el futuro", 400);
+    if (fechaRegreso) {
+      const regresoInicial = new Date(fechaRegreso);
+      if (!Number.isFinite(regresoInicial.getTime()) || regresoInicial < fechaSalidaEfectiva || regresoInicial > ahora) throw new AppError("La fecha de regreso inicial no es válida", 400);
+    }
+    if (ingresoActivo && fechaSalidaEfectiva < ingresoActivo.fechaEntrada) throw new AppError("La salida no puede ser anterior al ingreso del vehículo", 400);
     const planActivo = await tx.mensualidad.findFirst({
       where: {
         vehiculoId: vid, sucursalId: sucursalIngreso, estado: "ACTIVA",
@@ -49,13 +56,15 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       orderBy: { fechaInicio: "desc" },
     });
-    const fechaSalidaEfectiva = fechaSalida ? new Date(fechaSalida) : ahora;
-    if (!Number.isFinite(fechaSalidaEfectiva.getTime()) || fechaSalidaEfectiva > ahora) throw new AppError("La fecha de salida no es válida o está en el futuro", 400);
-    if (fechaRegreso) {
-      const regresoInicial = new Date(fechaRegreso);
-      if (!Number.isFinite(regresoInicial.getTime()) || regresoInicial < fechaSalidaEfectiva || regresoInicial > ahora) throw new AppError("La fecha de regreso inicial no es válida", 400);
-    }
-    if (ingresoActivo && fechaSalidaEfectiva < ingresoActivo.fechaEntrada) throw new AppError("La salida no puede ser anterior al ingreso del vehículo", 400);
+    const planQueCubriaEntrada = ingresoActivo && !planActivo ? await tx.mensualidad.findFirst({
+      where: {
+        vehiculoId: vid, sucursalId: sucursalIngreso, estado: { in: ["ACTIVA", "VENCIDA"] },
+        fechaInicio: { lte: ingresoActivo.fechaEntrada },
+        fechaFin: { gte: ingresoActivo.fechaEntrada, lt: fechaSalidaEfectiva },
+        ...(ingresoActivo.puestoId ? { OR: [{ puestoId: null }, { puestoId: ingresoActivo.puestoId }] } : {}),
+      },
+      orderBy: { fechaFin: "desc" },
+    }) : null;
 
     const a = await tx.ausencia.create({
       data: {
@@ -69,7 +78,7 @@ export const crearAusencia = asyncHandler(async (req, res) => {
     });
 
     if (ingresoActivo) {
-      const tiempoMinutos = Math.max(0, Math.ceil((fechaSalidaEfectiva.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60)));
+      let tiempoMinutos = Math.max(0, Math.ceil((fechaSalidaEfectiva.getTime() - ingresoActivo.fechaEntrada.getTime()) / (1000 * 60)));
       // La mensualidad vigente cubre el uso del puesto aunque tenga saldo pendiente.
       // El saldo sigue pendiente en la cuenta del cliente; no se genera un segundo cobro diario.
       const cubiertoPorPlan = !!planActivo;
@@ -78,14 +87,18 @@ export const crearAusencia = asyncHandler(async (req, res) => {
       if (!cubiertoPorPlan) {
         // No duplicar una fórmula simplificada: reutilizar el calculador central
         // para respetar modalidad, cortesías, minutos gratis, progresivas y topes.
+        const ingresoFacturable = planQueCubriaEntrada
+          ? { ...ingresoActivo, fechaEntrada: planQueCubriaEntrada.fechaFin }
+          : ingresoActivo;
         const cobro = await calcularCobro({
-          ingreso: ingresoActivo,
+          ingreso: ingresoFacturable,
           tipoVehiculo: ingresoActivo.vehiculo.tipo || undefined,
           fechaSalida: fechaSalidaEfectiva,
           tarifaId: ingresoActivo.vehiculo.tarifaId ?? undefined,
         });
         if (cobro.error) throw new AppError(cobro.error, 400);
         valorFacturado = cobro.total;
+        tiempoMinutos = cobro.totalMinutos ?? tiempoMinutos;
 
         await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124019)) AS advisory_lock`;
         const cajaAbierta = await tx.caja.findFirst({ where: { estado: "ABIERTA", sucursalId: sucursalIngreso } });
@@ -280,7 +293,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
         fechaFin: { gte: existente.fechaSalida },
         ...(a.mensualidadId ? { id: a.mensualidadId } : { ...(puestoAusenciaId ? { OR: [{ puestoId: null }, { puestoId: puestoAusenciaId }] } : {}) }),
       },
-      include: { facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
+      include: { plan: { select: { duracionDias: true } }, facturas: { select: { createdAt: true, valor: true, metodoPago: true, anulada: true } } },
       orderBy: { fechaInicio: "desc" },
     });
 
@@ -311,7 +324,8 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       // o sobra compensación después de cubrir la deuda, el excedente va al saldo
       // a favor del cliente con un movimiento trazable (no se altera la factura).
       const pagado = calcularPagadoMensualidad(mensualidadAusencia.facturas, mensualidadAusencia.fechaInicio);
-      const descuentoSolicitado = redondearDinero((mensualidadAusencia.valor / 30) * diasAusente);
+      const duracionPlan = Math.max(1, mensualidadAusencia.plan?.duracionDias ?? 30);
+      const descuentoSolicitado = redondearDinero((mensualidadAusencia.valor / duracionPlan) * diasAusente);
       diasCompensados = diasAusente;
       valorCompensado = descuentoSolicitado;
       const deudaPendiente = Math.max(0, restarDinero(mensualidadAusencia.valor, pagado));
