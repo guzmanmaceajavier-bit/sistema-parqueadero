@@ -167,12 +167,33 @@ export const actualizarAusencia = asyncHandler(async (req, res) => {
   const existente = await prisma.ausencia.findFirst({ where: { id: Number(id), ...(sucursalId ? { sucursalId } : {}) } });
   if (!existente) throw new AppError("Ausencia no encontrada", 404);
 
+  // Cambiar el estado por esta ruta omitía la lógica de finalización
+  // (devolución del puesto, fechas y ajustes de mensualidad).
+  if (estado !== undefined) {
+    throw new AppError("El estado debe modificarse mediante la acción de finalizar ausencia", 400);
+  }
+
   const data: any = {};
-  if (fechaSalida) data.fechaSalida = new Date(fechaSalida);
-  if (fechaRegreso !== undefined) data.fechaRegreso = fechaRegreso ? new Date(fechaRegreso) : null;
+  if (fechaSalida !== undefined) {
+    const fecha = new Date(fechaSalida);
+    if (!Number.isFinite(fecha.getTime())) throw new AppError("La fecha de salida no es válida", 400);
+    data.fechaSalida = fecha;
+  }
+  if (fechaRegreso !== undefined) {
+    if (fechaRegreso === null || fechaRegreso === "") data.fechaRegreso = null;
+    else {
+      const fecha = new Date(fechaRegreso);
+      if (!Number.isFinite(fecha.getTime())) throw new AppError("La fecha de regreso no es válida", 400);
+      if (data.fechaSalida && fecha < data.fechaSalida) throw new AppError("La fecha de regreso no puede ser anterior a la salida", 400);
+      data.fechaRegreso = fecha;
+    }
+  }
   if (motivo !== undefined) data.motivo = motivo;
-  if (opcion) data.opcion = opcion;
-  if (estado) data.estado = estado;
+  if (opcion !== undefined) {
+    const opcionesValidas = ["HISTORIAL", "CONGELAR", "EXTENDER", "DESCONTAR", "MANTENER"];
+    if (!opcionesValidas.includes(opcion)) throw new AppError("La opción de ausencia no es válida", 400);
+    data.opcion = opcion;
+  }
 
   const ausencia = await prisma.ausencia.update({
     where: { id: Number(id) }, data,
