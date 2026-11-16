@@ -9,6 +9,7 @@ import { formatCurrency, getMetodosPagoActivos } from "../utils/formatters";
 import api from "../services/api";
 import Pagination from "../components/Pagination";
 import Toast from "../components/Toast";
+import ConfirmDialog from "../components/ConfirmDialog";
 import SelectWithOther from "../components/SelectWithOther";
 import Select from "../components/ui/Select";
 import FormModal from "../components/ui/FormModal";
