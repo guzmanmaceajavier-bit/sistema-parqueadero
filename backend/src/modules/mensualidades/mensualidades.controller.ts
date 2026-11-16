@@ -772,7 +772,10 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
       // Relectura + bloqueo por mensualidad: evita duplicar la factura del mes
       // si dos usuarios generan pendientes a la vez.
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${m.id}::integer)) AS advisory_lock`;
-      const actual = await tx.mensualidad.findFirst({ where: { id: m.id }, include: { facturas: { select: { createdAt: true, origen: true } } } });
+      const actual = await tx.mensualidad.findFirst({
+        where: { id: m.id, estado: "ACTIVA", fechaFin: { gte: hoy } },
+        include: { facturas: { select: { createdAt: true, origen: true } } },
+      });
       if (!actual) return;
       const yaTieneMes = actual.facturas.some(f => {
         const fDate = new Date(f.createdAt);
@@ -780,16 +783,30 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
       });
       if (yaTieneMes) return;
 
+      // Recalcula el saldo después de tomar el bloqueo: pudo haberse pagado
+      // mientras se recorría la lista inicial de mensualidades.
+      const pagosActuales = await tx.factura.aggregate({
+        _sum: { valor: true },
+        where: {
+          mensualidadId: actual.id,
+          createdAt: { gte: actual.fechaInicio },
+          metodoPago: { not: null },
+          anulada: false,
+        },
+      });
+      const saldoActual = Math.max(0, restarDinero(actual.valor, pagosActuales._sum.valor || 0));
+      if (saldoActual <= 0) return;
+
       const numeroFactura = await generarNumeroFactura("FACT-MEN");
       await tx.factura.create({
         data: {
           numero: numeroFactura,
-          mensualidadId: m.id,
+          mensualidadId: actual.id,
           origen: "MENSUALIDAD_AUTO",
-          // Se factura el saldo pendiente real, no el valor total.
-          valor: saldoPendiente,
+          // Una factura pendiente documenta deuda, nunca un ingreso de caja.
+          valor: saldoActual,
           metodoPago: null,
-          sucursalId: m.sucursalId,
+          sucursalId: actual.sucursalId,
         },
       });
       generadas++;
