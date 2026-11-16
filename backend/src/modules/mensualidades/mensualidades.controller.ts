@@ -92,8 +92,8 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
       puesto ? tx.$queryRaw<Array<{ id: number }>>`SELECT "id" FROM "Reserva"
         WHERE "puestoId" = ${puesto.id}
           AND "estado" IN ('PENDIENTE', 'CONFIRMADA', 'ACTIVA')
-          AND "fechaInicio" < ${fin}
-          AND ("fechaFin" IS NULL OR "fechaFin" >= ${inicio})
+          AND "fechaInicio" < ${fin} AT TIME ZONE 'UTC'
+          AND ("fechaFin" IS NULL OR "fechaFin" >= ${inicio} AT TIME ZONE 'UTC')
         LIMIT 1` : Promise.resolve([]),
     ]);
     if (mensualidadVehiculo) throw new AppError("El vehículo ya tiene una mensualidad que se cruza con este periodo", 409);
@@ -204,101 +204,14 @@ export const obtenerVencidas = asyncHandler(async (req, res) => {
   res.json({ ok: true, vencidas });
 });
 
-export const renovarMensualidad = asyncHandler(async (req, res) => {
-  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
-  const id = Number(req.params.id);
-  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { vehiculo: { select: { sucursalId: true } }, plan: true } });
-  if (!existente) throw new AppError("Mensualidad no encontrada", 404);
-  if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
-
-  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo.sucursalId ?? sucursalId ?? null;
-  const ahora = new Date();
-  // El nuevo periodo comienza después del anterior; se conserva la mensualidad histórica y sus facturas.
-  const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin.getTime() + 1) : ahora;
-  const fechaFin = new Date(fechaInicio);
-  fechaFin.setDate(fechaFin.getDate() + Math.max(1, existente.plan?.duracionDias || 30));
-
-  const renovada = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
-    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
-    if (
-      !actual ||
-      actual.estado === "CANCELADA" ||
-      actual.vehiculoId !== existente.vehiculoId ||
-      actual.puestoId !== existente.puestoId ||
-      actual.fechaFin.getTime() !== existente.fechaFin.getTime() ||
-      actual.estado !== existente.estado
-    ) {
-      throw new AppError("La mensualidad cambió mientras se renovaba. Actualiza e inténtalo nuevamente.", 409);
-    }
-
-    const [otraMensualidad, reserva, ingreso] = await Promise.all([
-      tx.mensualidad.findFirst({
-        where: { id: { not: id }, vehiculoId: actual.vehiculoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
-        select: { id: true },
-      }),
-      tx.reserva.findFirst({
-        where: { vehiculoId: actual.vehiculoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-          fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
-        select: { id: true },
-      }),
-      tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
-    ]);
-    if (otraMensualidad || reserva) throw new AppError("El vehículo ya tiene otra asignación que se cruza con la renovación", 409);
-    if (ingreso && (!actual.puestoId || ingreso.puestoId !== actual.puestoId || fechaInicio > ahora)) {
-      throw new AppError("El vehículo tiene un ingreso activo incompatible con el periodo de renovación", 409);
-    }
-
-    if (actual.puestoId) {
-      const puestoActual = await tx.puesto.findFirst({ where: { id: actual.puestoId, sucursalId: sucursalOrigen } });
-      if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible para renovar", 409);
-      const [otraMensualidadPuesto, reservaPuesto, ingresoEnPuesto] = await Promise.all([
-        tx.mensualidad.findFirst({
-          where: { id: { not: id }, puestoId: actual.puestoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
-          select: { id: true },
-        }),
-        tx.reserva.findFirst({
-          where: { puestoId: actual.puestoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
-          select: { id: true },
-        }),
-        tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO", ...(ingreso ? { id: { not: ingreso.id } } : {}) }, select: { id: true } }),
-      ]);
-      if (otraMensualidadPuesto || reservaPuesto || ingresoEnPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
-    }
-
-    const nueva = await tx.mensualidad.create({
-      data: {
-        clienteId: actual.clienteId,
-        vehiculoId: actual.vehiculoId,
-        planId: actual.planId,
-        puestoId: actual.puestoId,
-        fechaInicio,
-        fechaFin,
-        valor: actual.valor,
-        observacion: actual.observacion,
-        estado: "ACTIVA",
-        sucursalId: actual.sucursalId,
-      },
-      include: { cliente: true, vehiculo: true, plan: true, puesto: true },
-    });
-
-    if (actual.puestoId) {
-      await tx.puesto.update({
-        where: { id: actual.puestoId },
-        data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
-      });
-    }
-    if (actual.fechaFin < ahora && actual.estado === "ACTIVA") {
-      await tx.mensualidad.update({ where: { id }, data: { estado: "VENCIDA" } });
-    }
-    return nueva;
-  });
-  await registrarMovimiento("MENSUALIDADES", "RENOVAR", `Mensualidad #${id} renovada como #${renovada.id}`, req.usuario?.usuario);
-  res.json({ ok: true, renovada });
+/**
+ * La renovación solo puede producirse como consecuencia de un pago registrado.
+ * Se conserva esta respuesta explícita para clientes antiguos que todavía llamen
+ * al endpoint retirado: nunca debe otorgarse cobertura sin factura ni caja.
+ */
+export const renovarMensualidad = asyncHandler(async (_req, _res) => {
+  throw new AppError("Para renovar, registra el pago desde la opción Cobrar mensualidad. La renovación se aplica automáticamente al completar el pago.", 409);
 });
-
 
 export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
@@ -625,15 +538,81 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
     const nuevoSaldo = Math.max(0, restarDinero(saldoPendiente, montoPagado));
     const renovada = nuevoSaldo <= 0;
     if (renovada) {
-      // Renovación unificada: se crea un PERÍODO NUEVO (igual que renovarMensualidad)
-      // y el periodo pagado queda como histórico con sus facturas.
-      const fechaInicio = new Date();
+      // El nuevo periodo nunca consume días ya pagados: si la mensualidad sigue
+      // vigente, la renovación empieza al día siguiente de su fecha de fin.
+      const ahora = new Date();
+      const fechaInicio = mensualidad.fechaFin > ahora
+        ? new Date(mensualidad.fechaFin.getTime() + 1)
+        : ahora;
       const fechaFin = new Date(fechaInicio);
-      fechaFin.setDate(fechaFin.getDate() + (mensualidad.plan?.duracionDias || 30));
-      await tx.mensualidad.update({
-        where: { id: mensualidad.id },
-        data: { estado: "VENCIDA" },
-      });
+      fechaFin.setDate(fechaFin.getDate() + Math.max(1, mensualidad.plan?.duracionDias || 30));
+
+      // El bloqueo por vehículo ya está tomado. Revalidamos conflictos dentro de
+      // la transacción para no crear dos coberturas o reservar el mismo espacio.
+      const [otraMensualidad, reservaVehiculo, ingresoFisico] = await Promise.all([
+        tx.mensualidad.findFirst({
+          where: {
+            id: { not: mensualidad.id }, vehiculoId: mensualidad.vehiculoId,
+            sucursalId: mensualidad.sucursalId ?? sucursalId ?? null, estado: "ACTIVA",
+            fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio },
+          },
+          select: { id: true },
+        }),
+        tx.reserva.findFirst({
+          where: {
+            vehiculoId: mensualidad.vehiculoId,
+            sucursalId: mensualidad.sucursalId ?? sucursalId ?? null,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: fechaFin },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }],
+          },
+          select: { id: true },
+        }),
+        tx.ingreso.findFirst({
+          where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVO" },
+          select: { id: true, puestoId: true },
+        }),
+      ]);
+      if (otraMensualidad || reservaVehiculo) {
+        throw new AppError("No se puede renovar: el vehículo tiene otra mensualidad o reserva en ese periodo", 409);
+      }
+      if (ingresoFisico && (!mensualidad.puestoId || ingresoFisico.puestoId !== mensualidad.puestoId)) {
+        throw new AppError("El vehículo está en un puesto incompatible con la renovación", 409);
+      }
+
+      if (mensualidad.puestoId) {
+        const [otraMensualidadPuesto, reservaPuesto, otroIngreso] = await Promise.all([
+          tx.mensualidad.findFirst({
+            where: {
+              id: { not: mensualidad.id }, puestoId: mensualidad.puestoId,
+              sucursalId: mensualidad.sucursalId ?? sucursalId ?? null, estado: "ACTIVA",
+              fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio },
+            },
+            select: { id: true },
+          }),
+          tx.reserva.findFirst({
+            where: {
+              puestoId: mensualidad.puestoId,
+              sucursalId: mensualidad.sucursalId ?? sucursalId ?? null,
+              estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+              fechaInicio: { lt: fechaFin },
+              OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }],
+            },
+            select: { id: true },
+          }),
+          tx.ingreso.findFirst({
+            where: {
+              puestoId: mensualidad.puestoId, estado: "ACTIVO",
+              ...(ingresoFisico ? { id: { not: ingresoFisico.id } } : {}),
+            },
+            select: { id: true },
+          }),
+        ]);
+        if (otraMensualidadPuesto || reservaPuesto || otroIngreso) {
+          throw new AppError("No se puede renovar: el puesto tiene otra asignación en ese periodo", 409);
+        }
+      }
+
       await tx.mensualidad.create({
         data: {
           clienteId: mensualidad.clienteId,
@@ -648,11 +627,10 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
           sucursalId: mensualidad.sucursalId,
         },
       });
+
+      // No se vence el periodo anterior anticipadamente: sigue dando cobertura
+      // hasta su fechaFin. El proceso de vencimientos lo cerrará cuando corresponda.
       if (mensualidad.puestoId) {
-        const ingresoFisico = await tx.ingreso.findFirst({
-          where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVO" },
-          select: { id: true },
-        });
         await tx.puesto.update({
           where: { id: mensualidad.puestoId },
           data: { estado: ingresoFisico ? "OCUPADO" : "RESERVADO" },
@@ -698,16 +676,14 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
 
-    // Saldo real pendiente del período (pagado = facturas con metodoPago dentro del período).
-    const pagado = calcularPagadoMensualidad(m.facturas, m.fechaInicio);
-    const saldoPendiente = Math.max(0, Number(m.valor) - pagado);
-    if (saldoPendiente <= 0) continue;
-
     await prisma.$transaction(async (tx) => {
       // Relectura + bloqueo por mensualidad: evita duplicar la factura del mes
       // si dos usuarios generan pendientes a la vez.
       await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124018, ${m.id}::integer)) AS advisory_lock`;
-      const actual = await tx.mensualidad.findFirst({ where: { id: m.id }, include: { facturas: { select: { createdAt: true, origen: true } } } });
+      const actual = await tx.mensualidad.findFirst({
+        where: { id: m.id, estado: "ACTIVA", fechaFin: { gte: hoy } },
+        include: { facturas: { select: { createdAt: true, origen: true } } },
+      });
       if (!actual) return;
       const yaTieneMes = actual.facturas.some(f => {
         const fDate = new Date(f.createdAt);
@@ -715,16 +691,30 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
       });
       if (yaTieneMes) return;
 
+      // Recalcula el saldo después de tomar el bloqueo: pudo haberse pagado
+      // mientras se recorría la lista inicial de mensualidades.
+      const pagosActuales = await tx.factura.aggregate({
+        _sum: { valor: true },
+        where: {
+          mensualidadId: actual.id,
+          createdAt: { gte: actual.fechaInicio },
+          metodoPago: { not: null },
+          anulada: false,
+        },
+      });
+      const saldoActual = Math.max(0, restarDinero(actual.valor, pagosActuales._sum.valor || 0));
+      if (saldoActual <= 0) return;
+
       const numeroFactura = await generarNumeroFactura("FACT-MEN");
       await tx.factura.create({
         data: {
           numero: numeroFactura,
-          mensualidadId: m.id,
+          mensualidadId: actual.id,
           origen: "MENSUALIDAD_AUTO",
-          // Se factura el saldo pendiente real, no el valor total.
-          valor: saldoPendiente,
+          // Una factura pendiente documenta deuda, nunca un ingreso de caja.
+          valor: saldoActual,
           metodoPago: null,
-          sucursalId: m.sucursalId,
+          sucursalId: actual.sucursalId,
         },
       });
       generadas++;

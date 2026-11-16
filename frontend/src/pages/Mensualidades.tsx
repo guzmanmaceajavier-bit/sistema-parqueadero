@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Calendar, CalendarClock, Plus, Search, X, Banknote, RefreshCw, PenSquare, Trash2, XCircle, MoreVertical, MessageCircle, CheckCircle, Wallet } from "lucide-react";
+import { Calendar, CalendarClock, Plus, Search, X, Banknote, PenSquare, Trash2, XCircle, MoreVertical, MessageCircle, CheckCircle, Wallet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCaja } from "../context/CajaContext";
 import { useConfig } from "../context/ConfigContext";
@@ -38,10 +38,6 @@ function IconX() {
 
 function IconCash() {
   return <Banknote className="w-4 h-4" />;
-}
-
-function IconRefresh() {
-  return <RefreshCw className="w-4 h-4" />;
 }
 
 function EstadoMensualidadBadge({ estado, vencida }) {
@@ -99,7 +95,6 @@ export default function Mensualidades() {
 
   const formVacio = { clienteId: "", vehiculoId: "", puestoId: "", planId: "", fechaInicio: "", fechaFin: "", valor: "", observacion: "" };
   const [toast, setToast] = useState({ mensaje: "", tipo: "" });
-  const [confirm, setConfirm] = useState({ abierto: false, titulo: "", mensaje: "", onConfirm: () => {} });
   const mostrarToast = useCallback((mensaje, tipo = "success") => setToast({ mensaje, tipo }), []);
 
   const [form, setForm] = useState(formVacio);
@@ -202,18 +197,6 @@ export default function Mensualidades() {
     setEditando(m);
     cargarVehiculosDelCliente(m.clienteId);
     setMostrarModal(true);
-  };
-
-  const confirmarRenovar = (id) => {
-    setConfirm({ abierto: true, titulo: "Renovar mensualidad", mensaje: "¿Renovar esta mensualidad por un mes más?", onConfirm: () => renovar(id) });
-  };
-
-  const renovar = async (id) => {
-    try {
-      await api.put(`/mensualidades/renovar/${id}`);
-      cargarMensualidades();
-      mostrarToast("Suscripción renovada por un mes más", "success");
-    } catch (error) { mostrarToast("Error al renovar mensualidad", "error"); }
   };
 
   const eliminarMensualidad = async () => {
@@ -522,7 +505,6 @@ export default function Mensualidades() {
       </FormModal>
 
       <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast({ mensaje: "", tipo: "" })} />
-      <ConfirmDialog abierto={confirm.abierto} titulo={confirm.titulo} mensaje={confirm.mensaje} confirmLabel="Renovar mensualidad" onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, abierto: false }))} />
       <ConfirmDialog
         abierto={!!cancelarId}
         titulo="Cancelar mensualidad"
@@ -563,10 +545,6 @@ export default function Mensualidades() {
                 )}
                 {esActiva && (
                   <>
-                    <button onClick={() => { confirmarRenovar(m.id); setMenuAbiertoId(null); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-400 font-medium text-sm transition-all">
-                      <span className="p-2 rounded-lg bg-teal-600 text-white"><IconRefresh /></span>
-                      Renovar por 1 mes
-                    </button>
                     <button onClick={() => { setCancelarId(m.id); setMenuAbiertoId(null); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-medium text-sm transition-all">
                       <span className="p-2 rounded-lg bg-amber-600 text-white"><IconXCircle /></span>
                       Cancelar mensualidad

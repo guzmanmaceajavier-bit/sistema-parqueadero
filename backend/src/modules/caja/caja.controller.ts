@@ -57,7 +57,7 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
     let totalConteo = 0;
     let diferencia = 0;
 
-    if (conteo) {
+    if (conteo !== undefined && conteo !== null) {
       const billetesValidos = new Set([100000, 50000, 20000, 10000, 5000, 2000, 1000]);
       const monedasValidas = new Set([1000, 500, 200, 100, 50]);
       for (const [denom, count] of Object.entries(conteo.billetes || {})) {
@@ -86,9 +86,9 @@ export const cerrarCaja = asyncHandler(async (req, res) => {
       where: { id: Number(id), estado: "ABIERTA" },
       data: {
         cierre: esperado,
-        conteoEfectivo: totalConteo > 0 ? totalConteo : null,
+        conteoEfectivo: conteo !== undefined && conteo !== null ? totalConteo : null,
         esperadoEfectivo: esperado,
-        diferenciaArqueo: totalConteo > 0 ? diferencia : null,
+        diferenciaArqueo: conteo !== undefined && conteo !== null ? diferencia : null,
         observacion: obsFinal,
         estado: "CERRADA",
       },

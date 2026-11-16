@@ -29,9 +29,9 @@ async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asigna
   if (!puesto || !puesto.activo) return false;
 
   const ahora = new Date();
-  const [ingresos, otrasMensualidades, otrasReservas, mensualidadPropia, reservaPropia] = await Promise.all([
-    tx.ingreso.count({ where: { puestoId, estado: "ACTIVO" } }),
-    tx.mensualidad.count({
+  const [ingresosRows, otrasMensualidadesRows, otrasReservasRows, mensualidadPropiaRows, reservaPropiaRows] = await Promise.all([
+    tx.ingreso.findMany({ where: { puestoId, estado: "ACTIVO" }, select: { id: true } }),
+    tx.mensualidad.findMany({
       where: {
         puestoId,
         estado: "ACTIVA",
@@ -39,17 +39,19 @@ async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asigna
         fechaFin: { gte: ahora },
         ...(asignacion.vehiculoId ? { vehiculoId: { not: asignacion.vehiculoId } } : {}),
       },
+      select: { id: true },
     }),
-    tx.reserva.count({
+    tx.reserva.findMany({
       where: {
         puestoId,
         estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
         OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }],
         ...(asignacion.reservaId ? { id: { not: asignacion.reservaId } } : {}),
       },
+      select: { id: true },
     }),
     asignacion.vehiculoId
-      ? tx.mensualidad.count({
+      ? tx.mensualidad.findMany({
           where: {
             vehiculoId: asignacion.vehiculoId, estado: "ACTIVA", fechaInicio: { lte: ahora }, fechaFin: { gte: ahora },
             OR: [
@@ -57,14 +59,22 @@ async function puestoEstaDisponibleParaAsignar(tx: any, puestoId: number, asigna
               { puestoId: null, ausencias: { some: { puestoId, estado: "FINALIZADA" } } },
             ],
           },
+          select: { id: true },
         })
-      : 0,
+      : [],
     asignacion.reservaId
-      ? tx.reserva.count({
+      ? tx.reserva.findMany({
           where: { id: asignacion.reservaId, puestoId, estado: { in: ["PENDIENTE", "CONFIRMADA"] }, fechaInicio: { lte: ahora }, OR: [{ fechaFin: null }, { fechaFin: { gte: ahora } }] },
+          select: { id: true },
         })
-      : 0,
+      : [],
   ]);
+
+  const ingresos = ingresosRows.length;
+  const otrasMensualidades = otrasMensualidadesRows.length;
+  const otrasReservas = otrasReservasRows.length;
+  const mensualidadPropia = mensualidadPropiaRows.length;
+  const reservaPropia = reservaPropiaRows.length;
 
   const sinConflictos = ingresos === 0 && otrasMensualidades === 0 && otrasReservas === 0;
   const estadoCompatible = puesto.estado === "LIBRE"
@@ -347,9 +357,9 @@ export const liberarPuesto = asyncHandler(async (req, res) => {
       FROM "Mensualidad"
       WHERE "vehiculoId" = ${ingresoActual.vehiculoId}
         AND "estado" = 'ACTIVA'
-        AND "fechaInicio" <= ${fechaSalida}
-        AND "fechaFin" >= ${fechaSalida}
-        AND ("puestoId" IS NULL OR "puestoId" = ${ingresoActual.puestoId})
+        AND "fechaInicio" <= ${fechaSalida} AT TIME ZONE 'UTC'
+        AND "fechaFin" >= ${fechaSalida} AT TIME ZONE 'UTC'
+        AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
       FOR UPDATE
     `;
     if (planesActuales.length === 0) throw new AppError("La mensualidad dejó de estar vigente. Registre la salida con cobro desde Ingresos.", 409);
@@ -776,8 +786,8 @@ export const registrarSalidaConCobro = asyncHandler(async (req, res) => {
       FROM "Mensualidad"
       WHERE "vehiculoId" = ${ingreso.vehiculoId}
         AND "estado" = 'ACTIVA'
-        AND "fechaInicio" <= ${fechaSalida}
-        AND "fechaFin" >= ${fechaSalida}
+        AND "fechaInicio" <= ${fechaSalida} AT TIME ZONE 'UTC'
+        AND "fechaFin" >= ${fechaSalida} AT TIME ZONE 'UTC'
         AND "sucursalId" IS NOT DISTINCT FROM ${sucursalOperativa}
         AND ("puestoId" IS NULL OR "puestoId" = ${ingreso.puestoId})
       FOR UPDATE
