@@ -625,15 +625,81 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
     const nuevoSaldo = Math.max(0, restarDinero(saldoPendiente, montoPagado));
     const renovada = nuevoSaldo <= 0;
     if (renovada) {
-      // Renovación unificada: se crea un PERÍODO NUEVO (igual que renovarMensualidad)
-      // y el periodo pagado queda como histórico con sus facturas.
-      const fechaInicio = new Date();
+      // El nuevo periodo nunca consume días ya pagados: si la mensualidad sigue
+      // vigente, la renovación empieza al día siguiente de su fecha de fin.
+      const ahora = new Date();
+      const fechaInicio = mensualidad.fechaFin > ahora
+        ? new Date(mensualidad.fechaFin.getTime() + 1)
+        : ahora;
       const fechaFin = new Date(fechaInicio);
-      fechaFin.setDate(fechaFin.getDate() + (mensualidad.plan?.duracionDias || 30));
-      await tx.mensualidad.update({
-        where: { id: mensualidad.id },
-        data: { estado: "VENCIDA" },
-      });
+      fechaFin.setDate(fechaFin.getDate() + Math.max(1, mensualidad.plan?.duracionDias || 30));
+
+      // El bloqueo por vehículo ya está tomado. Revalidamos conflictos dentro de
+      // la transacción para no crear dos coberturas o reservar el mismo espacio.
+      const [otraMensualidad, reservaVehiculo, ingresoFisico] = await Promise.all([
+        tx.mensualidad.findFirst({
+          where: {
+            id: { not: mensualidad.id }, vehiculoId: mensualidad.vehiculoId,
+            sucursalId: mensualidad.sucursalId ?? sucursalId ?? null, estado: "ACTIVA",
+            fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio },
+          },
+          select: { id: true },
+        }),
+        tx.reserva.findFirst({
+          where: {
+            vehiculoId: mensualidad.vehiculoId,
+            sucursalId: mensualidad.sucursalId ?? sucursalId ?? null,
+            estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+            fechaInicio: { lt: fechaFin },
+            OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }],
+          },
+          select: { id: true },
+        }),
+        tx.ingreso.findFirst({
+          where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVO" },
+          select: { id: true, puestoId: true },
+        }),
+      ]);
+      if (otraMensualidad || reservaVehiculo) {
+        throw new AppError("No se puede renovar: el vehículo tiene otra mensualidad o reserva en ese periodo", 409);
+      }
+      if (ingresoFisico && (!mensualidad.puestoId || ingresoFisico.puestoId !== mensualidad.puestoId)) {
+        throw new AppError("El vehículo está en un puesto incompatible con la renovación", 409);
+      }
+
+      if (mensualidad.puestoId) {
+        const [otraMensualidadPuesto, reservaPuesto, otroIngreso] = await Promise.all([
+          tx.mensualidad.findFirst({
+            where: {
+              id: { not: mensualidad.id }, puestoId: mensualidad.puestoId,
+              sucursalId: mensualidad.sucursalId ?? sucursalId ?? null, estado: "ACTIVA",
+              fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio },
+            },
+            select: { id: true },
+          }),
+          tx.reserva.findFirst({
+            where: {
+              puestoId: mensualidad.puestoId,
+              sucursalId: mensualidad.sucursalId ?? sucursalId ?? null,
+              estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
+              fechaInicio: { lt: fechaFin },
+              OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }],
+            },
+            select: { id: true },
+          }),
+          tx.ingreso.findFirst({
+            where: {
+              puestoId: mensualidad.puestoId, estado: "ACTIVO",
+              ...(ingresoFisico ? { id: { not: ingresoFisico.id } } : {}),
+            },
+            select: { id: true },
+          }),
+        ]);
+        if (otraMensualidadPuesto || reservaPuesto || otroIngreso) {
+          throw new AppError("No se puede renovar: el puesto tiene otra asignación en ese periodo", 409);
+        }
+      }
+
       await tx.mensualidad.create({
         data: {
           clienteId: mensualidad.clienteId,
@@ -648,11 +714,10 @@ export const cobrarMensualidad = asyncHandler(async (req, res) => {
           sucursalId: mensualidad.sucursalId,
         },
       });
+
+      // No se vence el periodo anterior anticipadamente: sigue dando cobertura
+      // hasta su fechaFin. El proceso de vencimientos lo cerrará cuando corresponda.
       if (mensualidad.puestoId) {
-        const ingresoFisico = await tx.ingreso.findFirst({
-          where: { vehiculoId: mensualidad.vehiculoId, estado: "ACTIVO" },
-          select: { id: true },
-        });
         await tx.puesto.update({
           where: { id: mensualidad.puestoId },
           data: { estado: ingresoFisico ? "OCUPADO" : "RESERVADO" },
