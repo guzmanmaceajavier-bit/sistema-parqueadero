@@ -23,6 +23,15 @@ function validarMontoTarifa(valor: unknown, etiqueta: string, obligatorio = fals
   return monto;
 }
 
+function normalizarTiposVehiculo(valor: string): string[] {
+  return [...new Set(valor.split(",").map((tipo) => tipo.trim().toLowerCase()).filter(Boolean))];
+}
+
+function buscarTipoEnComun(tiposExistentes: string, tiposNuevos: string[]): boolean {
+  const existentes = new Set(normalizarTiposVehiculo(tiposExistentes));
+  return tiposNuevos.some((tipo) => existentes.has(tipo));
+}
+
 export const crearTarifa = asyncHandler(async (req, res) => {
   const {
     nombre, tipoVehiculo, modalidad, valor, minutosCortesia, minutosGratis,
@@ -43,11 +52,13 @@ export const crearTarifa = asyncHandler(async (req, res) => {
   }
 
   const modalidadNormalizada = modalidad.trim().toLowerCase();
-  const tipos = tipoVehiculo.split(",").map((t: string) => t.trim()).filter(Boolean);
+  const tipos = normalizarTiposVehiculo(tipoVehiculo);
   if (!tipos.length) throw new AppError("Selecciona al menos un tipo de vehículo", 400);
-  const duplicada = await prisma.tarifa.findFirst({
-    where: { activa: true, modalidad: modalidadNormalizada, tipoVehiculo: { in: tipos }, sucursalId: sucursalId ?? null },
+  const tarifasActivas = await prisma.tarifa.findMany({
+    where: { activa: true, modalidad: modalidadNormalizada, sucursalId: sucursalId ?? null },
+    select: { nombre: true, tipoVehiculo: true },
   });
+  const duplicada = tarifasActivas.find((tarifa) => buscarTipoEnComun(tarifa.tipoVehiculo, tipos));
   if (duplicada) {
     throw new AppError(
       `Ya existe una tarifa activa para "${modalidadNormalizada}" y ese tipo de vehículo (${duplicada.nombre}). Desactívala o edítala en lugar de crear otra.`,
@@ -149,16 +160,18 @@ export const actualizarTarifa = asyncHandler(async (req, res) => {
     throw new AppError("Configura juntos el precio de la primera hora y el de las horas adicionales.", 400);
   }
 
-  const tipos = tipoFinal.split(",").map((t: string) => t.trim()).filter(Boolean);
+  const tipos = normalizarTiposVehiculo(tipoFinal);
   if (!tipos.length) throw new AppError("Selecciona al menos un tipo de vehículo", 400);
   if (tipoVehiculo !== undefined) data.tipoVehiculo = tipos.join(",");
   if (activaFinal) {
-    const duplicada = await prisma.tarifa.findFirst({
+    const tarifasActivas = await prisma.tarifa.findMany({
       where: {
         id: { not: Number(id) }, activa: true, modalidad: modalidadFinal,
-        tipoVehiculo: { in: tipos }, sucursalId: existe.sucursalId ?? null,
+        sucursalId: existe.sucursalId ?? null,
       },
+      select: { nombre: true, tipoVehiculo: true },
     });
+    const duplicada = tarifasActivas.find((tarifa) => buscarTipoEnComun(tarifa.tipoVehiculo, tipos));
     if (duplicada) throw new AppError(`Ya existe una tarifa activa para "${modalidadFinal}" y ese tipo de vehículo (${duplicada.nombre}).`, 409);
   }
 
