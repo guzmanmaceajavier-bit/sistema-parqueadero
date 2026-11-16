@@ -204,101 +204,14 @@ export const obtenerVencidas = asyncHandler(async (req, res) => {
   res.json({ ok: true, vencidas });
 });
 
-export const renovarMensualidad = asyncHandler(async (req, res) => {
-  const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
-  const id = Number(req.params.id);
-  const existente = await prisma.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) }, include: { vehiculo: { select: { sucursalId: true } }, plan: true } });
-  if (!existente) throw new AppError("Mensualidad no encontrada", 404);
-  if (existente.estado === "CANCELADA") throw new AppError("No se puede renovar una mensualidad cancelada", 409);
-
-  const sucursalOrigen = existente.sucursalId ?? existente.vehiculo.sucursalId ?? sucursalId ?? null;
-  const ahora = new Date();
-  // El nuevo periodo comienza después del anterior; se conserva la mensualidad histórica y sus facturas.
-  const fechaInicio = existente.fechaFin > ahora ? new Date(existente.fechaFin.getTime() + 1) : ahora;
-  const fechaFin = new Date(fechaInicio);
-  fechaFin.setDate(fechaFin.getDate() + Math.max(1, existente.plan?.duracionDias || 30));
-
-  const renovada = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124021, ${existente.vehiculoId}::integer)) AS advisory_lock`;
-    if (existente.puestoId) await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(78124020, ${existente.puestoId}::integer)) AS advisory_lock`;
-    const actual = await tx.mensualidad.findFirst({ where: { id, ...(sucursalId ? { sucursalId } : {}) } });
-    if (
-      !actual ||
-      actual.estado === "CANCELADA" ||
-      actual.vehiculoId !== existente.vehiculoId ||
-      actual.puestoId !== existente.puestoId ||
-      actual.fechaFin.getTime() !== existente.fechaFin.getTime() ||
-      actual.estado !== existente.estado
-    ) {
-      throw new AppError("La mensualidad cambió mientras se renovaba. Actualiza e inténtalo nuevamente.", 409);
-    }
-
-    const [otraMensualidad, reserva, ingreso] = await Promise.all([
-      tx.mensualidad.findFirst({
-        where: { id: { not: id }, vehiculoId: actual.vehiculoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
-        select: { id: true },
-      }),
-      tx.reserva.findFirst({
-        where: { vehiculoId: actual.vehiculoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-          fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
-        select: { id: true },
-      }),
-      tx.ingreso.findFirst({ where: { vehiculoId: actual.vehiculoId, vehiculo: { sucursalId: sucursalOrigen }, estado: "ACTIVO" }, select: { id: true, puestoId: true } }),
-    ]);
-    if (otraMensualidad || reserva) throw new AppError("El vehículo ya tiene otra asignación que se cruza con la renovación", 409);
-    if (ingreso && (!actual.puestoId || ingreso.puestoId !== actual.puestoId || fechaInicio > ahora)) {
-      throw new AppError("El vehículo tiene un ingreso activo incompatible con el periodo de renovación", 409);
-    }
-
-    if (actual.puestoId) {
-      const puestoActual = await tx.puesto.findFirst({ where: { id: actual.puestoId, sucursalId: sucursalOrigen } });
-      if (!puestoActual?.activo || puestoActual.estado === "MANTENIMIENTO") throw new AppError("El puesto no está disponible para renovar", 409);
-      const [otraMensualidadPuesto, reservaPuesto, ingresoEnPuesto] = await Promise.all([
-        tx.mensualidad.findFirst({
-          where: { id: { not: id }, puestoId: actual.puestoId, sucursalId: sucursalOrigen, estado: "ACTIVA", fechaInicio: { lt: fechaFin }, fechaFin: { gte: fechaInicio } },
-          select: { id: true },
-        }),
-        tx.reserva.findFirst({
-          where: { puestoId: actual.puestoId, sucursalId: sucursalOrigen, estado: { in: ["PENDIENTE", "CONFIRMADA", "ACTIVA"] },
-            fechaInicio: { lt: fechaFin }, OR: [{ fechaFin: null }, { fechaFin: { gte: fechaInicio } }] },
-          select: { id: true },
-        }),
-        tx.ingreso.findFirst({ where: { puestoId: actual.puestoId, estado: "ACTIVO", ...(ingreso ? { id: { not: ingreso.id } } : {}) }, select: { id: true } }),
-      ]);
-      if (otraMensualidadPuesto || reservaPuesto || ingresoEnPuesto) throw new AppError("El puesto tiene otra asignación que se cruza con la renovación", 409);
-    }
-
-    const nueva = await tx.mensualidad.create({
-      data: {
-        clienteId: actual.clienteId,
-        vehiculoId: actual.vehiculoId,
-        planId: actual.planId,
-        puestoId: actual.puestoId,
-        fechaInicio,
-        fechaFin,
-        valor: actual.valor,
-        observacion: actual.observacion,
-        estado: "ACTIVA",
-        sucursalId: actual.sucursalId,
-      },
-      include: { cliente: true, vehiculo: true, plan: true, puesto: true },
-    });
-
-    if (actual.puestoId) {
-      await tx.puesto.update({
-        where: { id: actual.puestoId },
-        data: { estado: ingreso ? "OCUPADO" : "RESERVADO" },
-      });
-    }
-    if (actual.fechaFin < ahora && actual.estado === "ACTIVA") {
-      await tx.mensualidad.update({ where: { id }, data: { estado: "VENCIDA" } });
-    }
-    return nueva;
-  });
-  await registrarMovimiento("MENSUALIDADES", "RENOVAR", `Mensualidad #${id} renovada como #${renovada.id}`, req.usuario?.usuario);
-  res.json({ ok: true, renovada });
+/**
+ * La renovación solo puede producirse como consecuencia de un pago registrado.
+ * Se conserva esta respuesta explícita para clientes antiguos que todavía llamen
+ * al endpoint retirado: nunca debe otorgarse cobertura sin factura ni caja.
+ */
+export const renovarMensualidad = asyncHandler(async (_req, _res) => {
+  throw new AppError("Para renovar, registra el pago desde la opción Cobrar mensualidad. La renovación se aplica automáticamente al completar el pago.", 409);
 });
-
 
 export const actualizarMensualidad = asyncHandler(async (req, res) => {
   const sucursalId = resolverSucursalPermitida(req.usuario, req.query.sucursalId);
