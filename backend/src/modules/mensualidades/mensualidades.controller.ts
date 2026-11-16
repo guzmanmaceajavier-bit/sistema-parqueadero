@@ -92,8 +92,8 @@ export const crearMensualidad = asyncHandler(async (req, res) => {
       puesto ? tx.$queryRaw<Array<{ id: number }>>`SELECT "id" FROM "Reserva"
         WHERE "puestoId" = ${puesto.id}
           AND "estado" IN ('PENDIENTE', 'CONFIRMADA', 'ACTIVA')
-          AND "fechaInicio" < ${fin}
-          AND ("fechaFin" IS NULL OR "fechaFin" >= ${inicio})
+          AND "fechaInicio" < ${fin} AT TIME ZONE 'UTC'
+          AND ("fechaFin" IS NULL OR "fechaFin" >= ${inicio} AT TIME ZONE 'UTC')
         LIMIT 1` : Promise.resolve([]),
     ]);
     if (mensualidadVehiculo) throw new AppError("El vehículo ya tiene una mensualidad que se cruza con este periodo", 409);
