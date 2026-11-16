@@ -111,3 +111,24 @@ npx prisma migrate diff --from-migrations prisma/migrations \
   `migrate deploy` no falla, pero conviene evitarlo salvo reconciliación).
 - No usar la base de producción como shadow database.
 - No subir `.env` ni credenciales.
+
+## 8. Migración monetaria Float → Decimal
+
+La migración `20261116000000_financial_decimal` convierte los campos financieros
+de `DOUBLE PRECISION` a `NUMERIC(14,2)` (IVA porcentual a `NUMERIC(5,2)`).
+PostgreSQL aplica `ROUND(columna::numeric, 2)` durante el cambio de tipo:
+- Conserva los valores nulos.
+- Conserva los importes visibles a centavos.
+- Elimina residuos binarios de punto flotante heredados.
+- No elimina registros ni modifica relaciones.
+
+Antes de aplicarla en una base real:
+1. Crear y verificar un respaldo reciente.
+2. Ejecutar primero en una copia/restauración de la base.
+3. Comparar conteos y sumas de saldos, facturas, caja, gastos y mensualidades antes/después.
+4. Aplicar `npm run migrate:deploy` solo cuando el backend compatible con Decimal esté desplegado.
+5. Comprobar `npm run migrate:status` y ejecutar un cobro, recarga, pago de mensualidad, gasto, cierre y anulación de prueba.
+
+Prisma Decimal se serializa como número JSON para conservar el contrato del frontend
+actual. En el backend, los helpers monetarios convierten Decimal a centavos antes
+de sumar o restar; no se deben usar operadores `+`/ `-` directamente con Decimal.

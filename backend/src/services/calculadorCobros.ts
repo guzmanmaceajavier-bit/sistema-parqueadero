@@ -109,14 +109,14 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   // Ticket extraviado: no se debe cobrar con una regla alternativa silenciosa.
   if (ticketExtraviado) {
-    if (tarifa.tarifaMaximaDiaria == null || tarifa.tarifaMaximaDiaria <= 0) {
+    if (tarifa.tarifaMaximaDiaria == null || Number(tarifa.tarifaMaximaDiaria) <= 0) {
       return {
         error: "No hay una tarifa máxima diaria configurada para este vehículo. Configúrala antes de cobrar un ticket extraviado.",
         total: 0,
         detalle: [],
       };
     }
-    const total = redondearDinero(tarifa.tarifaMaximaDiaria);
+    const total = redondearDinero(Number(tarifa.tarifaMaximaDiaria));
     const detalle = [{ concepto: "Ticket extraviado — Tarifa máxima del día", valor: total }];
     return {
       tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: modalidadTarifa, valorUnitario: tarifa.valor },
@@ -141,9 +141,9 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   // El máximo diario se aplica por cada bloque de 24 horas facturables.
   function aplicarTopeDiario(valor: number): number {
     const maximoDiario = tarifa?.tarifaMaximaDiaria;
-    if (minutosFacturables <= 0 || maximoDiario == null || maximoDiario <= 0) return valor;
+    if (minutosFacturables <= 0 || maximoDiario == null || Number(maximoDiario) <= 0) return valor;
     const bloquesDiarios = Math.ceil(minutosFacturables / 1440);
-    return Math.min(valor, maximoDiario * bloquesDiarios);
+    return Math.min(valor, Number(maximoDiario) * bloquesDiarios);
   }
 
   let detalle = [];
@@ -154,7 +154,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
 
   switch (modalidadTarifa) {
     case "minuto": {
-      const base = minutosFacturables * tarifa.valor;
+      const base = minutosFacturables * Number(tarifa.valor);
       const valor = aplicarTopeDiario(minCargo(base));
       detalle.push({ concepto: `${totalMinutos} min - ${cortesia + minutosGratis + minutosGracia} min gratis = ${minutosFacturables} min facturables → $${valor}`, valor });
       total = valor;
@@ -166,9 +166,9 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
         const horas = Math.ceil(minutosFacturables / 60);
         let valor = 0;
         if (horas >= 1) {
-          valor += tarifa.precioPrimeraHora ?? 0;
+          valor += Number(tarifa.precioPrimeraHora ?? 0);
           if (horas > 1) {
-            valor += (horas - 1) * (tarifa.precioHoraAdicional ?? 0);
+            valor += (horas - 1) * Number(tarifa.precioHoraAdicional ?? 0);
           }
         }
         valor = aplicarTopeDiario(valor);
@@ -177,7 +177,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
         desglose = { minutosFacturables, horas, valor, unidad: "hora_progresiva" };
       } else {
         const horas = Math.ceil(minutosFacturables / 60);
-        const valor = aplicarTopeDiario(horas * tarifa.valor);
+        const valor = aplicarTopeDiario(horas * Number(tarifa.valor));
         detalle.push({ concepto: `${totalMinutos} min → ${horas} hora(s) × $${tarifa.valor}`, valor });
         total = valor;
         desglose = { minutosFacturables, horas, valor, unidad: "hora" };
@@ -186,7 +186,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
     case "diario": {
       const dias = Math.ceil(minutosFacturables / 1440);
-      const valor = dias * tarifa.valor;
+      const valor = dias * Number(tarifa.valor);
       detalle.push({ concepto: `${totalMinutos} min → ${dias} día(s) × $${tarifa.valor}`, valor });
       total = valor;
       desglose = { dias, valor, unidad: "dia" };
@@ -194,7 +194,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
     case "semanal": {
       const semanas = Math.ceil(minutosFacturables / (7 * 1440));
-      const valor = semanas * tarifa.valor;
+      const valor = semanas * Number(tarifa.valor);
       detalle.push({ concepto: `${totalMinutos} min → ${semanas} semana(s) × $${tarifa.valor}`, valor });
       total = valor;
       desglose = { semanas, valor, unidad: "semana" };
@@ -202,7 +202,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
     case "quincenal": {
       const quincenas = Math.ceil(minutosFacturables / (15 * 1440));
-      const valor = quincenas * tarifa.valor;
+      const valor = quincenas * Number(tarifa.valor);
       detalle.push({ concepto: `${totalMinutos} min → ${quincenas} quincena(s) × $${tarifa.valor}`, valor });
       total = valor;
       desglose = { quincenas, valor, unidad: "quincena" };
@@ -210,7 +210,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
     }
     case "mensual": {
       const meses = minutosFacturables <= 0 ? 0 : diffMeses(fechaInicioFacturable, salida);
-      const valor = meses * tarifa.valor;
+      const valor = meses * Number(tarifa.valor);
       detalle.push({ concepto: `${totalMinutos} min → ${meses} mes(es) × $${tarifa.valor}`, valor });
       total = valor;
       desglose = { meses, valor, unidad: "mes" };
@@ -235,7 +235,7 @@ export async function calcularCobro({ ingreso, tipoVehiculo, modalidad, fechaSal
   };
 
   return {
-    tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: tarifa.modalidad, valorUnitario: redondearDinero(tarifa.valor) },
+    tarifa: { id: tarifa.id, nombre: tarifa.nombre, modalidad: tarifa.modalidad, valorUnitario: redondearDinero(Number(tarifa.valor)) },
     totalMinutos,
     minutosCortesia: cortesia,
     minutosGratis,

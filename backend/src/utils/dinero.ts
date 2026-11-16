@@ -1,7 +1,19 @@
-/** Operaciones monetarias en centavos para evitar acumulación de errores binarios de Float. */
-export function aCentavos(valor: number): number {
-  if (!Number.isFinite(valor)) throw new RangeError("El importe debe ser un número finito");
-  const centavos = Math.round((valor + Math.sign(valor) * Number.EPSILON) * 100);
+/** Operaciones monetarias en centavos; acepta números, strings y Prisma.Decimal. */
+export type Importe = number | string | { toNumber(): number };
+
+function aNumero(valor: Importe): number {
+  const numero = typeof valor === "number"
+    ? valor
+    : typeof valor === "string"
+      ? Number(valor)
+      : valor.toNumber();
+  if (!Number.isFinite(numero)) throw new RangeError("El importe debe ser un número finito");
+  return numero;
+}
+
+export function aCentavos(valor: Importe): number {
+  const numero = aNumero(valor);
+  const centavos = Math.round((numero + Math.sign(numero) * Number.EPSILON) * 100);
   if (!Number.isSafeInteger(centavos)) throw new RangeError("El importe excede el rango monetario seguro");
   return centavos;
 }
@@ -11,7 +23,7 @@ export function desdeCentavos(valor: number): number {
   return valor / 100;
 }
 
-export function redondearDinero(valor: number): number {
+export function redondearDinero(valor: Importe): number {
   return desdeCentavos(aCentavos(valor));
 }
 
@@ -32,10 +44,10 @@ export function normalizarMonto(valor: unknown): number | null {
   }
 }
 
-export function sumarDinero(...valores: number[]): number {
-  return desdeCentavos(valores.reduce((total, valor) => total + aCentavos(valor), 0));
+export function sumarDinero(...valores: Importe[]): number {
+  return desdeCentavos(valores.reduce<number>((total, valor) => total + aCentavos(valor), 0));
 }
 
-export function restarDinero(minuendo: number, sustraendo: number): number {
+export function restarDinero(minuendo: Importe, sustraendo: Importe): number {
   return desdeCentavos(aCentavos(minuendo) - aCentavos(sustraendo));
 }

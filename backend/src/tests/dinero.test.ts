@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Prisma } from "@prisma/client";
 import { aCentavos, desdeCentavos, normalizarMonto, redondearDinero, restarDinero, sumarDinero } from "../utils/dinero.js";
 
 describe("utilidades monetarias", () => {
@@ -23,5 +24,13 @@ describe("utilidades monetarias", () => {
   it("suma y resta en centavos sin acumular errores binarios", () => {
     expect(sumarDinero(0.1, 0.2, 0.3)).toBe(0.6);
     expect(restarDinero(10, 0.1 + 0.2)).toBe(9.7);
+  });
+
+  it("opera con valores Prisma.Decimal sin convertirlos a strings", () => {
+    const decimal = new Prisma.Decimal("0.10");
+    expect(aCentavos(decimal)).toBe(10);
+    expect(redondearDinero(new Prisma.Decimal("1.235"))).toBe(1.24);
+    expect(sumarDinero(decimal, new Prisma.Decimal("0.20"))).toBe(0.3);
+    expect(restarDinero(new Prisma.Decimal("10.00"), decimal)).toBe(9.9);
   });
 });

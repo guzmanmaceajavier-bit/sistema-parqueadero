@@ -6,7 +6,7 @@ import { generarNumeroFactura } from "../../services/facturaCounter.js";
 import { resolverSucursalPermitida } from "../../utils/sucursalAccess.js";
 import { calcularCobro } from "../../services/calculadorCobros.js";
 import { calcularPagadoMensualidad } from "../../utils/saldos.js";
-import { redondearDinero, restarDinero } from "../../utils/dinero.js";
+import { redondearDinero, restarDinero, sumarDinero } from "../../utils/dinero.js";
 import { emitirEvento } from "../../services/socket.js";
 
 export const crearAusencia = asyncHandler(async (req, res) => {
@@ -329,7 +329,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
       // a favor del cliente con un movimiento trazable (no se altera la factura).
       const pagado = calcularPagadoMensualidad(mensualidadAusencia.facturas, mensualidadAusencia.fechaInicio);
       const duracionPlan = Math.max(1, mensualidadAusencia.plan?.duracionDias ?? 30);
-      const descuentoSolicitado = redondearDinero((mensualidadAusencia.valor / duracionPlan) * diasAusente);
+      const descuentoSolicitado = redondearDinero((Number(mensualidadAusencia.valor) / duracionPlan) * diasAusente);
       diasCompensados = diasAusente;
       valorCompensado = descuentoSolicitado;
       const deudaPendiente = Math.max(0, restarDinero(mensualidadAusencia.valor, pagado));
@@ -348,7 +348,7 @@ export const finalizarAusencia = asyncHandler(async (req, res) => {
         await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${a.clienteId} FOR UPDATE`;
         const clienteActual = await tx.cliente.findUnique({ where: { id: a.clienteId }, select: { saldo: true } });
         const saldoAntes = redondearDinero(clienteActual?.saldo ?? 0);
-        const saldoDespues = redondearDinero(saldoAntes + creditoCliente);
+        const saldoDespues = sumarDinero(saldoAntes, creditoCliente);
         await tx.cliente.update({ where: { id: a.clienteId }, data: { saldo: saldoDespues } });
         await tx.clienteSaldoMovimiento.create({
           data: {
@@ -503,7 +503,7 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
     } else if (mensualidad && ausencia.opcion === "DESCONTAR") {
       const pagado = calcularPagadoMensualidad(mensualidad.facturas, mensualidad.fechaInicio);
       const duracion = Math.max(1, mensualidad.plan?.duracionDias ?? 30);
-      const descuento = redondearDinero((mensualidad.valor / duracion) * diasAusente);
+      const descuento = redondearDinero((Number(mensualidad.valor) / duracion) * diasAusente);
       const deuda = Math.max(0, restarDinero(mensualidad.valor, pagado));
       const reduccion = Math.min(descuento, deuda);
       const credito = Math.max(0, restarDinero(descuento, reduccion));
@@ -522,7 +522,7 @@ export const registrarRegresoAusencia = asyncHandler(async (req, res) => {
         await tx.$queryRaw`SELECT "id" FROM "Cliente" WHERE "id" = ${cliente.id} FOR UPDATE`;
         const actual = await tx.cliente.findUnique({ where: { id: cliente.id }, select: { saldo: true } });
         const antes = redondearDinero(actual?.saldo ?? 0);
-        const despues = redondearDinero(antes + credito);
+        const despues = sumarDinero(antes, credito);
         await tx.cliente.update({ where: { id: cliente.id }, data: { saldo: despues } });
         await tx.clienteSaldoMovimiento.create({
           data: { clienteId: cliente.id, tipo: "DEVOLUCION", monto: credito, saldoAntes: antes, saldoDespues: despues, concepto: `Compensación por ausencia #${id} — vehículo ${vehiculo.placa}`, usuario: req.usuario?.usuario || "admin" },

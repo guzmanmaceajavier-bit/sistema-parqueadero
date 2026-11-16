@@ -269,7 +269,7 @@ describe("Concurrencia de caja y gastos recurrentes (PostgreSQL real)", () => {
       where: { cajaId: caja.id, gastoId: ocurrencias[0].id },
     });
     expect(movimiento?.tipo).toBe("EGRESO");
-    expect(movimiento?.monto).toBe(12000);
+    expect(Number(movimiento?.monto)).toBe(12000);
   });
 });
 
