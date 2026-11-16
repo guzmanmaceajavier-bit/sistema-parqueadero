@@ -763,11 +763,6 @@ export const generarFacturasPendientes = asyncHandler(async (req, res) => {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
 
-    // Saldo real pendiente del período (pagado = facturas con metodoPago dentro del período).
-    const pagado = calcularPagadoMensualidad(m.facturas, m.fechaInicio);
-    const saldoPendiente = Math.max(0, Number(m.valor) - pagado);
-    if (saldoPendiente <= 0) continue;
-
     await prisma.$transaction(async (tx) => {
       // Relectura + bloqueo por mensualidad: evita duplicar la factura del mes
       // si dos usuarios generan pendientes a la vez.
