@@ -829,7 +829,7 @@ export default function Clientes() {
         gradient="from-emerald-600 to-teal-500"
         icon={UserPlus}
         titulo={modoEdicion ? "Editar Cliente" : "Nuevo Cliente"}
-        subtitulo="Complete la información del cliente y su vehículo"
+        subtitulo="Complete la información del cliente y su vehículo · v2 (plan de pago)"
         size="max-w-2xl"
         footer={
           <>
