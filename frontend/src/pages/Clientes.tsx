@@ -148,6 +148,7 @@ export default function Clientes() {
   const [planes, setPlanes] = useState([]);
   const [puestos, setPuestos] = useState([]);
   const [tarifas, setTarifas] = useState([]);
+  const [planPago, setPlanPago] = useState("");
   const [conSuscripcion, setConSuscripcion] = useState(false);
   const [tarifaForm, setTarifaForm] = useState({ planId: "", puestoId: "", observacion: "" });
   const [conReserva, setConReserva] = useState(false);
@@ -258,6 +259,13 @@ export default function Clientes() {
 
   const agregarVehiculo = () => setForm(prev => ({ ...prev, vehiculos: [...prev.vehiculos, { ...vehiculoVacio }] }));
   const quitarVehiculo = (idx) => setForm(prev => ({ ...prev, vehiculos: prev.vehiculos.filter((_, i) => i !== idx) }));
+
+  const cambiarPlanPago = (valor) => {
+    setPlanPago(valor);
+    setConSuscripcion(valor === "SUSCRIPCION");
+    setConReserva(valor === "RESERVA");
+    setConIngreso(valor === "INGRESO_DIARIO");
+  };
 
   const guardarMensualidad = async (clienteIdNum, vehiculoIdNum) => {
     if (!conSuscripcion || !tarifaForm.planId) return;
@@ -379,6 +387,7 @@ export default function Clientes() {
         }
       }
       setMostrarModal(false);
+      setPlanPago("");
       setConSuscripcion(false);
       setTarifaForm({ planId: "", puestoId: "", observacion: "" });
       setConReserva(false);
@@ -460,6 +469,10 @@ export default function Clientes() {
         existenteRef.current.ingresoId = null;
       }
     } catch (e) { console.log(e); }
+    if (conSuscripcion) setPlanPago("SUSCRIPCION");
+    else if (conReserva) setPlanPago("RESERVA");
+    else if (conIngreso) setPlanPago("INGRESO_DIARIO");
+    else setPlanPago("");
     setMostrarModal(true);
   };
 
@@ -550,6 +563,7 @@ export default function Clientes() {
     setModoEdicion(false);
     setClienteId(null);
     setForm({ ...formVacio, vehiculos: [{ ...vehiculoVacio }] });
+    setPlanPago("");
     setConSuscripcion(false);
     setTarifaForm({ planId: "", puestoId: "", observacion: "" });
     setConReserva(false);
@@ -935,74 +949,22 @@ export default function Clientes() {
         <div className="bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 p-4 space-y-4">
           <p className="text-xs text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider">Opciones adicionales</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {/* Card Suscripción */}
-            <div onClick={() => setConSuscripcion(!conSuscripcion)}
-              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none ${
-                conSuscripcion
-                  ? "border-teal-500 bg-teal-50 dark:bg-teal-900/20"
-                  : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 hover:border-teal-300"
-              }`}>
-              <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                  conSuscripcion ? "border-teal-500" : "border-slate-300 dark:border-slate-500"
-                }`}>
-                  {conSuscripcion && <div className="w-2 h-2 rounded-full bg-teal-500" />}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-medium ${conSuscripcion ? "text-teal-700 dark:text-teal-300" : "text-slate-700 dark:text-slate-300"}`}>
-                  Suscripción
-                </p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Plan semanal, mensual</p>
-              </div>
-            </div>
-
-            {/* Card Reserva */}
-            <div onClick={() => setConReserva(!conReserva)}
-              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none ${
-                conReserva
-                  ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                  : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 hover:border-rose-300"
-              }`}>
-              <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                  conReserva ? "border-rose-500" : "border-slate-300 dark:border-slate-500"
-                }`}>
-                  {conReserva && <div className="w-2 h-2 rounded-full bg-rose-500" />}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-medium ${conReserva ? "text-rose-700 dark:text-rose-300" : "text-slate-700 dark:text-slate-300"}`}>
-                  <CalendarDays className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />
-                  Reserva
-                </p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Agendar fecha</p>
-              </div>
-            </div>
-
-            {/* Card Ingreso diario */}
-            <div onClick={() => setConIngreso(!conIngreso)}
-              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none ${
-                conIngreso
-                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
-                  : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 hover:border-emerald-300"
-              }`}>
-              <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                  conIngreso ? "border-emerald-500" : "border-slate-300 dark:border-slate-500"
-                }`}>
-                  {conIngreso && <div className="w-2 h-2 rounded-full bg-emerald-500" />}
-                </div>
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-medium ${conIngreso ? "text-emerald-700 dark:text-emerald-300" : "text-slate-700 dark:text-slate-300"}`}>
-                  <svg className="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h18v18H3V3z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v8m-4-4h8" /></svg>
-                  Ingreso diario
-                </p>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Tarifa por hora/día</p>
-              </div>
-            </div>
+          <div>
+            <label className={labelClass}>Plan de pago</label>
+            <Select
+              value={planPago}
+              onChange={cambiarPlanPago}
+              options={[
+                { value: "", label: "Ninguno — solo registrar cliente/vehículo" },
+                { value: "SUSCRIPCION", label: "Suscripción — plan semanal o mensual" },
+                { value: "RESERVA", label: "Reserva — agendar una fecha" },
+                { value: "INGRESO_DIARIO", label: "Ingreso diario — tarifa por hora/día" },
+              ]}
+              placeholder="Seleccionar plan de pago..."
+            />
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+              Elige cómo va a pagar este vehículo. Según tu elección aparecerán los campos correspondientes.
+            </p>
           </div>
 
           {/* Contenido expandido Suscripción */}
