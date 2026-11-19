@@ -21,7 +21,6 @@ const ESTADOS_CLIENTE = [
   { value: "VENCIDO", label: "Vencido", bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-700 dark:text-red-400", border: "border-red-200 dark:border-red-800", dot: "bg-red-500" },
   { value: "SUSPENDIDO", label: "Suspendido", bg: "bg-slate-100 dark:bg-slate-700", text: "text-slate-600 dark:text-slate-300", border: "border-slate-300 dark:border-slate-600", dot: "bg-slate-400" },
   { value: "MOROSO", label: "Moroso", bg: "bg-rose-50 dark:bg-rose-900/20", text: "text-rose-700 dark:text-rose-400", border: "border-rose-200 dark:border-rose-800", dot: "bg-rose-500" },
-  { value: "RETIRADO", label: "Retirado", bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-500 dark:text-slate-400", border: "border-slate-300 dark:border-slate-700", dot: "bg-slate-500" },
 ];
 
 const TIPOS_VEHICULO_BASE = [];
@@ -861,13 +860,12 @@ export default function Clientes() {
                 <input name="email" type="email" placeholder="correo@ejemplo.com" value={form.email} onChange={handleChange} className={inputClass} />
               </div>
               <div>
-                <SelectWithOther
+                <Select
                   label="Estado"
-                  name="estado"
                   value={form.estado}
-                  onChange={handleChange}
+                  onChange={(val) => setForm(prev => ({ ...prev, estado: val }))}
                   options={ESTADOS_CLIENTE.map(e => ({ value: e.value, label: e.label }))}
-                  otherLabel="Otro estado"
+                  placeholder="Seleccionar estado..."
                 />
               </div>
             </div>
