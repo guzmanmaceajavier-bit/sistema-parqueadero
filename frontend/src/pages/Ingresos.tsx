@@ -17,9 +17,9 @@ import SelectWithOther from "../components/SelectWithOther";
 import ClientSearch from "../components/ClientSearch";
 import useDebounce from "../hooks/useDebounce";
 import { TableSkeleton } from "../components/Skeleton";
-const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
+const inputClass = "ds-input";
 
-const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
+const labelClass = "ds-label";
 
 const inputDisabled = "w-full px-3 py-2.5 border border-slate-100 dark:border-slate-600 rounded-lg text-sm text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-700";
 function IconLogIn() {

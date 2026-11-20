@@ -70,6 +70,55 @@ body {
 :where(.dark) .hover\:text-slate-600:hover { color: #e2e8f0; }
 :where(.dark) .hover\:border-slate-200:hover { border-color: #64748b; }
 
+/* ── Sistema de diseño compartido ─────────────────────────────── */
+@layer components {
+  /* Superficies */
+  .ds-panel { @apply bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm; }
+  .ds-panel-pad { @apply ds-panel p-5; }
+  .ds-section-title { @apply text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3; }
+
+  /* Campos de formulario */
+  .ds-label { @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5; }
+  .ds-input { @apply w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none transition-all focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20; }
+  .ds-textarea { @apply ds-input resize-none; }
+  .ds-select { @apply ds-input appearance-none cursor-pointer pr-9; }
+  .ds-error { @apply text-xs text-red-600 dark:text-red-400 mt-1; }
+
+  /* Botones */
+  .ds-btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed; }
+  .ds-btn-primary { @apply ds-btn bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-600/20; }
+  .ds-btn-secondary { @apply ds-btn bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600; }
+  .ds-btn-danger { @apply ds-btn bg-red-600 hover:bg-red-700 text-white; }
+  .ds-btn-ghost { @apply ds-btn text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700; }
+  .ds-icon-btn { @apply inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors; }
+
+  /* Tablas */
+  .ds-table-wrap { @apply ds-panel overflow-hidden; }
+  .ds-table { @apply w-full text-sm; }
+  .ds-table thead { @apply bg-slate-50 dark:bg-slate-900/40; }
+  .ds-table th { @apply px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap; }
+  .ds-table td { @apply px-4 py-3 text-slate-700 dark:text-slate-200 border-t border-slate-100 dark:border-slate-700; }
+  .ds-table tbody tr { @apply hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition-colors; }
+
+  /* Badges */
+  .ds-badge { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border; }
+  .ds-badge-green { @apply ds-badge bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800; }
+  .ds-badge-amber { @apply ds-badge bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800; }
+  .ds-badge-red { @apply ds-badge bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800; }
+  .ds-badge-slate { @apply ds-badge bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600; }
+
+  /* Tarjetas de métrica */
+  .ds-kpi { @apply ds-panel-pad flex items-center gap-4; }
+  .ds-kpi-icon { @apply w-11 h-11 rounded-xl flex items-center justify-center shrink-0; }
+}
+
+/* Animación de entrada de modales (si no existe) */
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-modal-in { animation: modal-in 0.22s ease-out; }
+
 /* El login siempre se ve igual, no le pega el modo oscuro. */
 .login-scope .text-slate-900 { color: #0f172a; }
 .login-scope .text-slate-800 { color: #1e293b; }

@@ -13,7 +13,7 @@ import { getZonaColor, combinarTipos } from "../components/puestos/puesto.helper
 import { useListas } from "../context/ListasContext";
 import { PuestosGridSkeleton } from "../components/Skeleton";
 
-const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
+const inputClass = "ds-input";
 
 function Toast({ mensaje, tipo, onClose }) {
   useEffect(() => { if (mensaje) { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); } }, [mensaje]);

@@ -86,17 +86,17 @@ export default function Sucursales() {
         <form id="sucursal-form" onSubmit={guardar} className="space-y-4">
           <div className="bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 p-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">Nombre</label>
+              <label className="ds-label">Nombre</label>
               <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                 className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-slate-700" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">Direccion</label>
+              <label className="ds-label">Direccion</label>
               <input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })}
                 className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-slate-700" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">Telefono</label>
+              <label className="ds-label">Telefono</label>
               <input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })}
                 className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-slate-700" />
             </div>

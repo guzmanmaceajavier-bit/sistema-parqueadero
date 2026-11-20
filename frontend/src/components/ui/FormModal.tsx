@@ -28,11 +28,11 @@ export default function FormModal({ open, onClose, gradient, icon: Icon, titulo,
             </div>
           </div>
         </div>
-        <div className="px-6 -mt-8 space-y-4 overflow-y-auto flex-1 pb-4 relative z-10">
+        <div className="px-6 -mt-8 space-y-5 overflow-y-auto flex-1 pb-6 relative z-10">
           {children}
         </div>
         {footer && (
-          <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800">
+          <div className="flex flex-wrap justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0 bg-slate-50/50 dark:bg-slate-900/30">
             {footer}
           </div>
         )}

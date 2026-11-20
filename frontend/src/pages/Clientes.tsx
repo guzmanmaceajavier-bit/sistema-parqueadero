@@ -75,8 +75,8 @@ function IconX() {
     return <X className="w-5 h-5" />;
   }
 
-const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
-const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
+const inputClass = "ds-input";
+const labelClass = "ds-label";
 
 function FiltroDropdown({ label, opciones, valor, onChange, color = "teal" }) {
   const [abierto, setAbierto] = useState(false);
@@ -336,11 +336,16 @@ export default function Clientes() {
   const guardarCliente = async () => {
     setCargando(true);
     setErrorMsg("");
+    if (!form.nombres.trim() || !form.apellidos.trim() || !form.documento.trim()) {
+      setErrorMsg("Nombres, apellidos y documento son obligatorios.");
+      setCargando(false);
+      return;
+    }
     try {
-      const payload = { nombres: form.nombres, apellidos: form.apellidos, documento: form.documento, telefono: form.telefono, email: form.email, direccion: form.direccion, observaciones: form.observaciones, estado: form.estado, bloqueado: !!form.bloqueado };
+      const payload = { nombres: form.nombres.trim(), apellidos: form.apellidos.trim(), documento: form.documento.trim(), telefono: form.telefono, email: form.email, direccion: form.direccion, observaciones: form.observaciones, estado: form.estado, bloqueado: !!form.bloqueado };
       const vehiculosValidos = form.vehiculos.filter(v => v.placa && v.placa.trim());
       if (conSuscripcion && vehiculosValidos.length === 0) {
-        mostrarToast("La suscripción requiere al menos un vehículo con placa.", "error");
+        setErrorMsg("La suscripción requiere al menos un vehículo con placa.");
         setCargando(false);
         return;
       }
@@ -399,7 +404,9 @@ export default function Clientes() {
       mostrarToast(modoEdicion ? "Cliente actualizado correctamente" : "Cliente creado correctamente", "success");
     } catch (error) {
       const data = error.response?.data;
-      mostrarToast(data?.errors?.[0]?.message || data?.message || "Error al guardar cliente", "error");
+      const msg = data?.errors?.[0]?.message || data?.message || "Error al guardar cliente";
+      setErrorMsg(msg);
+      mostrarToast(msg, "error");
     } finally {
       setCargando(false);
     }
@@ -829,17 +836,17 @@ export default function Clientes() {
         gradient="from-emerald-600 to-teal-500"
         icon={UserPlus}
         titulo={modoEdicion ? "Editar Cliente" : "Nuevo Cliente"}
-        subtitulo="Complete la información del cliente y su vehículo · v2 (plan de pago)"
+        subtitulo="Registre el cliente, su vehículo y la forma de pago"
         size="max-w-2xl"
         footer={
           <>
             {errorMsg && (
               <div className="flex-1 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">{errorMsg}</div>
             )}
-            <button onClick={() => setMostrarModal(false)} className="px-5 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600 transition-all duration-200">
+            <button onClick={() => setMostrarModal(false)} className="ds-btn-secondary">
               Cancelar
             </button>
-            <button onClick={guardarCliente} disabled={cargando} className="px-5 py-2.5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-all duration-200 shadow-lg shadow-teal-600/20 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]">
+            <button onClick={guardarCliente} disabled={cargando} className="ds-btn-primary">
               {cargando ? "Guardando..." : "Guardar Cliente"}
             </button>
           </>

@@ -9,7 +9,7 @@ import ListasTab from "../components/ListasTab";
 import { PageSkeleton } from "../components/Skeleton";
 
 const inputClass = "w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200 bg-white dark:bg-slate-700";
-const labelClass = "block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5";
+const labelClass = "ds-label";
 
 export default function Configuracion() {
   const { recargarConfig } = useConfig();
