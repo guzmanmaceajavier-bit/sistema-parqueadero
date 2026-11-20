@@ -37,11 +37,10 @@ export default function Select({ options, value, onChange, placeholder = "Selecc
     const rect = btnRef.current.getBoundingClientRect();
     const espacioAbajo = window.innerHeight - rect.bottom - 8;
     const h = Math.min(192, options.length * 40 + 8);
-    if (espacioAbajo >= h) {
-      setPos({ top: rect.bottom, left: rect.left, width: rect.width });
-    } else {
-      setPos({ top: rect.top - h, left: rect.left, width: rect.width });
-    }
+    const ancho = Math.max(rect.width, 180);
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - ancho - 8));
+    const top = espacioAbajo >= h ? rect.bottom : Math.max(8, rect.top - h);
+    setPos({ top, left, width: ancho });
   }, [open, options.length]);
 
   const selected = options.find(o => String(o.value) === String(value));

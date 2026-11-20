@@ -4,9 +4,9 @@ export default function FormModal({ open, onClose, gradient, icon: Icon, titulo,
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center items-start pt-8 pb-8 px-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex justify-center items-start pt-4 sm:pt-8 pb-4 sm:pb-8 px-2 sm:px-4 overflow-y-auto">
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full ${size} border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[95vh] flex flex-col animate-modal-in`}>
+      <div className={`relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full ${size} border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[92vh] sm:max-h-[95vh] flex flex-col animate-modal-in`}>
         <div className={`relative bg-gradient-to-br ${gradient} px-6 pt-5 pb-12 shrink-0`}>
           <div className="absolute inset-0 opacity-10">
             <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white" />

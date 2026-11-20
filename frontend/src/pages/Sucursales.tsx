@@ -2,9 +2,12 @@ import { useState, useEffect } from "react";
 import { Building2, Plus, Pencil, X } from "lucide-react";
 import api from "../services/api";
 import FormModal from "../components/ui/FormModal";
+import Pagination from "../components/Pagination";
 
 export default function Sucursales() {
   const [sucursales, setSucursales] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -12,12 +15,13 @@ export default function Sucursales() {
 
   const cargar = async () => {
     try {
-      const res = await api.get("/sucursales");
+      const res = await api.get("/sucursales", { params: { page } });
       setSucursales(res.data.sucursales || res.data.data || []);
+      setPagination(res.data.pagination || {});
     } catch {} finally { setLoading(false); }
   };
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => { cargar(); }, [page]);
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -69,6 +73,10 @@ export default function Sucursales() {
         ))}
       </div>
 
+      <div className="ds-table-wrap mt-4">
+        <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
+      </div>
+
       <FormModal
         open={showModal}
         onClose={() => setShowModal(false)}
@@ -88,17 +96,17 @@ export default function Sucursales() {
             <div>
               <label className="ds-label">Nombre</label>
               <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-slate-700" />
+                className="ds-input" />
             </div>
             <div>
               <label className="ds-label">Direccion</label>
               <input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-slate-700" />
+                className="ds-input" />
             </div>
             <div>
               <label className="ds-label">Telefono</label>
               <input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-slate-700" />
+                className="ds-input" />
             </div>
           </div>
         </form>

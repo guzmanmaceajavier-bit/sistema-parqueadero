@@ -7,6 +7,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ExportButton from "../components/ExportButton";
 import SelectWithOther from "../components/SelectWithOther";
 import { TableSkeleton } from "../components/Skeleton";
+import Pagination from "../components/Pagination";
 
 const inputClass = "ds-input";
 const labelClass = "ds-label";
@@ -75,6 +76,8 @@ function RolBadge({ rol }) {
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [sucursales, setSucursales] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -89,14 +92,15 @@ export default function Usuarios() {
 
   const cargarUsuarios = async () => {
     try {
-      const [usuariosRes, sucursalesRes] = await Promise.all([api.get("/usuarios"), api.get("/sucursales")]);
+      const [usuariosRes, sucursalesRes] = await Promise.all([api.get("/usuarios", { params: { page } }), api.get("/sucursales")]);
       setUsuarios(usuariosRes.data.usuarios || []);
+      setPagination(usuariosRes.data.pagination || {});
       setSucursales(sucursalesRes.data.sucursales || []);
     } catch { console.log("error"); }
     finally { setInitialLoading(false); }
   };
 
-  useEffect(() => { cargarUsuarios(); }, []);
+  useEffect(() => { cargarUsuarios(); }, [page]);
 
   const handleChange = (e) => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
@@ -227,6 +231,7 @@ export default function Usuarios() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pagination.page || 1} totalPages={pagination.totalPages || 1} total={pagination.total || 0} onPageChange={setPage} />
       </div>
       )}
 
